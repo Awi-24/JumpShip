@@ -1,260 +1,288 @@
-<img src="https://github.com/cullenwatson/JobSpy/assets/78247585/ae185b7e-e444-4712-8bb9-fa97f53e896b" width="400">
+# Jumpship
 
-**JobSpy** is a job scraping library with the goal of aggregating all the jobs from popular job boards with one tool.
-
-## Features
-
-- Scrapes job postings from **LinkedIn**, **Indeed**, **Glassdoor**, **Google**, **ZipRecruiter**, & other job boards concurrently
-- Aggregates the job postings in a dataframe
-- Proxies support to bypass blocking
-
-![jobspy](https://github.com/cullenwatson/JobSpy/assets/78247585/ec7ef355-05f6-4fd3-8161-a817e31c5c57)
-
-### Installation
-
-```
-pip install -U python-jobspy
-```
-
-_Python version >= [3.10](https://www.python.org/downloads/release/python-3100/) required_
-
-### Usage
-
-```python
-import csv
-from jobspy import scrape_jobs
-
-jobs = scrape_jobs(
-    site_name=["indeed", "linkedin", "zip_recruiter", "google"], # "glassdoor", "bayt", "naukri", "bdjobs"
-    search_term="software engineer",
-    google_search_term="software engineer jobs near San Francisco, CA since yesterday",
-    location="San Francisco, CA",
-    results_wanted=20,
-    hours_old=72,
-    country_indeed='USA',
-    
-    # linkedin_fetch_description=True # gets more info such as description, direct job url (slower)
-    # proxies=["208.195.175.46:65095", "208.195.175.45:65095", "localhost"],
-)
-print(f"Found {len(jobs)} jobs")
-print(jobs.head())
-jobs.to_csv("jobs.csv", quoting=csv.QUOTE_NONNUMERIC, escapechar="\\", index=False) # to_excel
-```
-
-### Output
-
-```
-SITE           TITLE                             COMPANY           CITY          STATE  JOB_TYPE  INTERVAL  MIN_AMOUNT  MAX_AMOUNT  JOB_URL                                            DESCRIPTION
-indeed         Software Engineer                 AMERICAN SYSTEMS  Arlington     VA     None      yearly    200000      150000      https://www.indeed.com/viewjob?jk=5e409e577046...  THIS POSITION COMES WITH A 10K SIGNING BONUS!...
-indeed         Senior Software Engineer          TherapyNotes.com  Philadelphia  PA     fulltime  yearly    135000      110000      https://www.indeed.com/viewjob?jk=da39574a40cb...  About Us TherapyNotes is the national leader i...
-linkedin       Software Engineer - Early Career  Lockheed Martin   Sunnyvale     CA     fulltime  yearly    None        None        https://www.linkedin.com/jobs/view/3693012711      Description:By bringing together people that u...
-linkedin       Full-Stack Software Engineer      Rain              New York      NY     fulltime  yearly    None        None        https://www.linkedin.com/jobs/view/3696158877      Rain’s mission is to create the fastest and ea...
-zip_recruiter Software Engineer - New Grad       ZipRecruiter      Santa Monica  CA     fulltime  yearly    130000      150000      https://www.ziprecruiter.com/jobs/ziprecruiter...  We offer a hybrid work environment. Most US-ba...
-zip_recruiter Software Developer                 TEKsystems        Phoenix       AZ     fulltime  hourly    65          75          https://www.ziprecruiter.com/jobs/teksystems-0...  Top Skills' Details• 6 years of Java developme...
-
-```
-
-### Parameters for `scrape_jobs()`
-
-```plaintext
-Optional
-├── site_name (list|str): 
-|    linkedin, zip_recruiter, indeed, glassdoor, google, bayt, bdjobs
-|    (default is all)
-│
-├── search_term (str)
-|
-├── google_search_term (str)
-|     search term for google jobs. This is the only param for filtering google jobs.
-│
-├── location (str)
-│
-├── distance (int): 
-|    in miles, default 50
-│
-├── job_type (str): 
-|    fulltime, parttime, internship, contract
-│
-├── proxies (list): 
-|    in format ['user:pass@host:port', 'localhost']
-|    each job board scraper will round robin through the proxies
-|
-├── is_remote (bool)
-│
-├── results_wanted (int): 
-|    number of job results to retrieve for each site specified in 'site_name'
-│
-├── easy_apply (bool): 
-|    filters for jobs that are hosted on the job board site (LinkedIn easy apply filter no longer works)
-|
-├── user_agent (str): 
-|    override the default user agent which may be outdated
-│
-├── description_format (str): 
-|    markdown, html (Format type of the job descriptions. Default is markdown.)
-│
-├── offset (int): 
-|    starts the search from an offset (e.g. 25 will start the search from the 25th result)
-│
-├── hours_old (int): 
-|    filters jobs by the number of hours since the job was posted 
-|    (ZipRecruiter and Glassdoor round up to next day.)
-│
-├── verbose (int) {0, 1, 2}: 
-|    Controls the verbosity of the runtime printouts 
-|    (0 prints only errors, 1 is errors+warnings, 2 is all logs. Default is 2.)
-
-├── linkedin_fetch_description (bool): 
-|    fetches full description and direct job url for LinkedIn (Increases requests by O(n))
-│
-├── linkedin_company_ids (list[int]): 
-|    searches for linkedin jobs with specific company ids
-|
-├── country_indeed (str): 
-|    filters the country on Indeed & Glassdoor (see below for correct spelling)
-|
-├── enforce_annual_salary (bool): 
-|    converts wages to annual salary
-|
-├── ca_cert (str)
-|    path to CA Certificate file for proxies
-```
-
-```
-├── Indeed limitations:
-|    Only one from this list can be used in a search:
-|    - hours_old
-|    - job_type & is_remote
-|    - easy_apply
-│
-└── LinkedIn limitations:
-|    Only one from this list can be used in a search:
-|    - hours_old
-|    - easy_apply
-```
-
-## Supported Countries for Job Searching
-
-### **LinkedIn**
-
-LinkedIn searches globally & uses only the `location` parameter. 
-
-### **ZipRecruiter**
-
-ZipRecruiter searches for jobs in **US/Canada** & uses only the `location` parameter.
-
-### **Indeed / Glassdoor**
-
-Indeed & Glassdoor supports most countries, but the `country_indeed` parameter is required. Additionally, use the `location`
-parameter to narrow down the location, e.g. city & state if necessary. 
-
-You can specify the following countries when searching on Indeed (use the exact name, * indicates support for Glassdoor):
-
-|                      |              |            |                |
-|----------------------|--------------|------------|----------------|
-| Argentina            | Australia*   | Austria*   | Bahrain        |
-| Belgium*             | Brazil*      | Canada*    | Chile          |
-| China                | Colombia     | Costa Rica | Czech Republic |
-| Denmark              | Ecuador      | Egypt      | Finland        |
-| France*              | Germany*     | Greece     | Hong Kong*     |
-| Hungary              | India*       | Indonesia  | Ireland*       |
-| Israel               | Italy*       | Japan      | Kuwait         |
-| Luxembourg           | Malaysia     | Mexico*    | Morocco        |
-| Netherlands*         | New Zealand* | Nigeria    | Norway         |
-| Oman                 | Pakistan     | Panama     | Peru           |
-| Philippines          | Poland       | Portugal   | Qatar          |
-| Romania              | Saudi Arabia | Singapore* | South Africa   |
-| South Korea          | Spain*       | Sweden     | Switzerland*   |
-| Taiwan               | Thailand     | Turkey     | Ukraine        |
-| United Arab Emirates | UK*          | USA*       | Uruguay        |
-| Venezuela            | Vietnam*     |            |                |
-
-### **Bayt**
-
-Bayt only uses the search_term parameter currently and searches internationally
-
-
-
-## Notes
-* Indeed is the best scraper currently with no rate limiting.  
-* All the job board endpoints are capped at around 1000 jobs on a given search.  
-* LinkedIn is the most restrictive and usually rate limits around the 10th page with one ip. Proxies are a must basically.
-
-## Frequently Asked Questions
-
----
-**Q: Why is Indeed giving unrelated roles?**  
-**A:** Indeed searches the description too.
-
-- use - to remove words
-- "" for exact match
-
-Example of a good Indeed query
-
-```py
-search_term='"engineering intern" software summer (java OR python OR c++) 2025 -tax -marketing'
-```
-
-This searches the description/title and must include software, summer, 2025, one of the languages, engineering intern exactly, no tax, no marketing.
+> Fork of [python-jobspy](https://github.com/Bunsly/JobSpy) — plataforma completa de busca de vagas com UI moderna, análise de currículo por IA e automação de candidaturas.
 
 ---
 
-**Q: No results when using "google"?**  
-**A:** You have to use super specific syntax. Search for google jobs on your browser and then whatever pops up in the google jobs search box after applying some filters is what you need to copy & paste into the google_search_term. 
+## O que é isso?
+
+**Jumpship** adiciona uma aplicação web completa ao motor de scraping do python-jobspy. Em vez de uma biblioteca Python pura, você tem:
+
+- UI moderna para buscar e navegar vagas (Next.js 14 + cores da identidade visual do Claude)
+- Análise de currículo por IA — score de compatibilidade, pontos fortes, lacunas, sugestões, keywords
+- Geração de currículo personalizado para cada vaga
+- Tracker de candidaturas com pipeline de status
+- Automação de formulários via Playwright (Easy Apply)
+- Suporte a **10 providers de IA** — incluindo opções 100% gratuitas e modelo local (Ollama)
 
 ---
 
-**Q: Received a response code 429?**  
-**A:** This indicates that you have been blocked by the job board site for sending too many requests. All of the job board sites are aggressive with blocking. We recommend:
+## Funcionalidades
 
-- Wait some time between scrapes (site-dependent).
-- Try using the proxies param to change your IP address.
+### Busca de vagas
+- Scraping de **LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter, Bayt, Naukri** (internacional)
+- Plataformas brasileiras: **Gupy** (API oficial), **Catho**, **Vagas.com.br**
+- Filtros: localização, distância, tipo de contrato, remoto, Easy Apply, publicadas há N horas
+- Seletor de país para Indeed/Glassdoor
+- Salva vagas no banco local para análise posterior
+- Estado da busca preservado ao navegar entre páginas
+
+### Concursos públicos
+- Aba dedicada com busca em **PCI Concursos** e portais do **Gov.br**
+- Filtros: Estado/Região, Nível (fundamental/médio/superior/pós-graduação), Área, Salário mínimo, Status (abertos/todos), Banca e Órgão
+- Exibição de prazo de inscrição, número de vagas e faixa salarial em R$
+
+### Análise de currículo por IA
+- Faça upload do seu currículo uma vez (PDF ou DOCX) — ele é parseado e armazenado
+- Clique em **Analisar** em qualquer vaga para obter:
+  - **Score** (0–100) — compatibilidade geral
+  - **Pontos fortes** — o que no seu currículo corresponde à vaga
+  - **Lacunas** — requisitos que você não cobre
+  - **Sugestões** — como melhorar sua candidatura
+  - **Keywords** — encontradas vs ausentes no currículo
+- Saída JSON estruturada garantida por provider nativo (tool_use / json_object / json mime)
+- Retry automático se o modelo não retornar JSON válido
+
+### Personalização de currículo
+- Após a análise, gere uma versão do currículo otimizada para a vaga
+- A IA reescreve seu currículo destacando experiências relevantes e inserindo keywords ausentes — sem inventar nada
+
+### Tracker de candidaturas
+- Adicione qualquer vaga ao seu tracker
+- Pipeline: `Salva → Aprovada → Candidatando → Candidatada → Entrevista → Oferta / Rejeitada`
+- Dashboard com contagem por status
+
+### Automação (Playwright)
+- Para vagas Easy Apply, dispare o agente de browser direto do dashboard
+- O agente navega até a vaga, preenche o formulário com seus dados e envia o currículo
 
 ---
 
-### JobPost Schema
+## Providers de IA suportados
 
-```plaintext
-JobPost
-├── title
-├── company
-├── company_url
-├── job_url
-├── location
-│   ├── country
-│   ├── city
-│   ├── state
-├── is_remote
-├── description
-├── job_type: fulltime, parttime, internship, contract
-├── job_function
-│   ├── interval: yearly, monthly, weekly, daily, hourly
-│   ├── min_amount
-│   ├── max_amount
-│   ├── currency
-│   └── salary_source: direct_data, description (parsed from posting)
-├── date_posted
-└── emails
+### Pagos
 
-Linkedin specific
-└── job_level
+| Provider | Modelo | JSON garantido | Link |
+|---|---|---|---|
+| Anthropic | claude-sonnet-4-6 | tool_use | [console.anthropic.com](https://console.anthropic.com) |
+| OpenAI | gpt-4o-mini | json_object | [platform.openai.com](https://platform.openai.com/api-keys) |
+| Google Gemini | gemini-1.5-flash | response_mime_type | [aistudio.google.com](https://aistudio.google.com/app/apikey) |
+| DeepSeek | deepseek-chat | json_object | [platform.deepseek.com](https://platform.deepseek.com/api_keys) |
 
-Linkedin & Indeed specific
-└── company_industry
+### Gratuitos (API online)
 
-Indeed specific
-├── company_country
-├── company_addresses
-├── company_employees_label
-├── company_revenue_label
-├── company_description
-└── company_logo
+| Provider | Modelo | Diferencial | Link |
+|---|---|---|---|
+| **Groq** | llama-3.3-70b-versatile | Inferência ultra-rápida, limites diários generosos | [console.groq.com](https://console.groq.com/keys) |
+| **Hugging Face** | Qwen/Qwen2.5-72B-Instruct | Serverless Inference API, milhares de modelos | [huggingface.co](https://huggingface.co/settings/tokens) |
+| **Mistral AI** | mistral-small-latest | Tier "Experiment" gratuito para testes | [console.mistral.ai](https://console.mistral.ai/api-keys) |
+| **OpenRouter** | llama-3.2-3b-instruct:free | Agregador — sempre há modelos 100% gratuitos | [openrouter.ai](https://openrouter.ai/settings/keys) |
+| **Cohere** | command-r | Trial key gratuita para desenvolvimento | [dashboard.cohere.com](https://dashboard.cohere.com/api-keys) |
 
-Naukri specific
-├── skills
-├── experience_range
-├── company_rating
-├── company_reviews_count
-├── vacancy_count
-└── work_from_home_type
+### Local (sem internet)
+
+| Provider | Modelo padrão | Requisito |
+|---|---|---|
+| **Ollama** | llama3.2 (configurável) | [Ollama](https://ollama.com/download) rodando na máquina |
+
+Para usar o Ollama, instale-o e baixe um modelo. O Jumpship **detecta automaticamente** o Ollama rodando na máquina — sem nenhuma configuração manual. Se nenhuma API key estiver configurada, ele usa Ollama como provedor padrão. O campo "chave" nas configurações aceita qualquer nome de modelo instalado (`llama3.2`, `mistral`, `qwen2.5`, `deepseek-r1`, etc.).
+
+---
+
+## Stack
+
+| Camada | Tecnologia |
+|---|---|
+| Scraping | python-jobspy |
+| Backend | FastAPI + Python 3.11 |
+| Banco de dados | SQLite (local) |
+| Frontend | Next.js 14 + Tailwind CSS |
+| Parsing de currículo | PyMuPDF + python-docx |
+| Análise por IA | 10 providers (ver tabela acima) |
+| Automação de browser | Playwright (Chromium) |
+| Containerização | Docker Compose |
+
+---
+
+## Quick Start (sem Docker)
+
+**Requisitos:** Python 3.10+, Node 18+, npm
+
+```bash
+git clone https://github.com/seu-usuario/jumpship.git
+cd jumpship
+
+chmod +x start.sh && ./start.sh
 ```
+
+O script irá:
+1. Criar um ambiente virtual Python e instalar as dependências
+2. Iniciar o backend FastAPI em `http://localhost:8000`
+3. Instalar os pacotes npm e iniciar o frontend Next.js em `http://localhost:3000`
+
+### Setup manual
+
+```bash
+# Backend
+pip install -r backend/requirements.txt
+uvicorn backend.main:app --reload --port 8000
+
+# Frontend (em outro terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+## Docker
+
+```bash
+docker-compose up --build
+```
+
+| Serviço | URL |
+|---|---|
+| Frontend | http://localhost:3000 |
+| Backend API | http://localhost:8000 |
+| API Docs (Swagger) | http://localhost:8000/docs |
+
+### Ollama com Docker
+
+O Ollama roda na máquina host, não dentro do container. O `docker-compose.yml` já está configurado para isso:
+
+```yaml
+environment:
+  - OLLAMA_HOST=http://host.docker.internal:11434
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+No `start.sh` (sem Docker), o backend usa `localhost:11434` automaticamente.
+
+---
+
+## Configuração
+
+### 1. Chave de IA
+
+Vá em **Configurações → AI Keys** na UI, cole sua chave e selecione o provider ativo.
+
+Fallback por variável de ambiente (compatibilidade retroativa):
+
+```bash
+# backend/.env
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### 2. Credenciais de plataforma (opcional — para automação)
+
+Vá em **Configurações → Platform Login** para adicionar credenciais de LinkedIn, Indeed, Glassdoor ou ZipRecruiter.
+
+> ⚠️ **Use uma "burn account" dedicada.** Crie uma conta separada em cada plataforma exclusivamente para automação. O login automatizado pode violar os Termos de Serviço e resultar em banimento. Nunca use sua conta pessoal principal.
+
+### 3. Perfil de candidatura
+
+Vá em **Configurações → Perfil** para salvar seu nome, e-mail, telefone e URL do LinkedIn. Esses dados são usados para preencher formulários automaticamente.
+
+---
+
+## Estrutura do projeto
+
+```
+jumpship/
+├── backend/
+│   ├── main.py               # Entrypoint FastAPI + migration leve
+│   ├── database.py           # SQLAlchemy + SQLite
+│   ├── models/
+│   │   └── db_models.py      # ORM: SavedJob, Resume, Analysis, Application, Settings
+│   ├── routers/
+│   │   ├── jobs.py           # Busca + vagas salvas (internacional)
+│   │   ├── brazilian_jobs.py # Gupy, Catho, Vagas.com.br
+│   │   ├── concursos.py      # Concursos públicos + filtros
+│   │   ├── resume.py         # Upload + parse
+│   │   ├── analysis.py       # Score por IA + currículo personalizado
+│   │   ├── applications.py   # Tracker + trigger de automação
+│   │   └── settings.py       # Chaves de IA + credenciais + perfil + Ollama
+│   ├── services/
+│   │   ├── scraper.py            # Wrapper do jobspy
+│   │   ├── brazilian_scrapers.py # Gupy (API) + Catho + Vagas (HTML)
+│   │   ├── concursos_scraper.py  # PCI Concursos + Gov.br
+│   │   ├── resume_parser.py      # PyMuPDF + python-docx
+│   │   ├── ai_evaluator.py       # Cliente multi-provider com saída JSON garantida
+│   │   └── browser_agent.py      # Automação Playwright
+│   ├── requirements.txt
+│   └── Dockerfile
+├── frontend/
+│   ├── public/
+│   │   ├── logo.png          # Logo Jumpship
+│   │   ├── favicon.ico
+│   │   └── favicon-32.png
+│   └── src/
+│       ├── app/
+│       │   ├── page.tsx          # Busca de vagas
+│       │   ├── resume/           # Gerenciamento de currículo
+│       │   ├── dashboard/        # Tracker de candidaturas
+│       │   ├── settings/         # Configurações
+│       │   └── jobs/[id]/        # Detalhe de vaga (deep link)
+│       ├── components/
+│       │   ├── Navbar.tsx
+│       │   ├── JobCard.tsx
+│       │   ├── JobDetailPanel.tsx
+│       │   └── AnalysisPanel.tsx
+│       └── lib/
+│           ├── api.ts            # Cliente de API com tipos
+│           └── usePersistedState.ts  # Hook para persistência de estado via sessionStorage
+├── docker-compose.yml
+├── start.sh
+└── README.md
+```
+
+---
+
+## API Reference
+
+Documentação interativa em `http://localhost:8000/docs` com o backend rodando.
+
+| Método | Rota | Descrição |
+|---|---|---|
+| POST | `/api/jobs/search` | Scraping de vagas nos sites selecionados |
+| POST | `/api/jobs/save` | Salva vaga no banco local |
+| GET | `/api/jobs/saved` | Lista vagas salvas |
+| POST | `/api/resume/upload` | Upload e parse de currículo |
+| GET | `/api/resume/latest` | Currículo mais recente |
+| POST | `/api/analysis` | Análise IA: currículo × vaga |
+| GET | `/api/analysis/job/{job_id}` | Última análise de uma vaga |
+| POST | `/api/analysis/tailored-resume` | Gera currículo personalizado |
+| GET | `/api/applications` | Lista candidaturas |
+| PUT | `/api/applications/{id}/status` | Atualiza status da candidatura |
+| POST | `/api/applications/{id}/apply` | Dispara automação de browser |
+| GET/PUT | `/api/settings/ai-keys` | Gerencia chaves de IA (todos os providers) |
+| GET/PUT | `/api/settings/platforms/{id}` | Gerencia credenciais de plataforma |
+| GET/PUT | `/api/settings/profile` | Gerencia perfil de candidatura |
+| GET | `/api/health` | Health check |
+
+---
+
+## Limitações conhecidas
+
+Herdadas do python-jobspy:
+- **LinkedIn** tem rate limit agressivo (~10 páginas por IP) — use proxies para volume maior
+- **Indeed** é o scraper mais confiável (sem rate limit relevante)
+- Máximo ~1.000 resultados por busca
+
+Automação de browser:
+- Conformidade com os ToS das plataformas é responsabilidade do usuário
+- Fluxos de Easy Apply variam bastante entre sites e podem requerer ajustes manuais
+
+---
+
+## Créditos
+
+Jumpship é um fork de **[python-jobspy](https://github.com/Bunsly/JobSpy)**, criado por [Bunsly](https://github.com/Bunsly) e colaboradores. A biblioteca original fornece toda a infraestrutura de scraping sobre a qual esta aplicação é construída.
+
+---
+
+## Licença
+
+MIT — igual ao python-jobspy original. Veja [LICENSE](LICENSE).

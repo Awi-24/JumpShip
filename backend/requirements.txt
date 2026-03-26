@@ -1,0 +1,24 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+sqlalchemy==2.0.36
+python-multipart==0.0.18
+pydantic==2.10.3
+pydantic-settings==2.6.1
+anthropic==0.40.0
+openai==1.58.1
+google-generativeai==0.8.3
+pymupdf==1.25.1
+python-docx==1.1.2
+aiofiles==24.1.0
+httpx==0.28.1
+playwright==1.49.0
+python-dotenv==1.0.1
+alembic==1.14.0
+pandas==2.2.3
+# jobspy transitive dependencies
+requests==2.32.3
+beautifulsoup4==4.12.3
+tls-client==1.0.1
+markdownify==1.1.0
+regex==2024.11.6
+numpy==1.26.4

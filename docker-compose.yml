@@ -1,0 +1,39 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: jumpship-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app/backend
+      - jumpship-db:/app/data
+      - jumpship-uploads:/app/uploads
+    environment:
+      - DATABASE_URL=sqlite:////app/data/jobspy_ui.db
+      - UPLOAD_DIR=/app/uploads
+      - CORS_ORIGINS=http://localhost:3000
+      # Ollama runs on the host machine — use host.docker.internal to reach it from the container.
+      # On Linux Docker Engine, extra_hosts below maps this hostname to the host gateway.
+      - OLLAMA_HOST=http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: jumpship-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  jumpship-db:
+  jumpship-uploads:
