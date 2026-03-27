@@ -1,12 +1,24 @@
 import { useMutation } from '@tanstack/react-query';
 import type { ResumeProfile } from '../types';
 
-const API = 'http://localhost:8000/api';
+interface ParseResumeArgs {
+  file: File;
+  llmProvider?: string;
+  llmModel?: string;
+  llmBaseUrl?: string;
+  llmApiKey?: string;
+}
 
-async function parseResume(file: File): Promise<ResumeProfile> {
+async function parseResume(args: ParseResumeArgs): Promise<ResumeProfile> {
   const formData = new FormData();
-  formData.append('file', file);
-  const res = await fetch(`${API}/resume/parse`, {
+  formData.append('file', args.file);
+  // Pass LLM config as extra form fields so the server uses the user's chosen model
+  if (args.llmProvider) formData.append('llm_provider', args.llmProvider);
+  if (args.llmModel)    formData.append('llm_model', args.llmModel);
+  if (args.llmBaseUrl)  formData.append('llm_base_url', args.llmBaseUrl);
+  if (args.llmApiKey)   formData.append('llm_api_key', args.llmApiKey);
+
+  const res = await fetch('/api/resume/parse', {
     method: 'POST',
     body: formData,
   });
@@ -15,7 +27,5 @@ async function parseResume(file: File): Promise<ResumeProfile> {
 }
 
 export function useResumeParse() {
-  return useMutation({
-    mutationFn: parseResume,
-  });
+  return useMutation({ mutationFn: parseResume });
 }

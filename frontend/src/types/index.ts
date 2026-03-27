@@ -29,6 +29,7 @@ export interface JobResult {
   id: string;
   title: string;
   company: string;
+  company_url?: string;
   location: string;
   job_type: string;
   salary_range: string;

@@ -26,6 +26,15 @@ export default function Search({ onBack }: SearchProps) {
   const [jobType, setJobType] = useState('all');
   const [sortBy, setSortBy] = useState<SortOption>('match');
   const [newKeyword, setNewKeyword] = useState('');
+  const [activeSites, setActiveSites] = useState<string[]>(settings.defaultSites);
+
+  const ALL_SITES = ['linkedin', 'indeed', 'glassdoor', 'zip_recruiter'];
+
+  const toggleSite = (site: string) => {
+    setActiveSites(prev =>
+      prev.includes(site) ? prev.filter(s => s !== site) : [...prev, site]
+    );
+  };
 
   const jobSearch = useJobSearch();
 
@@ -46,19 +55,30 @@ export default function Search({ onBack }: SearchProps) {
   }, [settings.llmProvider]);
 
   const handleResumeUpload = useCallback(async (file: File) => {
-    const profile = await resumeMutation.mutateAsync(file);
+    const apiKey =
+      settings.llmProvider === 'openai'    ? settings.openaiKey :
+      settings.llmProvider === 'anthropic' ? settings.anthropicKey :
+      settings.llmProvider === 'groq'      ? settings.groqKey : '';
+
+    const profile = await resumeMutation.mutateAsync({
+      file,
+      llmProvider: settings.llmProvider,
+      llmModel:    settings.llmModel    || undefined,
+      llmBaseUrl:  settings.ollamaUrl   || undefined,
+      llmApiKey:   apiKey               || undefined,
+    });
     setResumeProfile(profile);
     if (profile.suggested_keywords?.length) setKeywords(profile.suggested_keywords);
     if (!location && settings.defaultLocation) setLocation(settings.defaultLocation);
     else if (!location) setLocation('Remote');
-  }, [resumeMutation, location, settings.defaultLocation]);
+  }, [resumeMutation, location, settings]);
 
   const handleSearch = () => {
     jobSearch.mutate({
       keywords,
       location,
       job_type: jobType === 'all' ? 'fulltime' : jobType,
-      sites: settings.defaultSites,
+      sites: activeSites.length > 0 ? activeSites : settings.defaultSites,
       results_wanted: settings.resultsWanted,
       resume_profile: resumeProfile,
       // LLM config passed per-request
@@ -232,21 +252,24 @@ export default function Search({ onBack }: SearchProps) {
             </div>
 
             <div className="filter-group" style={{ marginTop: 14 }}>
-              <div className="filter-label">
-                Sources
-                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-                  {settings.defaultSites.length} active
-                </span>
+              <div className="filter-label">Job Boards</div>
+              <div className="site-pills">
+                {ALL_SITES.map(site => (
+                  <button
+                    key={site}
+                    type="button"
+                    className={`site-pill${activeSites.includes(site) ? ' active' : ''}`}
+                    onClick={() => toggleSite(site)}
+                  >
+                    {site.replace('_', ' ')}
+                  </button>
+                ))}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                {settings.defaultSites.join(', ')} ·{' '}
-                <button
-                  onClick={() => setSettingsOpen(true)}
-                  style={{ background: 'none', border: 'none', color: 'var(--gold)', cursor: 'pointer', fontSize: 12, padding: 0 }}
-                >
-                  edit in Settings
-                </button>
-              </div>
+              {activeSites.length === 0 && (
+                <div style={{ fontSize: 11, color: '#f87171', marginTop: 4 }}>
+                  Select at least one board
+                </div>
+              )}
             </div>
           </div>
 

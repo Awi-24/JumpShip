@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -53,7 +53,7 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-family: 'Syne', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: 22px;
   font-weight: 800;
   letter-spacing: -0.5px;
@@ -85,7 +85,7 @@ body {
   color: #0A0A0A;
   border: none;
   border-radius: 8px;
-  font-family: 'Syne', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
@@ -139,7 +139,7 @@ body {
 }
 
 .hero-title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: clamp(52px, 8vw, 96px);
   font-weight: 800;
   line-height: 0.95;
@@ -184,7 +184,7 @@ body {
   color: #0A0A0A;
   border: none;
   border-radius: 10px;
-  font-family: 'Syne', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
@@ -251,7 +251,7 @@ body {
 }
 
 .section-title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: clamp(32px, 4vw, 52px);
   font-weight: 800;
   letter-spacing: -1.5px;
@@ -310,7 +310,7 @@ body {
 }
 
 .feature-name {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: 17px;
   font-weight: 700;
   margin-bottom: 8px;
@@ -387,7 +387,7 @@ body {
 }
 
 .search-logo {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-weight: 800;
   font-size: 20px;
   cursor: pointer;
@@ -414,7 +414,7 @@ body {
 }
 
 .sidebar-section-title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 1.5px;
@@ -455,7 +455,7 @@ body {
 }
 
 .upload-title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: 14px;
   font-weight: 700;
   margin-bottom: 4px;
@@ -475,7 +475,7 @@ body {
 }
 
 .resume-name {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: 13px;
   font-weight: 700;
   color: var(--gold);
@@ -602,7 +602,7 @@ body {
   color: #0A0A0A;
   border: none;
   border-radius: 10px;
-  font-family: 'Syne', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
@@ -631,7 +631,7 @@ body {
 }
 
 .results-title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: 20px;
   font-weight: 700;
 }
@@ -692,12 +692,30 @@ body {
   justify-content: center;
   font-size: 18px;
   flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.company-favicon {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  padding: 8px;
+  border-radius: 10px;
+}
+
+.company-initials {
+  width: 100%; height: 100%;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-muted);
 }
 
 .job-info { flex: 1; min-width: 0; }
 
 .job-title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.3px;
@@ -751,7 +769,7 @@ body {
   align-items: center;
   justify-content: center;
   position: relative;
-  font-family: 'Syne', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: 15px;
   font-weight: 800;
 }
@@ -785,24 +803,45 @@ body {
 .expand-btn.open { transform: rotate(180deg); color: var(--gold); }
 
 /* EXPANDED CONTENT */
-.job-expanded {
+.job-expanded-body {
   border-top: 1px solid var(--border);
-  overflow: hidden;
-  max-height: 0;
-  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: fadeIn 0.2s ease;
 }
 
-.job-expanded.open { max-height: 1200px; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 
-.job-expanded-inner {
-  padding: 20px;
+/* Two-column grid: description on the left, assessment on the right */
+.job-expanded-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  gap: 0;
+}
+
+/* Each column scrolls independently so a long description never hides the assessment */
+.job-expanded-col {
+  padding: 20px;
+  max-height: 540px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-bright) transparent;
+}
+
+.job-expanded-col + .job-expanded-col {
+  border-left: 1px solid var(--border);
+}
+
+.job-expanded-col::-webkit-scrollbar { width: 4px; }
+.job-expanded-col::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+.job-expanded-actions {
+  display: flex;
+  gap: 10px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
 }
 
 .exp-section-title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.5px;
@@ -812,13 +851,58 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  position: sticky;
+  top: 0;
+  background: var(--bg2);
+  padding-bottom: 8px;
+  z-index: 1;
 }
 
+/* Markdown-rendered description */
 .job-description {
   font-size: 13px;
   line-height: 1.7;
   color: var(--text-muted);
   font-weight: 300;
+}
+
+.markdown-body p { margin: 0 0 10px; }
+.markdown-body h3, .markdown-body h4 {
+  font-family: 'Roboto', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 14px 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.markdown-body strong { color: var(--text); font-weight: 600; }
+.markdown-body em { font-style: italic; }
+.markdown-body ul { margin: 6px 0 10px 0; padding-left: 16px; }
+.markdown-body li { margin-bottom: 4px; }
+.markdown-body pre {
+  background: var(--bg3);
+  border-radius: 4px;
+  padding: 10px;
+  font-size: 12px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.markdown-body hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+
+/* Score row inside assessment panel */
+.assessment-score-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.assessment-score-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 /* LLM Assessment */
@@ -931,7 +1015,7 @@ body {
   color: #0A0A0A;
   border: none;
   border-radius: 8px;
-  font-family: 'Syne', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -947,7 +1031,7 @@ body {
 }
 
 .empty-icon { font-size: 56px; margin-bottom: 20px; opacity: 0.4; }
-.empty-title { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 700; margin-bottom: 10px; }
+.empty-title { font-family: 'Roboto', sans-serif; font-size: 22px; font-weight: 700; margin-bottom: 10px; }
 .empty-sub { font-size: 15px; color: var(--text-muted); font-weight: 300; }
 
 /* LOADING STATE */
@@ -1024,7 +1108,7 @@ body {
   text-transform: capitalize;
 }
 .llm-status-model {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: 13px;
   font-weight: 700;
   color: var(--text);
@@ -1085,7 +1169,7 @@ body {
 }
 
 .modal-title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: 18px;
   font-weight: 800;
   letter-spacing: -0.3px;
@@ -1249,4 +1333,39 @@ body {
   width: 13px;
   height: 13px;
   cursor: pointer;
+}
+
+/* ── SIDEBAR SITE PILL TOGGLES ───────────────────────────────────── */
+.site-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.site-pill {
+  padding: 5px 11px;
+  border-radius: 6px;
+  border: 1px solid rgba(245,166,35,0.18);
+  background: rgba(245,166,35,0.04);
+  color: var(--text-muted);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  letter-spacing: 0.2px;
+}
+
+.site-pill:hover {
+  border-color: rgba(245,166,35,0.4);
+  color: var(--text);
+}
+
+.site-pill.active {
+  border-color: var(--gold);
+  background: rgba(245,166,35,0.14);
+  color: var(--gold);
+  font-weight: 600;
 }

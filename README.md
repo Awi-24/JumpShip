@@ -1,288 +1,177 @@
-# Jumpship
+# JumpShip
 
-> Fork of [python-jobspy](https://github.com/Bunsly/JobSpy) — plataforma completa de busca de vagas com UI moderna, análise de currículo por IA e automação de candidaturas.
-
----
-
-## O que é isso?
-
-**Jumpship** adiciona uma aplicação web completa ao motor de scraping do python-jobspy. Em vez de uma biblioteca Python pura, você tem:
-
-- UI moderna para buscar e navegar vagas (Next.js 14 + cores da identidade visual do Claude)
-- Análise de currículo por IA — score de compatibilidade, pontos fortes, lacunas, sugestões, keywords
-- Geração de currículo personalizado para cada vaga
-- Tracker de candidaturas com pipeline de status
-- Automação de formulários via Playwright (Easy Apply)
-- Suporte a **10 providers de IA** — incluindo opções 100% gratuitas e modelo local (Ollama)
+> A fork of [python-jobspy](https://github.com/Bunsly/JobSpy) — a full-featured job search platform with a modern UI, AI-powered resume analysis, and a local-first LLM integration.
 
 ---
 
-## Funcionalidades
+## What is this?
 
-### Busca de vagas
-- Scraping de **LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter, Bayt, Naukri** (internacional)
-- Plataformas brasileiras: **Gupy** (API oficial), **Catho**, **Vagas.com.br**
-- Filtros: localização, distância, tipo de contrato, remoto, Easy Apply, publicadas há N horas
-- Seletor de país para Indeed/Glassdoor
-- Salva vagas no banco local para análise posterior
-- Estado da busca preservado ao navegar entre páginas
+**JumpShip** wraps the python-jobspy scraping engine in a complete web application. Instead of a bare Python library you get:
 
-### Concursos públicos
-- Aba dedicada com busca em **PCI Concursos** e portais do **Gov.br**
-- Filtros: Estado/Região, Nível (fundamental/médio/superior/pós-graduação), Área, Salário mínimo, Status (abertos/todos), Banca e Órgão
-- Exibição de prazo de inscrição, número de vagas e faixa salarial em R$
-
-### Análise de currículo por IA
-- Faça upload do seu currículo uma vez (PDF ou DOCX) — ele é parseado e armazenado
-- Clique em **Analisar** em qualquer vaga para obter:
-  - **Score** (0–100) — compatibilidade geral
-  - **Pontos fortes** — o que no seu currículo corresponde à vaga
-  - **Lacunas** — requisitos que você não cobre
-  - **Sugestões** — como melhorar sua candidatura
-  - **Keywords** — encontradas vs ausentes no currículo
-- Saída JSON estruturada garantida por provider nativo (tool_use / json_object / json mime)
-- Retry automático se o modelo não retornar JSON válido
-
-### Personalização de currículo
-- Após a análise, gere uma versão do currículo otimizada para a vaga
-- A IA reescreve seu currículo destacando experiências relevantes e inserindo keywords ausentes — sem inventar nada
-
-### Tracker de candidaturas
-- Adicione qualquer vaga ao seu tracker
-- Pipeline: `Salva → Aprovada → Candidatando → Candidatada → Entrevista → Oferta / Rejeitada`
-- Dashboard com contagem por status
-
-### Automação (Playwright)
-- Para vagas Easy Apply, dispare o agente de browser direto do dashboard
-- O agente navega até a vaga, preenche o formulário com seus dados e envia o currículo
+- A dark-themed React UI to search and browse jobs
+- AI resume analysis — compatibility score, strong points, gaps, keywords, and career suggestions
+- Per-request LLM configuration (switch providers without restarting the server)
+- Support for **Ollama, OpenAI, Anthropic, and Groq** out of the box — including 100% local/free options
 
 ---
 
-## Providers de IA suportados
+## Features
 
-### Pagos
+### Job search
+- Scrapes **LinkedIn, Indeed, Glassdoor, ZipRecruiter** simultaneously
+- Filters: location, job type, remote-only, results count
+- Match score shown on each card when a resume is uploaded
+- Expand any card to view the full description and lazy-load the AI assessment
 
-| Provider | Modelo | JSON garantido | Link |
-|---|---|---|---|
-| Anthropic | claude-sonnet-4-6 | tool_use | [console.anthropic.com](https://console.anthropic.com) |
-| OpenAI | gpt-4o-mini | json_object | [platform.openai.com](https://platform.openai.com/api-keys) |
-| Google Gemini | gemini-1.5-flash | response_mime_type | [aistudio.google.com](https://aistudio.google.com/app/apikey) |
-| DeepSeek | deepseek-chat | json_object | [platform.deepseek.com](https://platform.deepseek.com/api_keys) |
+### Resume analysis
+- Upload a PDF or DOCX once — it is parsed on the server and kept in memory for the session
+- Click **Assess** on any job to get:
+  - **Match score** (0–100)
+  - **Strong points** — what on your resume matches the role
+  - **Gaps** — requirements you don't currently cover
+  - **Career suggestions** — concrete next steps
 
-### Gratuitos (API online)
-
-| Provider | Modelo | Diferencial | Link |
-|---|---|---|---|
-| **Groq** | llama-3.3-70b-versatile | Inferência ultra-rápida, limites diários generosos | [console.groq.com](https://console.groq.com/keys) |
-| **Hugging Face** | Qwen/Qwen2.5-72B-Instruct | Serverless Inference API, milhares de modelos | [huggingface.co](https://huggingface.co/settings/tokens) |
-| **Mistral AI** | mistral-small-latest | Tier "Experiment" gratuito para testes | [console.mistral.ai](https://console.mistral.ai/api-keys) |
-| **OpenRouter** | llama-3.2-3b-instruct:free | Agregador — sempre há modelos 100% gratuitos | [openrouter.ai](https://openrouter.ai/settings/keys) |
-| **Cohere** | command-r | Trial key gratuita para desenvolvimento | [dashboard.cohere.com](https://dashboard.cohere.com/api-keys) |
-
-### Local (sem internet)
-
-| Provider | Modelo padrão | Requisito |
-|---|---|---|
-| **Ollama** | llama3.2 (configurável) | [Ollama](https://ollama.com/download) rodando na máquina |
-
-Para usar o Ollama, instale-o e baixe um modelo. O Jumpship **detecta automaticamente** o Ollama rodando na máquina — sem nenhuma configuração manual. Se nenhuma API key estiver configurada, ele usa Ollama como provedor padrão. O campo "chave" nas configurações aceita qualquer nome de modelo instalado (`llama3.2`, `mistral`, `qwen2.5`, `deepseek-r1`, etc.).
+### LLM configuration
+- Fully configurable from the Settings modal (⚙ button in the header)
+- Per-request LLM override — each search/assess call can specify a different provider, model, and API key without touching any config files
+- Supported providers: Ollama (local), LM Studio, OpenAI, Anthropic, Groq
 
 ---
 
-## Stack
+## Tech stack
 
-| Camada | Tecnologia |
+| Layer | Technology |
 |---|---|
-| Scraping | python-jobspy |
-| Backend | FastAPI + Python 3.11 |
-| Banco de dados | SQLite (local) |
-| Frontend | Next.js 14 + Tailwind CSS |
-| Parsing de currículo | PyMuPDF + python-docx |
-| Análise por IA | 10 providers (ver tabela acima) |
-| Automação de browser | Playwright (Chromium) |
-| Containerização | Docker Compose |
+| Frontend | React 19 + TypeScript + Vite |
+| Backend | FastAPI + Pydantic v2 + Python 3.11 |
+| Scraping | python-jobspy (LinkedIn, Indeed, Glassdoor, ZipRecruiter) |
+| Resume parsing | pdfminer.six (PDF), python-docx (DOCX) |
+| LLM | Ollama · OpenAI · Anthropic · Groq |
+| Container | Docker Compose (nginx reverse proxy + backend) |
 
 ---
 
-## Quick Start (sem Docker)
+## Quick start
 
-**Requisitos:** Python 3.10+, Node 18+, npm
+### With Docker Compose (recommended)
 
 ```bash
-git clone https://github.com/seu-usuario/jumpship.git
+# 1. Clone
+git clone https://github.com/your-org/jumpship.git
 cd jumpship
 
-chmod +x start.sh && ./start.sh
+# 2. Configure environment (optional — defaults work with Ollama)
+cp .env.example .env
+# Edit .env to set your LLM provider and API keys
+
+# 3. Start
+docker compose up --build
 ```
 
-O script irá:
-1. Criar um ambiente virtual Python e instalar as dependências
-2. Iniciar o backend FastAPI em `http://localhost:8000`
-3. Instalar os pacotes npm e iniciar o frontend Next.js em `http://localhost:3000`
+Open [http://localhost](http://localhost). The frontend is served by nginx on port 80 and proxies `/api/` to the backend on port 8000.
 
-### Setup manual
+### Local development
+
+**Backend**
 
 ```bash
-# Backend
-pip install -r backend/requirements.txt
+cd backend
+pip install -r requirements.txt
 uvicorn backend.main:app --reload --port 8000
+```
 
-# Frontend (em outro terminal)
+**Frontend**
+
+```bash
 cd frontend
 npm install
-npm run dev
+npm run dev        # starts Vite dev server on http://localhost:5173
 ```
+
+Vite proxies `/api` requests to `http://localhost:8000` automatically.
 
 ---
 
-## Docker
+## Environment variables
+
+Copy `.env.example` to `.env` in the project root and adjust as needed.
+
+| Variable | Default | Description |
+|---|---|---|
+| `LLM_PROVIDER` | `ollama` | Active LLM provider (`ollama`, `openai`, `anthropic`, `groq`) |
+| `LLM_MODEL` | `llama3:8b` | Model name for the chosen provider |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server address |
+| `OPENAI_API_KEY` | — | OpenAI key (only needed when using OpenAI) |
+| `ANTHROPIC_API_KEY` | — | Anthropic key (only needed when using Anthropic) |
+| `GROQ_API_KEY` | — | Groq key (only needed when using Groq) |
+| `CORS_ORIGINS` | `*` | Allowed CORS origins for the API |
+
+API keys entered in the Settings modal are stored in `localStorage` and sent directly to the chosen provider — they are never stored on the server.
+
+---
+
+## Running tests
+
+### Backend
 
 ```bash
-docker-compose up --build
+# Install dependencies
+pip install -r requirements.txt
+pip install pytest pytest-asyncio httpx
+
+# Unit tests (no external services required)
+pytest tests/unit/ -v
+
+# Integration tests (no external services required)
+pytest tests/integration/ -v -m "not llm_integration"
+
+# LLM integration tests (requires Ollama running locally)
+pytest tests/integration/test_llm_integration.py -v
 ```
 
-| Serviço | URL |
-|---|---|
-| Frontend | http://localhost:3000 |
-| Backend API | http://localhost:8000 |
-| API Docs (Swagger) | http://localhost:8000/docs |
-
-### Ollama com Docker
-
-O Ollama roda na máquina host, não dentro do container. O `docker-compose.yml` já está configurado para isso:
-
-```yaml
-environment:
-  - OLLAMA_HOST=http://host.docker.internal:11434
-extra_hosts:
-  - "host.docker.internal:host-gateway"
-```
-
-No `start.sh` (sem Docker), o backend usa `localhost:11434` automaticamente.
-
----
-
-## Configuração
-
-### 1. Chave de IA
-
-Vá em **Configurações → AI Keys** na UI, cole sua chave e selecione o provider ativo.
-
-Fallback por variável de ambiente (compatibilidade retroativa):
+### Frontend
 
 ```bash
-# backend/.env
-ANTHROPIC_API_KEY=sk-ant-...
+cd frontend
+npm run test:run          # single run
+npm run test:coverage     # with V8 coverage report
 ```
 
-### 2. Credenciais de plataforma (opcional — para automação)
-
-Vá em **Configurações → Platform Login** para adicionar credenciais de LinkedIn, Indeed, Glassdoor ou ZipRecruiter.
-
-> ⚠️ **Use uma "burn account" dedicada.** Crie uma conta separada em cada plataforma exclusivamente para automação. O login automatizado pode violar os Termos de Serviço e resultar em banimento. Nunca use sua conta pessoal principal.
-
-### 3. Perfil de candidatura
-
-Vá em **Configurações → Perfil** para salvar seu nome, e-mail, telefone e URL do LinkedIn. Esses dados são usados para preencher formulários automaticamente.
+Current test coverage: **41 backend tests** (unit + integration) and **38 frontend tests** (components + hooks), all passing with no external dependencies required.
 
 ---
 
-## Estrutura do projeto
+## Project structure
 
 ```
 jumpship/
 ├── backend/
-│   ├── main.py               # Entrypoint FastAPI + migration leve
-│   ├── database.py           # SQLAlchemy + SQLite
-│   ├── models/
-│   │   └── db_models.py      # ORM: SavedJob, Resume, Analysis, Application, Settings
+│   ├── main.py                  # FastAPI app entry point
+│   ├── config.py                # pydantic-settings configuration
+│   ├── models/schemas.py        # Pydantic v2 request/response schemas
 │   ├── routers/
-│   │   ├── jobs.py           # Busca + vagas salvas (internacional)
-│   │   ├── brazilian_jobs.py # Gupy, Catho, Vagas.com.br
-│   │   ├── concursos.py      # Concursos públicos + filtros
-│   │   ├── resume.py         # Upload + parse
-│   │   ├── analysis.py       # Score por IA + currículo personalizado
-│   │   ├── applications.py   # Tracker + trigger de automação
-│   │   └── settings.py       # Chaves de IA + credenciais + perfil + Ollama
-│   ├── services/
-│   │   ├── scraper.py            # Wrapper do jobspy
-│   │   ├── brazilian_scrapers.py # Gupy (API) + Catho + Vagas (HTML)
-│   │   ├── concursos_scraper.py  # PCI Concursos + Gov.br
-│   │   ├── resume_parser.py      # PyMuPDF + python-docx
-│   │   ├── ai_evaluator.py       # Cliente multi-provider com saída JSON garantida
-│   │   └── browser_agent.py      # Automação Playwright
-│   ├── requirements.txt
-│   └── Dockerfile
+│   │   ├── jobs_v2.py           # POST /api/jobs/search, /api/jobs/assess
+│   │   └── resume_v2.py         # POST /api/resume/parse
+│   └── services/
+│       ├── llm_service.py       # LLM abstraction (Ollama/OpenAI/Anthropic/Groq)
+│       ├── job_scraper_v2.py    # python-jobspy wrapper
+│       └── resume_parser_v2.py  # PDF/DOCX text extraction + LLM profile parsing
 ├── frontend/
-│   ├── public/
-│   │   ├── logo.png          # Logo Jumpship
-│   │   ├── favicon.ico
-│   │   └── favicon-32.png
-│   └── src/
-│       ├── app/
-│       │   ├── page.tsx          # Busca de vagas
-│       │   ├── resume/           # Gerenciamento de currículo
-│       │   ├── dashboard/        # Tracker de candidaturas
-│       │   ├── settings/         # Configurações
-│       │   └── jobs/[id]/        # Detalhe de vaga (deep link)
-│       ├── components/
-│       │   ├── Navbar.tsx
-│       │   ├── JobCard.tsx
-│       │   ├── JobDetailPanel.tsx
-│       │   └── AnalysisPanel.tsx
-│       └── lib/
-│           ├── api.ts            # Cliente de API com tipos
-│           └── usePersistedState.ts  # Hook para persistência de estado via sessionStorage
+│   ├── src/
+│   │   ├── pages/               # Landing.tsx, Search.tsx
+│   │   ├── components/          # JobCard, ScoreRing, ResumeUpload, SettingsModal, …
+│   │   ├── hooks/               # useSettings, useJobs, useResume
+│   │   └── types/               # TypeScript interfaces
+│   └── vitest.config.ts
+├── tests/
+│   ├── unit/                    # Schema, config, LLM, scraper, parser unit tests
+│   └── integration/             # API endpoint tests + live LLM tests
 ├── docker-compose.yml
-├── start.sh
-└── README.md
+└── .env.example
 ```
 
 ---
 
-## API Reference
+## License
 
-Documentação interativa em `http://localhost:8000/docs` com o backend rodando.
-
-| Método | Rota | Descrição |
-|---|---|---|
-| POST | `/api/jobs/search` | Scraping de vagas nos sites selecionados |
-| POST | `/api/jobs/save` | Salva vaga no banco local |
-| GET | `/api/jobs/saved` | Lista vagas salvas |
-| POST | `/api/resume/upload` | Upload e parse de currículo |
-| GET | `/api/resume/latest` | Currículo mais recente |
-| POST | `/api/analysis` | Análise IA: currículo × vaga |
-| GET | `/api/analysis/job/{job_id}` | Última análise de uma vaga |
-| POST | `/api/analysis/tailored-resume` | Gera currículo personalizado |
-| GET | `/api/applications` | Lista candidaturas |
-| PUT | `/api/applications/{id}/status` | Atualiza status da candidatura |
-| POST | `/api/applications/{id}/apply` | Dispara automação de browser |
-| GET/PUT | `/api/settings/ai-keys` | Gerencia chaves de IA (todos os providers) |
-| GET/PUT | `/api/settings/platforms/{id}` | Gerencia credenciais de plataforma |
-| GET/PUT | `/api/settings/profile` | Gerencia perfil de candidatura |
-| GET | `/api/health` | Health check |
-
----
-
-## Limitações conhecidas
-
-Herdadas do python-jobspy:
-- **LinkedIn** tem rate limit agressivo (~10 páginas por IP) — use proxies para volume maior
-- **Indeed** é o scraper mais confiável (sem rate limit relevante)
-- Máximo ~1.000 resultados por busca
-
-Automação de browser:
-- Conformidade com os ToS das plataformas é responsabilidade do usuário
-- Fluxos de Easy Apply variam bastante entre sites e podem requerer ajustes manuais
-
----
-
-## Créditos
-
-Jumpship é um fork de **[python-jobspy](https://github.com/Bunsly/JobSpy)**, criado por [Bunsly](https://github.com/Bunsly) e colaboradores. A biblioteca original fornece toda a infraestrutura de scraping sobre a qual esta aplicação é construída.
-
----
-
-## Licença
-
-MIT — igual ao python-jobspy original. Veja [LICENSE](LICENSE).
+MIT — same as the upstream [python-jobspy](https://github.com/Bunsly/JobSpy) project.

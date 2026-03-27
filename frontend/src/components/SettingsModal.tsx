@@ -2,17 +2,17 @@ import { useState, useEffect } from 'react';
 import type { Settings } from '../hooks/useSettings';
 import type { LLMProvider } from '../types';
 
+// Fallback / cloud model suggestions shown when Ollama can't be queried
 const PROVIDER_MODELS: Record<LLMProvider, string[]> = {
-  ollama:    ['llama3:8b', 'llama3:70b', 'mistral:7b', 'mixtral:8x7b', 'phi3:mini', 'gemma2:9b', 'deepseek-r1:7b'],
+  ollama:    [],  // populated at runtime from /api/ollama/models
   openclaw:  ['openclaw-default'],
   lmstudio:  ['lmstudio-default'],
   openai:    ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-  anthropic: ['claude-opus-4-5', 'claude-sonnet-4-5', 'claude-haiku-4-5'],
+  anthropic: ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
   groq:      ['llama3-70b-8192', 'llama3-8b-8192', 'mixtral-8x7b-32768', 'gemma2-9b-it'],
 };
 
 const LOCAL_PROVIDERS: LLMProvider[] = ['ollama', 'openclaw', 'lmstudio'];
-
 const ALL_SITES = ['linkedin', 'indeed', 'glassdoor', 'zip_recruiter'];
 
 interface Props {
@@ -26,9 +26,35 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
   const [draft, setDraft] = useState<Settings>(initial);
   const [status, setStatus] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
   const [activeTab, setActiveTab] = useState<'llm' | 'search'>('llm');
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
 
   // Keep draft in sync if settings change externally
   useEffect(() => { setDraft(initial); }, [initial]);
+
+  // Fetch Ollama models whenever provider is ollama or the base URL changes
+  useEffect(() => {
+    if (!open) return;
+    if (draft.llmProvider !== 'ollama') return;
+
+    setLoadingModels(true);
+    const params = draft.ollamaUrl
+      ? `?base_url=${encodeURIComponent(draft.ollamaUrl)}`
+      : '';
+
+    fetch(`/api/ollama/models${params}`)
+      .then(r => r.json())
+      .then((models: string[]) => {
+        setOllamaModels(models);
+        // If the current model isn't in the fetched list, auto-select the first one
+        if (models.length > 0 && !models.includes(draft.llmModel)) {
+          setDraft(d => ({ ...d, llmModel: models[0] }));
+        }
+      })
+      .catch(() => setOllamaModels([]))
+      .finally(() => setLoadingModels(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, draft.llmProvider, draft.ollamaUrl]);
 
   if (!open) return null;
 
@@ -36,11 +62,8 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
     setDraft(d => ({ ...d, [key]: value }));
 
   const handleProviderChange = (p: LLMProvider) => {
-    setDraft(d => ({
-      ...d,
-      llmProvider: p,
-      llmModel: PROVIDER_MODELS[p][0],
-    }));
+    const defaultModel = PROVIDER_MODELS[p][0] ?? '';
+    setDraft(d => ({ ...d, llmProvider: p, llmModel: defaultModel }));
     setStatus('idle');
   };
 
@@ -78,6 +101,13 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
     if (draft.llmProvider === 'anthropic') set('anthropicKey', val);
     if (draft.llmProvider === 'groq')      set('groqKey', val);
   };
+
+  // For cloud providers use the hardcoded list; for Ollama use the live list
+  const modelSuggestions = draft.llmProvider === 'ollama'
+    ? ollamaModels
+    : PROVIDER_MODELS[draft.llmProvider];
+
+  const datalistId = `model-suggestions-${draft.llmProvider}`;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -132,20 +162,7 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
                 </select>
               </div>
 
-              <div className="settings-row">
-                <label className="settings-label">Model</label>
-                <select
-                  className="config-select"
-                  value={draft.llmModel}
-                  onChange={e => set('llmModel', e.target.value)}
-                >
-                  {PROVIDER_MODELS[draft.llmProvider].map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Local provider URL */}
+              {/* Local provider URL — shown first so URL can be set before model fetch */}
               {!isCloud && (
                 <div className="settings-row">
                   <label className="settings-label">Base URL</label>
@@ -153,13 +170,56 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
                     className="config-input"
                     value={draft.ollamaUrl}
                     onChange={e => set('ollamaUrl', e.target.value)}
-                    placeholder="http://localhost:11434"
+                    placeholder="default (host.docker.internal:11434)"
                   />
                   <div className="settings-hint">
-                    The address where {draft.llmProvider} is running
+                    Leave blank to use the server's configured URL. In Docker, Ollama is reached via host.docker.internal:11434.
                   </div>
                 </div>
               )}
+
+              <div className="settings-row">
+                <label className="settings-label">
+                  Model
+                  {loadingModels && (
+                    <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                      <span className="spinner" style={{ width: 10, height: 10, display: 'inline-block', verticalAlign: 'middle' }} /> fetching…
+                    </span>
+                  )}
+                  {draft.llmProvider === 'ollama' && !loadingModels && ollamaModels.length === 0 && (
+                    <span style={{ marginLeft: 8, fontSize: 11, color: '#f87171' }}>
+                      Ollama unreachable — type model name manually
+                    </span>
+                  )}
+                  {draft.llmProvider === 'ollama' && !loadingModels && ollamaModels.length > 0 && (
+                    <span style={{ marginLeft: 8, fontSize: 11, color: '#4ade80' }}>
+                      {ollamaModels.length} model{ollamaModels.length > 1 ? 's' : ''} found
+                    </span>
+                  )}
+                </label>
+
+                {/* datalist gives autocomplete from live list while still allowing free text */}
+                <datalist id={datalistId}>
+                  {modelSuggestions.map(m => <option key={m} value={m} />)}
+                </datalist>
+                <input
+                  className="config-input"
+                  list={datalistId}
+                  value={draft.llmModel}
+                  onChange={e => set('llmModel', e.target.value)}
+                  placeholder={
+                    draft.llmProvider === 'ollama'
+                      ? loadingModels ? 'Loading…' : 'e.g. qwen2.5:7b-instruct'
+                      : modelSuggestions[0] ?? 'model name'
+                  }
+                  autoComplete="off"
+                />
+                {draft.llmProvider === 'ollama' && ollamaModels.length > 0 && (
+                  <div className="settings-hint">
+                    Click to pick from your installed models, or type any name
+                  </div>
+                )}
+              </div>
 
               {/* Cloud API key */}
               {isCloud && (
@@ -181,7 +241,7 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
                     autoComplete="off"
                   />
                   <div className="settings-hint">
-                    Stored only in your browser (localStorage) — never sent to any server except the chosen provider.
+                    Stored only in your browser — never sent to any server except the provider.
                   </div>
                 </div>
               )}
@@ -191,9 +251,7 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
                 <button className="test-btn" onClick={testConnection} disabled={status === 'checking'}>
                   {status === 'checking' ? (
                     <><div className="spinner" style={{ width: 12, height: 12 }} /> Testing...</>
-                  ) : (
-                    'Test Connection'
-                  )}
+                  ) : 'Test Connection'}
                 </button>
                 {status === 'ok' && (
                   <span className="test-result ok">✓ Connected</span>
@@ -257,9 +315,7 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
                     </label>
                   ))}
                 </div>
-                <div className="settings-hint">
-                  At least one source must be selected.
-                </div>
+                <div className="settings-hint">At least one source must be selected.</div>
               </div>
 
             </div>

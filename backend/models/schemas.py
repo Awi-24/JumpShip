@@ -38,6 +38,7 @@ class JobResult(BaseModel):
     id: str = ""
     title: str = ""
     company: str = ""
+    company_url: str = ""   # company page URL — used for favicon logo
     location: str = ""
     job_type: str = ""
     salary_range: str = ""

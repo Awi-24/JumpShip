@@ -2,13 +2,15 @@
 JumpShip v2 — Job search and assessment endpoints.
 POST /api/jobs/search  → list of JobResult
 POST /api/jobs/assess  → JobAssessment
+GET  /api/ollama/models → list[str]
 """
 from __future__ import annotations
 
 import json
 import logging
 
-from fastapi import APIRouter, HTTPException
+import httpx
+from fastapi import APIRouter, HTTPException, Query
 
 from backend.models.schemas import (
     JobSearchRequest,
@@ -21,7 +23,31 @@ from backend.services.llm_service import get_llm_service, LLMService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/jobs", tags=["jobs-v2"])
+router = APIRouter(tags=["jobs-v2"])
+
+# ── Ollama model discovery ─────────────────────────────────────────────────────
+
+@router.get("/api/ollama/models", response_model=list[str])
+async def ollama_models(
+    base_url: str = Query(default=None, description="Override the Ollama base URL"),
+):
+    """Return the list of models installed in the running Ollama instance."""
+    from backend.config import settings
+    url = (base_url or settings.ollama_base_url).rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=4) as client:
+            r = await client.get(f"{url}/api/tags")
+            r.raise_for_status()
+            data = r.json()
+            return [m["name"] for m in data.get("models", [])]
+    except Exception as e:
+        logger.warning(f"Could not fetch Ollama models from {url}: {e}")
+        return []
+
+
+# ── Job endpoints ─────────────────────────────────────────────────────────────
+
+_jobs_router = APIRouter(prefix="/api/jobs")
 
 
 def _llm_from_request(req) -> LLMService:
@@ -52,7 +78,7 @@ def _llm_from_request(req) -> LLMService:
     )
 
 
-@router.post("/search", response_model=list[JobResult])
+@_jobs_router.post("/search", response_model=list[JobResult])
 async def search_jobs_endpoint(req: JobSearchRequest):
     """Search for jobs using python-jobspy and return structured results."""
     if not req.keywords:
@@ -72,7 +98,7 @@ async def search_jobs_endpoint(req: JobSearchRequest):
         raise HTTPException(status_code=500, detail=f"Search failed: {e}")
 
 
-@router.post("/assess", response_model=JobAssessment)
+@_jobs_router.post("/assess", response_model=JobAssessment)
 async def assess_job_endpoint(req: AssessmentRequest):
     """Use the LLM to assess how well a candidate matches a job."""
     llm = _llm_from_request(req)

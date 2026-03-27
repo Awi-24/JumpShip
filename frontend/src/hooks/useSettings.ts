@@ -17,8 +17,8 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   llmProvider: 'ollama',
-  llmModel: 'llama3:8b',
-  ollamaUrl: 'http://localhost:11434',
+  llmModel: '',        // empty → SettingsModal auto-fills from live Ollama model list
+  ollamaUrl: '',       // empty → backend uses its own OLLAMA_BASE_URL env var
   openaiKey: '',
   anthropicKey: '',
   groqKey: '',
