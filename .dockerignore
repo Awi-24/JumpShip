@@ -1,32 +1,21 @@
-# Python
-.venv
-.venv_*
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.egg-info
-dist/
-build/
-.pytest_cache/
-
-# Node
+# Don't copy the frontend into the backend image build context
 frontend/node_modules
+frontend/dist
 frontend/.next
-frontend/.npm
 
-# Database & uploads (use Docker volumes instead)
+# Python caches
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.venv
+*.egg-info
+
+# DB and uploads (mounted as volumes)
 *.db
-*.sqlite
+*.db-journal
 uploads/
 
-# Dev / OS
+# Dev files
 .env
-.DS_Store
-Thumbs.db
-*.log
-
-# Git
+*.md
 .git
-.gitignore

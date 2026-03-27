@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────
-# Jumpship — Quick-start script (no Docker)
-# Requirements: Python 3.11+, Node 18+, npm
+# JumpShip — Quick-start script (no Docker)
+# Prerequisites: Python 3.11+, Node 18+, Ollama (optional)
 # ─────────────────────────────────────────────────────────────────
 set -e
 
@@ -9,7 +9,7 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 
 echo ""
 echo "╔══════════════════════════════════════╗"
-echo "║           Jumpship — Start           ║"
+echo "║         JumpShip — Start             ║"
 echo "╚══════════════════════════════════════╝"
 echo ""
 
@@ -28,13 +28,13 @@ echo "   Installing Python dependencies…"
 pip install --quiet -r backend/requirements.txt
 
 # Copy .env if missing
-if [ ! -f backend/.env ]; then
-  cp backend/.env.example backend/.env
-  echo "   ⚠  Created backend/.env — add your ANTHROPIC_API_KEY (or configure via Settings UI)"
+if [ ! -f ".env" ]; then
+  cp .env.example .env 2>/dev/null || true
+  echo "   ⚠  Created .env — configure your LLM provider if needed"
 fi
 
 echo "   Starting backend on http://localhost:8000 …"
-uvicorn backend.main:app --reload --port 8000 &
+PYTHONPATH="$ROOT" uvicorn backend.main:app --reload --port 8000 &
 BACKEND_PID=$!
 
 # ── Frontend ──────────────────────────────────────────────────────
@@ -47,18 +47,14 @@ if [ ! -d "node_modules" ]; then
   npm install
 fi
 
-if [ ! -f ".env.local" ]; then
-  cp .env.local.example .env.local
-fi
-
-echo "   Starting frontend on http://localhost:3000 …"
+echo "   Starting frontend on http://localhost:5173 …"
 npm run dev &
 FRONTEND_PID=$!
 
 # ── Done ──────────────────────────────────────────────────────────
 echo ""
 echo "✅  Both servers are running!"
-echo "   Frontend : http://localhost:3000"
+echo "   Frontend : http://localhost:5173"
 echo "   Backend  : http://localhost:8000"
 echo "   API Docs : http://localhost:8000/docs"
 echo ""

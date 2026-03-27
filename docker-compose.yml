@@ -1,4 +1,6 @@
 services:
+
+  # ── Backend ─────────────────────────────────────────────────────
   backend:
     build:
       context: .
@@ -7,31 +9,43 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app/backend
       - jumpship-db:/app/data
       - jumpship-uploads:/app/uploads
     environment:
-      - DATABASE_URL=sqlite:////app/data/jobspy_ui.db
-      - UPLOAD_DIR=/app/uploads
-      - CORS_ORIGINS=http://localhost:3000
-      # Ollama runs on the host machine — use host.docker.internal to reach it from the container.
-      # On Linux Docker Engine, extra_hosts below maps this hostname to the host gateway.
-      - OLLAMA_HOST=http://host.docker.internal:11434
+      DATABASE_URL: sqlite:////app/data/jobspy_ui.db
+      UPLOAD_DIR: /app/uploads
+      # Allow requests from the nginx frontend container
+      CORS_ORIGINS: "http://localhost,http://localhost:80"
+      # LLM config — override via .env file passed with --env-file
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      LLM_MODEL: ${LLM_MODEL:-llama3}
+      # Ollama runs on the host; host.docker.internal reaches it from inside the container
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
     extra_hosts:
+      # Maps host.docker.internal → host gateway on Linux Docker Engine
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
+  # ── Frontend ────────────────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: jumpship-frontend
     ports:
-      - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - "80:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
