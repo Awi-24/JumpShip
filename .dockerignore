@@ -1,0 +1,21 @@
+# Don't copy the frontend into the backend image build context
+frontend/node_modules
+frontend/dist
+frontend/.next
+
+# Python caches
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.venv
+*.egg-info
+
+# DB and uploads (mounted as volumes)
+*.db
+*.db-journal
+uploads/
+
+# Dev files
+.env
+*.md
+.git
