@@ -60,7 +60,7 @@ app = FastAPI(
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 
-origins = settings.cors_origins
+origins = settings.cors_origins_list
 
 app.add_middleware(
     CORSMiddleware,
@@ -70,7 +70,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Legacy Routers ────────────────────────────────────────────────────────────
+# ── v2 Routers (JumpShip primary API) ────────────────────────────────────────
+# Registered first so v2 routes take priority over legacy routes with
+# the same path (e.g. POST /api/jobs/search uses the v2 schema).
+
+app.include_router(resume_v2.router)
+app.include_router(jobs_v2.router)       # /api/ollama/models
+app.include_router(jobs_v2._jobs_router) # /api/jobs/search, /api/jobs/assess
+
+# ── Legacy Routers (kept for backward compat) ─────────────────────────────────
 
 app.include_router(jobs.router)
 app.include_router(resume.router)
@@ -79,13 +87,6 @@ app.include_router(applications.router)
 app.include_router(settings_router.router)
 app.include_router(brazilian_jobs.router)
 app.include_router(concursos.router)
-
-# ── v2 Routers (JumpShip) ────────────────────────────────────────────────────
-# Note: v2 resume router uses /api/resume/parse which doesn't conflict with
-# the legacy /api/resume/upload endpoint
-
-app.include_router(resume_v2.router)
-app.include_router(jobs_v2.router)
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

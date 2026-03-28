@@ -29,6 +29,7 @@ export interface JobResult {
   id: string;
   title: string;
   company: string;
+  company_url?: string;
   location: string;
   job_type: string;
   salary_range: string;
@@ -55,6 +56,9 @@ export interface JobAssessment {
   strong_points: string[];
   gaps: string[];
   career_suggestions: string[];
+  company_insights?: string;
+  income_range?: string;
+  is_relevant?: boolean;
 }
 
 export interface HealthStatus {
@@ -74,3 +78,14 @@ export interface LLMConfig {
 
 export type SortOption = 'match' | 'newest' | 'salary';
 export type JobTypeFilter = 'all' | 'fulltime' | 'parttime' | 'contract' | 'remote';
+
+export type AssessmentSpeed = 'careful' | 'balanced' | 'turbo';
+
+export type BookmarkStatus = 'saved' | 'applied' | 'interview' | 'rejected' | 'offer';
+
+export interface BookmarkedJob {
+  job: JobResult;
+  status: BookmarkStatus;
+  savedAt: string;
+  assessment?: JobAssessment;
+}
