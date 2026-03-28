@@ -13,6 +13,7 @@ export interface Settings {
   resultsWanted: number;
   defaultSites: string[];
   defaultLocation: string;
+  assessmentSpeed: 'careful' | 'balanced' | 'turbo';
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -25,6 +26,7 @@ export const DEFAULT_SETTINGS: Settings = {
   resultsWanted: 20,
   defaultSites: ['linkedin', 'indeed', 'glassdoor'],
   defaultLocation: '',
+  assessmentSpeed: 'balanced',
 };
 
 const STORAGE_KEY = 'jumpship_settings';

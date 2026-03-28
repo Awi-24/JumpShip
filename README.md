@@ -1,177 +1,165 @@
 # JumpShip
 
-> A fork of [python-jobspy](https://github.com/Bunsly/JobSpy) — a full-featured job search platform with a modern UI, AI-powered resume analysis, and a local-first LLM integration.
+> An AI-powered job search platform that pushes back against automated hiring. Built on [python-jobspy](https://github.com/Bunsly/JobSpy).
 
 ---
 
-## What is this?
+## Why JumpShip exists
 
-**JumpShip** wraps the python-jobspy scraping engine in a complete web application. Instead of a bare Python library you get:
+Many companies now automate how they filter candidates: ATS rules, keyword scoring, and black-box scoring remove people **before anyone reads their story**. Applicants often never get **a real chance** to show what they can do. The system can discard them even when they are **well aligned with the role**, or when they are **motivated to grow** and develop the skills the job needs.
 
-- A dark-themed React UI to search and browse jobs
-- AI resume analysis — compatibility score, strong points, gaps, keywords, and career suggestions
-- Per-request LLM configuration (switch providers without restarting the server)
-- Support for **Ollama, OpenAI, Anthropic, and Groq** out of the box — including 100% local/free options
+JumpShip exists to rebalance that dynamic. If employers use automation to screen people out, job seekers deserve tools that help them **find fit, understand gaps, and use their time on roles that matter**—instead of losing silently to a filter.
+
+---
+
+## Stack
+
+| Layer | Technology |
+|-------|------------|
+| **Backend** | FastAPI (Python 3.11+), SQLAlchemy, SQLite, pydantic-settings |
+| **Frontend** | React 19, TypeScript, Vite 8, TanStack Query, Framer Motion |
+| **LLM integration** | Ollama (local-first), OpenAI, Anthropic, Groq — configurable per request |
+| **Resume parsing** | pdfminer.six, python-docx, LLM-powered extraction |
+| **Job scraping** | python-jobspy wrapper + custom scrapers (RemoteOK, Arbeitnow, Gupy, Programathor, Trampos) |
+| **Styling** | Custom CSS, dark theme with gold accent palette |
+
+---
+
+## Next steps (roadmap)
+
+Planned focus areas:
+
+1. **Auto-application** — Reduce friction when applying: use parsed profile data to help fill forms, draft tailored cover letters, and (where technically and ethically viable) streamline submission across supported sites.
+2. **Agentic workflows** — Autonomous assistants that can run on a schedule or triggers: discover new listings, assess fit, surface high-match roles, and eventually coordinate follow-up steps with clear human oversight.
+
+Broader ideas still on the list:
+
+- **Application analytics** — Track outcomes, response times, and which profiles or keywords perform best.
+- **Resume optimization** — Targeted suggestions per role (keywords, wording, gaps).
+- **Interview prep** — Questions and talking points from the job description and your profile.
+- **Multi-language UI** — Full i18n (e.g. Portuguese and English).
 
 ---
 
 ## Features
 
 ### Job search
-- Scrapes **LinkedIn, Indeed, Glassdoor, ZipRecruiter** simultaneously
-- Filters: location, job type, remote-only, results count
-- Match score shown on each card when a resume is uploaded
-- Expand any card to view the full description and lazy-load the AI assessment
+- Aggregates LinkedIn, Indeed, Glassdoor, ZipRecruiter, RemoteOK, Arbeitnow, and Brazilian boards (Gupy, Programathor, Trampos)
+- OR-based keyword search for broader results across all boards
+- Smart deduplication (fuzzy title + company matching across sources)
+- In-memory search caching (15min TTL) to avoid redundant scraping
+- Pagination with "Load More" for large result sets
 
-### Resume analysis
-- Upload a PDF or DOCX once — it is parsed on the server and kept in memory for the session
-- Click **Assess** on any job to get:
-  - **Match score** (0–100)
-  - **Strong points** — what on your resume matches the role
-  - **Gaps** — requirements you don't currently cover
-  - **Career suggestions** — concrete next steps
+### AI-powered assessment
+- Every job gets a match score (0–100), gap analysis, and career suggestions
+- Company intelligence enriched with live web data (culture, salary, Glassdoor sentiment)
+- Configurable assessment speed: Careful (1 at a time), Balanced (3 parallel), Turbo (6 parallel)
+- Automatic retry on LLM parse failures
+- Irrelevant job filtering with a "Show hidden" toggle to review flagged jobs
 
-### LLM configuration
-- Fully configurable from the Settings modal (⚙ button in the header)
-- Per-request LLM override — each search/assess call can specify a different provider, model, and API key without touching any config files
-- Supported providers: Ollama (local), LM Studio, OpenAI, Anthropic, Groq
+### Resume intelligence
+- Upload PDF or DOCX — the LLM extracts skills, seniority, domains, and suggested keywords
+- Auto-populates search filters from your profile
+- AI keyword expansion: related terms and Portuguese translations for broader coverage
+
+### Job tracking
+- Bookmark jobs and track application status (Saved → Applied → Interview → Rejected → Offer)
+- Export results as CSV or JSON with assessment data included
+- Search history with one-click restore
+- Description quality warnings for jobs with insufficient detail
+
+### Privacy-first
+- Resume stays on your machine
+- Inference runs locally via Ollama by default
+- Cloud APIs are opt-in and key-controlled
+- No accounts, no tracking, no data collection
 
 ---
 
-## Tech stack
+## Getting started
 
-| Layer | Technology |
-|---|---|
-| Frontend | React 19 + TypeScript + Vite |
-| Backend | FastAPI + Pydantic v2 + Python 3.11 |
-| Scraping | python-jobspy (LinkedIn, Indeed, Glassdoor, ZipRecruiter) |
-| Resume parsing | pdfminer.six (PDF), python-docx (DOCX) |
-| LLM | Ollama · OpenAI · Anthropic · Groq |
-| Container | Docker Compose (nginx reverse proxy + backend) |
+### Prerequisites
+- Python 3.11+
+- Node.js 18+
+- (Optional) [Ollama](https://ollama.ai) for local LLM inference
 
----
-
-## Quick start
-
-### With Docker Compose (recommended)
+### Setup
 
 ```bash
-# 1. Clone
-git clone https://github.com/your-org/jumpship.git
-cd jumpship
+# Clone
+git clone https://github.com/Awi-24/JumpShip.git
+cd JumpShip
 
-# 2. Configure environment (optional — defaults work with Ollama)
-cp .env.example .env
-# Edit .env to set your LLM provider and API keys
+# Backend (from repo root, after venv activate)
+pip install -r backend/requirements.txt
+cp .env.example .env  # edit with your settings
 
-# 3. Start
-docker compose up --build
-```
-
-Open [http://localhost](http://localhost). The frontend is served by nginx on port 80 and proxies `/api/` to the backend on port 8000.
-
-### Local development
-
-**Backend**
-
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn backend.main:app --reload --port 8000
-```
-
-**Frontend**
-
-```bash
+# Frontend
 cd frontend
 npm install
-npm run dev        # starts Vite dev server on http://localhost:5173
+cd ..
+
+# Run both
+chmod +x start.sh
+./start.sh
 ```
 
-Vite proxies `/api` requests to `http://localhost:8000` automatically.
+The backend runs on `localhost:8000`, the frontend on `localhost:5173`.
 
----
-
-## Environment variables
-
-Copy `.env.example` to `.env` in the project root and adjust as needed.
-
-| Variable | Default | Description |
-|---|---|---|
-| `LLM_PROVIDER` | `ollama` | Active LLM provider (`ollama`, `openai`, `anthropic`, `groq`) |
-| `LLM_MODEL` | `llama3:8b` | Model name for the chosen provider |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server address |
-| `OPENAI_API_KEY` | — | OpenAI key (only needed when using OpenAI) |
-| `ANTHROPIC_API_KEY` | — | Anthropic key (only needed when using Anthropic) |
-| `GROQ_API_KEY` | — | Groq key (only needed when using Groq) |
-| `CORS_ORIGINS` | `*` | Allowed CORS origins for the API |
-
-API keys entered in the Settings modal are stored in `localStorage` and sent directly to the chosen provider — they are never stored on the server.
-
----
-
-## Running tests
-
-### Backend
+### Quick start with Ollama (free, local)
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-pip install pytest pytest-asyncio httpx
-
-# Unit tests (no external services required)
-pytest tests/unit/ -v
-
-# Integration tests (no external services required)
-pytest tests/integration/ -v -m "not llm_integration"
-
-# LLM integration tests (requires Ollama running locally)
-pytest tests/integration/test_llm_integration.py -v
+ollama pull qwen2.5:7b-instruct
+./start.sh
 ```
 
-### Frontend
-
-```bash
-cd frontend
-npm run test:run          # single run
-npm run test:coverage     # with V8 coverage report
-```
-
-Current test coverage: **41 backend tests** (unit + integration) and **38 frontend tests** (components + hooks), all passing with no external dependencies required.
+Open `localhost:5173`, upload your resume, and search. No API keys needed.
 
 ---
 
-## Project structure
+## Architecture
 
 ```
-jumpship/
+JumpShip/
 ├── backend/
-│   ├── main.py                  # FastAPI app entry point
-│   ├── config.py                # pydantic-settings configuration
-│   ├── models/schemas.py        # Pydantic v2 request/response schemas
+│   ├── main.py                 FastAPI app
+│   ├── config.py               pydantic-settings (.env)
+│   ├── models/schemas.py       Pydantic v2 models
 │   ├── routers/
-│   │   ├── jobs_v2.py           # POST /api/jobs/search, /api/jobs/assess
-│   │   └── resume_v2.py         # POST /api/resume/parse
+│   │   ├── resume_v2.py        POST /api/resume/parse
+│   │   ├── jobs_v2.py          POST /api/jobs/search, /assess, /suggest-keywords, /translate-keywords
+│   │   └── (legacy routers)
 │   └── services/
-│       ├── llm_service.py       # LLM abstraction (Ollama/OpenAI/Anthropic/Groq)
-│       ├── job_scraper_v2.py    # python-jobspy wrapper
-│       └── resume_parser_v2.py  # PDF/DOCX text extraction + LLM profile parsing
+│       ├── llm_service.py      Unified LLM abstraction (Ollama/OpenAI/Anthropic/Groq)
+│       ├── resume_parser_v2.py PDF/DOCX text + LLM profile extraction
+│       ├── job_scraper_v2.py   JobSpy wrapper + dedup + caching
+│       ├── extra_sources.py    RemoteOK, Arbeitnow scrapers
+│       ├── br_sources.py       Brazilian job board scrapers
+│       ├── salary_normalizer.py Salary parsing and normalization
+│       └── web_search.py       Company intelligence via web
 ├── frontend/
-│   ├── src/
-│   │   ├── pages/               # Landing.tsx, Search.tsx
-│   │   ├── components/          # JobCard, ScoreRing, ResumeUpload, SettingsModal, …
-│   │   ├── hooks/               # useSettings, useJobs, useResume
-│   │   └── types/               # TypeScript interfaces
-│   └── vitest.config.ts
-├── tests/
-│   ├── unit/                    # Schema, config, LLM, scraper, parser unit tests
-│   └── integration/             # API endpoint tests + live LLM tests
-├── docker-compose.yml
-└── .env.example
+│   ├── src/pages/              Landing.tsx, Search.tsx
+│   ├── src/components/         JobCard, ScoreRing, SettingsModal, AssessmentLoader, etc.
+│   ├── src/hooks/              useResume, useJobs, useSettings
+│   └── src/types/              TypeScript interfaces
+├── .env.example
+└── start.sh                    Starts backend:8000 + frontend:5173
 ```
+
+---
+
+## Development notes
+
+This project was developed with help from **Claude** (Anthropic) for **code review** and for **parts of the UI**—the repetitive layout, styling, and wiring that is necessary but not where most of the creative product decisions live. Core product direction, domain logic, and architecture remain author-driven.
+
+---
+
+## Credits
+
+Built by [Adrian Widmer](https://awi-24.github.io) · Fork of [python-jobspy](https://github.com/Bunsly/JobSpy) by Bunsly
 
 ---
 
 ## License
 
-MIT — same as the upstream [python-jobspy](https://github.com/Bunsly/JobSpy) project.
+This project inherits the license from [python-jobspy](https://github.com/Bunsly/JobSpy). See the original repository for license details.

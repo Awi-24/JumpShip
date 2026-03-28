@@ -21,8 +21,8 @@ class LLMOverride(BaseModel):
     """Per-request LLM configuration. If omitted, falls back to .env / config.py defaults."""
     llm_provider: str | None = None
     llm_model: str | None = None
-    llm_api_key: str | None = None   # OpenAI / Anthropic / Groq key sent from browser
-    llm_base_url: str | None = None  # Custom Ollama / LMStudio URL
+    llm_api_key: str | None = None
+    llm_base_url: str | None = None
 
 
 class JobSearchRequest(LLMOverride):
@@ -38,7 +38,7 @@ class JobResult(BaseModel):
     id: str = ""
     title: str = ""
     company: str = ""
-    company_url: str = ""   # company page URL — used for favicon logo
+    company_url: str = ""
     location: str = ""
     job_type: str = ""
     salary_range: str = ""
@@ -52,6 +52,7 @@ class JobResult(BaseModel):
 class AssessmentRequest(LLMOverride):
     job: JobResult
     resume_profile: ResumeProfile
+    include_company_research: bool = True  # set False to skip web search
 
 
 class JobAssessment(BaseModel):
@@ -60,6 +61,9 @@ class JobAssessment(BaseModel):
     strong_points: list[str] = []
     gaps: list[str] = []
     career_suggestions: list[str] = []
+    company_insights: str = ""   # web-researched company info summary
+    income_range: str = ""       # estimated market salary range for this role/location
+    is_relevant: bool = True     # False when job is completely unrelated to candidate's field
 
 
 class HealthResponse(BaseModel):
