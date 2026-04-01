@@ -9,9 +9,11 @@ import { useResumeParse } from '../hooks/useResume';
 import { useJobSearch } from '../hooks/useJobs';
 import { useSettings } from '../hooks/useSettings';
 import type { ResumeProfile, JobResult, JobAssessment, SortOption, BookmarkStatus } from '../types';
+import type { Page } from '../App';
 
 interface SearchProps {
   onBack: () => void;
+  onNavigate?: (page: Page) => void;
 }
 
 const ALL_SITES = ['linkedin', 'indeed', 'glassdoor', 'zip_recruiter', 'remoteok', 'arbeitnow', 'gupy', 'programathor', 'trampos'];
@@ -117,7 +119,7 @@ function exportJSON(jobs: JobResult[], assessments: Record<string, JobAssessment
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
-export default function Search({ onBack }: SearchProps) {
+export default function Search({ onBack, onNavigate }: SearchProps) {
   const { settings, saveSettings } = useSettings();
   const settingsRef = useRef(settings);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
@@ -399,12 +401,26 @@ export default function Search({ onBack }: SearchProps) {
       if (status === null) {
         delete next[jobId];
       } else {
+        const isNew = !prev[jobId];
         next[jobId] = {
           job,
           status,
           savedAt: prev[jobId]?.savedAt || new Date().toISOString(),
           assessment: assessments[jobId] || prev[jobId]?.assessment,
         };
+        if (isNew) {
+          fetch('/api/applications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              job_title: job.title,
+              company_name: job.company,
+              job_url: job.url,
+              site: job.site,
+              status: 'saved',
+            }),
+          }).catch(() => {});
+        }
       }
       saveBookmarks(next);
       return next;
@@ -482,11 +498,24 @@ export default function Search({ onBack }: SearchProps) {
           <img src="/logo-icon.png" alt="" className="nav-logo-icon" />
           <span>Jump<span className="logo-accent">Ship</span></span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div className="llm-status">
             <span className={`status-dot ${llmStatus}`} />
             {statusLabel}
           </div>
+          {onNavigate && (
+            <>
+              <button className="nav-pill" onClick={() => onNavigate('profile')} title="Edit profile">
+                👤 Profile
+              </button>
+              <button className="nav-pill" onClick={() => onNavigate('agents')} title="Agent monitor">
+                🤖 Agents
+              </button>
+              <button className="nav-pill" onClick={() => onNavigate('tracker')} title="Job tracker">
+                📋 Track
+              </button>
+            </>
+          )}
           <button className="settings-trigger" onClick={() => setSettingsOpen(true)} title="Settings">
             ⚙ Settings
           </button>

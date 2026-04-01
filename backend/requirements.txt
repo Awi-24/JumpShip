@@ -13,10 +13,14 @@ aiofiles>=24.1.0
 pdfminer.six>=20221105
 python-docx>=1.1.2
 
-# ── LLM providers (install as needed) ───
-# anthropic>=0.40.0
+# ── LLM providers ───────────────────────
+anthropic>=0.40.0
 # openai>=1.58.0
 # google-generativeai>=0.8.0
+
+# ── Browser automation (agents) ──────────
+playwright>=1.44.0
+# After install run: playwright install chromium
 
 # ── Legacy dependencies ─────────────────
 pandas>=2.2.0

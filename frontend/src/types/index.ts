@@ -59,6 +59,7 @@ export interface JobAssessment {
   company_insights?: string;
   income_range?: string;
   is_relevant?: boolean;
+  job_tags?: string[];
 }
 
 export interface HealthStatus {
@@ -88,4 +89,90 @@ export interface BookmarkedJob {
   status: BookmarkStatus;
   savedAt: string;
   assessment?: JobAssessment;
+}
+
+// ── User Profile ──────────────────────────────────────────────────────────────
+
+export interface WorkExperience {
+  company: string;
+  title: string;
+  start_date: string;
+  end_date: string;
+  current: boolean;
+  description: string;
+  location: string;
+}
+
+export interface Education {
+  institution: string;
+  degree: string;
+  field: string;
+  start_date: string;
+  end_date: string;
+  gpa: string;
+}
+
+export interface CustomQA {
+  question: string;
+  answer: string;
+}
+
+export interface UserProfile {
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  country: string;
+  zip_code: string;
+  linkedin_url: string;
+  github_url: string;
+  portfolio_url: string;
+  professional_summary: string;
+  current_title: string;
+  years_experience: number;
+  skills: string[];
+  work_experience: WorkExperience[];
+  education: Education[];
+  expected_salary: string;
+  work_authorization: string;
+  willing_to_relocate: boolean;
+  remote_preference: string;
+  cover_letter_template: string;
+  custom_answers: CustomQA[];
+}
+
+// ── Agents ────────────────────────────────────────────────────────────────────
+
+export type AgentStatus = 'pending' | 'running' | 'completed' | 'failed' | 'stopped' | 'review_requested' | 'help_requested';
+
+export interface AgentLogEntry {
+  timestamp: string;
+  message: string;
+  level: 'info' | 'warn' | 'error';
+}
+
+export interface AgentInteraction {
+  type: 'review' | 'help';
+  message?: string;
+  reason?: string;
+  options: string[];
+  screenshot?: string;
+}
+
+export interface Agent {
+  id: string;
+  job_url: string;
+  job_title: string;
+  company: string;
+  status: AgentStatus;
+  current_action: string;
+  log: AgentLogEntry[];
+  screenshot_b64: string | null;
+  error: string | null;
+  application_id: string | null;
+  interaction_pending: AgentInteraction | null;
+  llm_provider: string;
+  llm_model: string;
 }

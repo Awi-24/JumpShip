@@ -95,3 +95,30 @@ class Settings(Base):
     key = Column(String, primary_key=True)
     value = Column(Text)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class UserProfile(Base):
+    """Stores the user's full profile used by agents to auto-fill applications."""
+    __tablename__ = "user_profiles"
+
+    key = Column(String, primary_key=True, default="default")
+    value = Column(Text, nullable=False)  # JSON blob
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class AgentTask(Base):
+    """Tracks each agent run for history and auditing."""
+    __tablename__ = "agent_tasks"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    application_id = Column(String, nullable=True)
+    job_url = Column(String, nullable=False)
+    job_title = Column(String)
+    company = Column(String)
+    status = Column(String, default="pending")  # pending|running|completed|failed|stopped
+    log = Column(JSON, default=list)             # list of {timestamp, message, level}
+    error = Column(Text, nullable=True)
+    current_action = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    completed_at = Column(DateTime, nullable=True)

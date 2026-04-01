@@ -109,7 +109,7 @@ def _llm_from_request(req) -> LLMService:
         ollama_base_url=base_url,
         openai_api_key=openai_key,
         anthropic_api_key=anthropic_key,
-        groq_key=groq_key,
+        groq_api_key=groq_key,
     )
 
 

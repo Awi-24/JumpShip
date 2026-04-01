@@ -27,6 +27,10 @@ from backend.routers import brazilian_jobs, concursos
 # v2 routers (JumpShip new API)
 from backend.routers import resume_v2, jobs_v2
 
+# Agentic routers (new)
+from backend.routers import agents as agents_router
+from backend.routers import user_profile as user_profile_router
+
 # Create all DB tables on startup
 Base.metadata.create_all(bind=engine)
 
@@ -37,6 +41,9 @@ def _migrate_db():
     migrations = [
         "ALTER TABLE analyses ADD COLUMN keywords_matched JSON",
         "ALTER TABLE analyses ADD COLUMN keywords_missing JSON",
+        # Agent tables (created via Base.metadata.create_all, but listed here for safety)
+        "CREATE TABLE IF NOT EXISTS user_profiles (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)",
+        "CREATE TABLE IF NOT EXISTS agent_tasks (id TEXT PRIMARY KEY, application_id TEXT, job_url TEXT NOT NULL, job_title TEXT, company TEXT, status TEXT DEFAULT 'pending', log JSON, error TEXT, current_action TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, completed_at DATETIME)",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
@@ -77,6 +84,11 @@ app.add_middleware(
 app.include_router(resume_v2.router)
 app.include_router(jobs_v2.router)       # /api/ollama/models
 app.include_router(jobs_v2._jobs_router) # /api/jobs/search, /api/jobs/assess
+
+# ── Agentic Routers ────────────────────────────────────────────────────────────
+
+app.include_router(agents_router.router)       # /api/agents + /api/agents/ws
+app.include_router(user_profile_router.router) # /api/profile
 
 # ── Legacy Routers (kept for backward compat) ─────────────────────────────────
 
