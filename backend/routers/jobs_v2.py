@@ -187,6 +187,12 @@ ASSESSMENT GUIDELINES:
   If the salary is already disclosed in the job post, use that as a reference and note the source. \
   Use ranges from reliable sources (Glassdoor, LinkedIn Salary, Levels.fyi, local market data). \
   Never leave this blank — always provide a best-effort estimate with a confidence note if uncertain.
+- job_tags: Short characteristic labels extracted directly from the job description (max 8 tags). \
+  Include: (1) work mode tag — exactly one of "Remote", "Hybrid", or "On-site"; \
+  (2) up to 4 main tech stack tags (e.g. "Python", "React", "AWS", "PostgreSQL"); \
+  (3) salary tag if disclosed in the posting (e.g. "$90k-120k", "BRL 12k/mês") — omit if not present; \
+  (4) contract type if mentioned (e.g. "Full-time", "Contract", "Part-time"). \
+  Tags must be short (1-3 words). Use title case. Extract from the job text — do NOT fabricate.
 
 CRITICAL: Return ONLY valid JSON — no markdown, no explanation, no trailing text."""
 
@@ -258,12 +264,20 @@ async def suggest_keywords(req: SynonymRequest):
 
     llm = _llm_from_request(req)
 
-    system = "You are a job search assistant. Given a list of skills/keywords, suggest related search terms that would help find more relevant job postings. Include synonyms, related technologies, and common job title variations."
+    system = (
+        "You are a job search assistant. Given a list of skills/keywords, suggest related search terms "
+        "that would help find more relevant job postings. "
+        "IMPORTANT: Each keyword must be SHORT — 1 or 2 words maximum. "
+        "No phrases, no sentences, no articles or prepositions. "
+        "Think of atomic terms that someone types into a job board search box."
+    )
     user = f"""Given these job search keywords: {', '.join(req.keywords)}
 
-Return a JSON array of 5-10 additional related keywords/phrases that would help find more relevant jobs.
+Return a JSON array of 5-10 additional SHORT related keywords (1-2 words each) that would help find more relevant jobs.
 Only include genuinely useful terms — no duplicates of the input.
-Return ONLY valid JSON array, no explanation. Example: ["keyword1", "keyword2"]"""
+GOOD: ["fastapi", "django", "rest api", "aws", "docker"]
+BAD: ["Python backend developer with FastAPI", "cloud infrastructure management"]
+Return ONLY valid JSON array, no explanation."""
 
     try:
         raw = await llm.complete(system, user)
@@ -272,8 +286,17 @@ Return ONLY valid JSON array, no explanation. Example: ["keyword1", "keyword2"]"
         if isinstance(suggestions, list):
             # Filter out any that are already in the input
             input_lower = {k.lower() for k in req.keywords}
-            suggestions = [s for s in suggestions if isinstance(s, str) and s.lower() not in input_lower]
-            return {"suggestions": suggestions[:10]}
+            cleaned: list[str] = []
+            for s in suggestions:
+                if not isinstance(s, str):
+                    continue
+                s = s.strip()
+                if not s or s.lower() in input_lower:
+                    continue
+                # Truncate to first 2 words to enforce atomic keywords
+                words = s.split()
+                cleaned.append(" ".join(words[:2]) if len(words) > 2 else s)
+            return {"suggestions": cleaned[:10]}
     except Exception as exc:
         logger.warning("Keyword suggestion failed: %s", exc)
 

@@ -161,10 +161,22 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
                   className="config-input"
                   value={draft.ollamaUrl}
                   onChange={e => set('ollamaUrl', e.target.value)}
-                  placeholder="default (host.docker.internal:11434)"
+                  placeholder="http://localhost:11434"
                 />
+                {isOllamaUnreachable && (
+                  <div className="settings-hint" style={{ color: '#fbbf24', marginBottom: 4 }}>
+                    ⚠ Cannot reach Ollama. Common fixes:
+                    <ul style={{ margin: '4px 0 0 0', paddingLeft: 16, lineHeight: 1.7 }}>
+                      <li><strong>macOS / Windows Docker:</strong> use <code>http://host.docker.internal:11434</code></li>
+                      <li><strong>Linux Docker:</strong> use <code>http://host.docker.internal:11434</code> — the server auto-maps this to the host gateway</li>
+                      <li><strong>Without Docker:</strong> <code>http://localhost:11434</code> (default)</li>
+                      <li>Make sure Ollama is running: <code>ollama serve</code></li>
+                    </ul>
+                  </div>
+                )}
                 <div className="settings-hint">
-                  Leave blank to use the server's configured URL. In Docker, use host.docker.internal:11434.
+                  Leave blank to use the server's configured URL. The backend automatically retries with
+                  <code> host.docker.internal</code> on Linux Docker if <code>localhost</code> fails.
                 </div>
               </div>
             )}

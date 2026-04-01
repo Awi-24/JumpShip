@@ -41,9 +41,20 @@ class LLMService:
         """Check if the LLM backend is reachable."""
         try:
             if self.provider in ("ollama", "openclaw", "lmstudio"):
-                async with httpx.AsyncClient(timeout=5) as client:
-                    r = await client.get(f"{self.ollama_base_url}/api/tags")
-                    return r.status_code == 200
+                candidates = [self.ollama_base_url]
+                if "localhost" in self.ollama_base_url or "127.0.0.1" in self.ollama_base_url:
+                    fallback = self.ollama_base_url.replace("localhost", "host.docker.internal").replace("127.0.0.1", "host.docker.internal")
+                    if fallback not in candidates:
+                        candidates.append(fallback)
+                for base in candidates:
+                    try:
+                        async with httpx.AsyncClient(timeout=5) as client:
+                            r = await client.get(f"{base.rstrip('/')}/api/tags")
+                            if r.status_code == 200:
+                                return True
+                    except Exception:
+                        continue
+                return False
             elif self.provider == "openai":
                 return bool(self.openai_api_key)
             elif self.provider == "anthropic":
@@ -57,17 +68,34 @@ class LLMService:
     # ── Ollama / local ───────────────────────────────────────────────────────
 
     async def _ollama_complete(self, system: str, user: str) -> str:
-        url = f"{self.ollama_base_url}/api/generate"
         payload = {
             "model": self.model,
             "prompt": user,
             "system": system,
             "stream": False,
         }
-        async with httpx.AsyncClient(timeout=120) as client:
-            r = await client.post(url, json=payload)
-            r.raise_for_status()
-            return r.json().get("response", "")
+        # Build list of candidate base-URLs to try.
+        # On Linux Docker, localhost:11434 resolves to the container itself — not the host.
+        # host.docker.internal is mapped to the host gateway via extra_hosts in docker-compose.
+        candidates = [self.ollama_base_url]
+        if "localhost" in self.ollama_base_url or "127.0.0.1" in self.ollama_base_url:
+            fallback = self.ollama_base_url.replace("localhost", "host.docker.internal").replace("127.0.0.1", "host.docker.internal")
+            if fallback not in candidates:
+                candidates.append(fallback)
+
+        last_exc: Exception | None = None
+        for base in candidates:
+            url = f"{base.rstrip('/')}/api/generate"
+            try:
+                async with httpx.AsyncClient(timeout=120) as client:
+                    r = await client.post(url, json=payload)
+                    r.raise_for_status()
+                    return r.json().get("response", "")
+            except Exception as exc:
+                logger.debug("Ollama attempt failed for %s: %s", base, exc)
+                last_exc = exc
+
+        raise last_exc or RuntimeError("Ollama unreachable on all candidate URLs")
 
     # ── OpenAI ───────────────────────────────────────────────────────────────
 

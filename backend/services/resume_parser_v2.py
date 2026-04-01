@@ -53,9 +53,12 @@ Your task is to extract a precise, structured professional profile from a resume
 
 CRITICAL RULES:
 1. Return ONLY valid JSON — no markdown fences, no explanation, no commentary.
-2. "suggested_keywords" must be SPECIFIC and SEARCH-READY — these are terms a recruiter would type
-   into a job board. Include: core technologies, frameworks, methodologies, seniority level, and domain.
-   Examples: "Python backend", "React TypeScript", "MLOps Kubernetes", "Staff Engineer", "fintech SaaS"
+2. "suggested_keywords" must be SHORT ATOMIC TERMS — single words or two-word pairs at most.
+   These are typed directly into a job board search field. Long phrases return zero results.
+   GOOD examples: "python", "react", "fastapi", "kubernetes", "mlops", "sql", "typescript"
+   BAD examples (DO NOT use): "Python backend developer", "React TypeScript frontend", "MLOps with Kubernetes"
+   Include: core technologies, frameworks, tools, and ONE seniority keyword (e.g. "senior", "lead").
+   Maximum 2 words per keyword. No sentences, no phrases with articles or prepositions.
 3. "suggested_titles" must reflect actual job titles the candidate could apply for, ordered by best fit.
 4. "skills" must be specific (e.g. "FastAPI" not just "web frameworks", "PostgreSQL" not just "databases").
 5. Infer seniority from experience_years, job titles held, and complexity of responsibilities.
@@ -99,6 +102,28 @@ RESUME:
         for field in ("skills", "domains", "suggested_keywords", "suggested_titles"):
             if not isinstance(data[field], list):
                 data[field] = []
+
+        # Sanitize suggested_keywords: strip overly long phrases (> 3 words).
+        # This prevents small LLMs from polluting keywords with full sentences.
+        sanitized_kws: list[str] = []
+        for kw in data["suggested_keywords"]:
+            kw = kw.strip()
+            if not kw:
+                continue
+            words = kw.split()
+            if len(words) <= 3:
+                sanitized_kws.append(kw)
+            else:
+                # Keep only the first two words as a fallback atomic term
+                sanitized_kws.append(" ".join(words[:2]))
+        # Deduplicate (case-insensitive) while preserving order
+        seen_kws: set[str] = set()
+        deduped_kws: list[str] = []
+        for kw in sanitized_kws:
+            if kw.lower() not in seen_kws:
+                seen_kws.add(kw.lower())
+                deduped_kws.append(kw)
+        data["suggested_keywords"] = deduped_kws[:15]
 
         return data
 

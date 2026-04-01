@@ -64,6 +64,7 @@ class JobAssessment(BaseModel):
     company_insights: str = ""   # web-researched company info summary
     income_range: str = ""       # estimated market salary range for this role/location
     is_relevant: bool = True     # False when job is completely unrelated to candidate's field
+    job_tags: list[str] = []     # Characteristic tags: tech stack, work mode, salary hint, etc.
 
 
 class HealthResponse(BaseModel):
