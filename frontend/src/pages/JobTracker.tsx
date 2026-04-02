@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { ArrowLeft, ChevronDown, Plus, X } from 'lucide-react';
 import type { Page } from '../App';
 
 interface JobTrackerProps {
@@ -158,11 +159,13 @@ function TrackerCard({
       <div className="tracker-card-actions">
         <div style={{ position: 'relative' }}>
           <button
-            className="btn-secondary"
+            type="button"
+            className="btn-secondary btn-with-icon"
             style={{ fontSize: 12, padding: '4px 10px' }}
             onClick={() => setShowStatusMenu(v => !v)}
           >
-            Move ▾
+            Move
+            <ChevronDown size={14} strokeWidth={1.75} aria-hidden />
           </button>
           {showStatusMenu && (
             <div
@@ -310,7 +313,10 @@ export default function JobTracker({ onBack, onNavigate }: JobTrackerProps) {
       {/* Header */}
       <header className="tracker-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <button className="btn-ghost" onClick={onBack}>← Back</button>
+          <button type="button" className="btn-ghost btn-with-icon" onClick={onBack}>
+            <ArrowLeft size={18} strokeWidth={1.75} aria-hidden />
+            Back
+          </button>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>Job Tracker</h1>
             <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
@@ -318,7 +324,10 @@ export default function JobTracker({ onBack, onNavigate }: JobTrackerProps) {
             </p>
           </div>
         </div>
-        <button className="btn-primary" onClick={() => setShowAddModal(true)}>+ Add Job</button>
+        <button type="button" className="btn-primary btn-with-icon" onClick={() => setShowAddModal(true)}>
+          <Plus size={18} strokeWidth={1.75} aria-hidden />
+          Add job
+        </button>
       </header>
 
       {/* Stats bar */}
@@ -335,7 +344,9 @@ export default function JobTracker({ onBack, onNavigate }: JobTrackerProps) {
       {error && (
         <div className="agents-error-banner">
           {error}
-          <button className="btn-ghost" onClick={() => setError(null)} style={{ marginLeft: 12 }}>✕</button>
+          <button type="button" className="btn-ghost btn-icon-btn" onClick={() => setError(null)} style={{ marginLeft: 12 }} aria-label="Dismiss">
+            <X size={18} strokeWidth={1.75} aria-hidden />
+          </button>
         </div>
       )}
 

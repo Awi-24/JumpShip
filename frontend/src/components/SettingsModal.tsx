@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { AlertTriangle, Check, FlaskConical, Rocket, Settings as SettingsIcon, X, Zap } from 'lucide-react';
 import CustomSelect from './CustomSelect';
 import type { Settings } from '../hooks/useSettings';
 import type { LLMProvider } from '../types';
@@ -128,8 +129,13 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
 
         {/* Header */}
         <div className="modal-header">
-          <div className="modal-title">⚙ Settings</div>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <div className="modal-title modal-title-row" role="heading" aria-level={2}>
+            <SettingsIcon size={22} strokeWidth={1.75} aria-hidden />
+            Settings
+          </div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
+            <X size={18} strokeWidth={1.75} aria-hidden />
+          </button>
         </div>
 
         {/* Body */}
@@ -164,8 +170,11 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
                   placeholder="http://localhost:11434"
                 />
                 {isOllamaUnreachable && (
-                  <div className="settings-hint" style={{ color: '#fbbf24', marginBottom: 4 }}>
-                    ⚠ Cannot reach Ollama. Common fixes:
+                  <div className="settings-hint settings-hint-warn-block">
+                    <span className="settings-hint-warn-title">
+                      <AlertTriangle size={14} strokeWidth={1.75} aria-hidden />
+                      Cannot reach Ollama. Common fixes:
+                    </span>
                     <ul style={{ margin: '4px 0 0 0', paddingLeft: 16, lineHeight: 1.7 }}>
                       <li><strong>macOS / Windows Docker:</strong> use <code>http://host.docker.internal:11434</code></li>
                       <li><strong>Linux Docker:</strong> use <code>http://host.docker.internal:11434</code> — the server auto-maps this to the host gateway</li>
@@ -269,7 +278,13 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
                     onClick={() => set('assessmentSpeed', mode)}
                   >
                     <span className="speed-mode-icon">
-                      {mode === 'careful' ? '🔬' : mode === 'balanced' ? '⚡' : '🚀'}
+                      {mode === 'careful' ? (
+                        <FlaskConical size={22} strokeWidth={1.75} aria-hidden />
+                      ) : mode === 'balanced' ? (
+                        <Zap size={22} strokeWidth={1.75} aria-hidden />
+                      ) : (
+                        <Rocket size={22} strokeWidth={1.75} aria-hidden />
+                      )}
                     </span>
                     <span className="speed-mode-label">{mode.charAt(0).toUpperCase() + mode.slice(1)}</span>
                     <span className="speed-mode-desc">
@@ -290,10 +305,16 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
                   ? <><div className="spinner" style={{ width: 12, height: 12 }} /> Testing…</>
                   : 'Test Connection'}
               </button>
-              {status === 'ok'    && <span className="test-result ok">✓ Connected</span>}
+              {status === 'ok' && (
+                <span className="test-result ok test-result--row">
+                  <Check size={14} strokeWidth={2} aria-hidden />
+                  Connected
+                </span>
+              )}
               {status === 'error' && (
-                <span className="test-result error">
-                  ✕ Unreachable
+                <span className="test-result error test-result--row">
+                  <X size={14} strokeWidth={2} aria-hidden />
+                  Unreachable
                   {!isCloud && <span className="test-hint"> — is {draft.llmProvider} running?</span>}
                 </span>
               )}

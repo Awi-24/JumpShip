@@ -1,4 +1,21 @@
 import { useState } from 'react';
+import {
+  AlertTriangle,
+  Bot,
+  Building2,
+  Check,
+  ChevronDown,
+  DollarSign,
+  FileText,
+  Globe,
+  Lightbulb,
+  Mail,
+  PartyPopper,
+  RefreshCw,
+  Star,
+  Target,
+  X,
+} from 'lucide-react';
 import ScoreRing from './ScoreRing';
 import type { JobResult, JobAssessment, ResumeProfile, BookmarkStatus } from '../types';
 
@@ -45,6 +62,24 @@ function md(text: string): string {
   }).join('\n');
 
   return out;
+}
+
+function BookmarkStatusIcon({ status }: { status: BookmarkStatus }) {
+  const common = { size: 18 as const, strokeWidth: 1.75 as const, 'aria-hidden': true as const };
+  switch (status) {
+    case 'saved':
+      return <Star {...common} />;
+    case 'applied':
+      return <Mail {...common} />;
+    case 'interview':
+      return <Target {...common} />;
+    case 'rejected':
+      return <X {...common} />;
+    case 'offer':
+      return <PartyPopper {...common} />;
+    default:
+      return <Star {...common} />;
+  }
 }
 
 /** Returns which of the given keywords appear in the job text (case-insensitive). */
@@ -130,7 +165,10 @@ export default function JobCard({
             {job.posted_date && <span className="tag">{job.posted_date}</span>}
             {/* Salary — green tag when available */}
             {job.salary_range && (
-              <span className="tag salary">💰 {job.salary_range}</span>
+              <span className="tag salary tag-with-icon">
+                <DollarSign size={12} strokeWidth={2} aria-hidden />
+                {job.salary_range}
+              </span>
             )}
             {/* Matched keywords — gold highlight chips */}
             {hits.map(kw => (
@@ -138,7 +176,10 @@ export default function JobCard({
             ))}
             {/* Description quality indicator */}
             {(!job.description || job.description.length < 100) && (
-              <span className="tag desc-warn" title="Short or missing description — AI assessment may be less accurate">⚠ Low detail</span>
+              <span className="tag desc-warn tag-with-icon" title="Short or missing description — AI assessment may be less accurate">
+                <AlertTriangle size={12} strokeWidth={2} aria-hidden />
+                Low detail
+              </span>
             )}
           </div>
         </div>
@@ -152,15 +193,18 @@ export default function JobCard({
           )}
           {bookmarkStatus && (
             <span className="bookmark-badge" title={bookmarkStatus}>
-              {bookmarkStatus === 'saved' ? '☆' : bookmarkStatus === 'applied' ? '📨' : bookmarkStatus === 'interview' ? '🎯' : bookmarkStatus === 'rejected' ? '✕' : '🎉'}
+              <BookmarkStatusIcon status={bookmarkStatus} />
             </span>
           )}
           {score != null && !parseFailed && <ScoreRing score={score} />}
           <button
+            type="button"
             className={`expand-btn ${expanded ? 'open' : ''}`}
             onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
             aria-label={expanded ? 'Collapse' : 'Expand'}
-          >▾</button>
+          >
+            <ChevronDown size={20} strokeWidth={1.75} aria-hidden />
+          </button>
         </div>
       </div>
 
@@ -171,7 +215,10 @@ export default function JobCard({
 
             {/* Left — description */}
             <div className="job-expanded-col-outer">
-              <div className="exp-section-title">📋 Description</div>
+              <div className="exp-section-title">
+                <FileText size={16} strokeWidth={1.75} aria-hidden />
+                Description
+              </div>
               <div className="job-expanded-col">
                 <div
                   className="job-description markdown-body"
@@ -182,7 +229,10 @@ export default function JobCard({
 
             {/* Right — LLM assessment */}
             <div className="job-expanded-col-outer">
-              <div className="exp-section-title">🤖 LLM Assessment</div>
+              <div className="exp-section-title">
+                <Bot size={16} strokeWidth={1.75} aria-hidden />
+                LLM assessment
+              </div>
               <div className="job-expanded-col">
                 <div className="assessment-box">
 
@@ -207,12 +257,14 @@ export default function JobCard({
                       </div>
                       {onReassess && (
                         <button
-                          className="apply-btn"
+                          type="button"
+                          className="apply-btn btn-icon-inline"
                           style={{ background: 'transparent', border: '1px solid var(--border-bright)', color: 'var(--gold)' }}
                           onClick={onReassess}
                           disabled={assessing}
                         >
-                          ↺ Try Again
+                          <RefreshCw size={14} strokeWidth={1.75} aria-hidden />
+                          Try again
                         </button>
                       )}
                     </div>
@@ -232,7 +284,10 @@ export default function JobCard({
                           color: '#f87171',
                           lineHeight: 1.5,
                         }}>
-                          ⚠ This job appears unrelated to your professional field.
+                          <span className="warn-inline">
+                            <AlertTriangle size={14} strokeWidth={1.75} aria-hidden />
+                            This job appears unrelated to your professional field.
+                          </span>
                         </div>
                       )}
 
@@ -247,26 +302,33 @@ export default function JobCard({
 
                       {/* Income range */}
                       {assessment.income_range && (
-                        <div style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          padding: '5px 12px',
-                          background: 'rgba(74,222,128,0.08)',
-                          border: '1px solid rgba(74,222,128,0.2)',
-                          borderRadius: 8,
-                          fontSize: 12,
-                          color: '#4ade80',
-                          fontWeight: 600,
-                          marginBottom: 14,
-                        }}>
-                          💰 {assessment.income_range}
+                        <div
+                          className="btn-icon-inline"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '5px 12px',
+                            background: 'rgba(74,222,128,0.08)',
+                            border: '1px solid rgba(74,222,128,0.2)',
+                            borderRadius: 8,
+                            fontSize: 12,
+                            color: 'var(--success)',
+                            fontWeight: 600,
+                            marginBottom: 14,
+                          }}
+                        >
+                          <DollarSign size={14} strokeWidth={1.75} aria-hidden />
+                          {assessment.income_range}
                         </div>
                       )}
 
                       {assessment.strong_points.length > 0 && (
                         <div className="assessment-pros">
-                          <div className="assessment-pros-title">✓ Strong Points</div>
+                          <div className="assessment-pros-title title-with-icon">
+                            <Check size={12} strokeWidth={2} aria-hidden />
+                            Strong points
+                          </div>
                           {assessment.strong_points.map((p, i) => (
                             <div key={i} className="assessment-item">{p}</div>
                           ))}
@@ -275,7 +337,10 @@ export default function JobCard({
 
                       {assessment.gaps.length > 0 && (
                         <div className="assessment-gaps">
-                          <div className="assessment-gaps-title">⚠ Gaps</div>
+                          <div className="assessment-gaps-title title-with-icon">
+                            <AlertTriangle size={12} strokeWidth={2} aria-hidden />
+                            Gaps
+                          </div>
                           {assessment.gaps.map((g, i) => (
                             <div key={i} className="assessment-item">{g}</div>
                           ))}
@@ -284,8 +349,9 @@ export default function JobCard({
 
                       {(assessment.career_suggestions?.length ?? 0) > 0 && (
                         <div style={{ marginTop: 14 }}>
-                          <div className="assessment-pros-title" style={{ color: 'var(--gold)' }}>
-                            ✦ Suggestions
+                          <div className="assessment-pros-title title-with-icon" style={{ color: 'var(--gold)' }}>
+                            <Lightbulb size={12} strokeWidth={2} aria-hidden />
+                            Suggestions
                           </div>
                           {assessment.career_suggestions.map((s, i) => (
                             <div key={i} className="suggestion-item">{s}</div>
@@ -295,8 +361,9 @@ export default function JobCard({
 
                       {assessment.company_insights && (
                         <div style={{ marginTop: 16 }}>
-                          <div className="assessment-pros-title" style={{ color: '#60a5fa' }}>
-                            🌐 Company Insights
+                          <div className="assessment-pros-title title-with-icon" style={{ color: 'var(--info)' }}>
+                            <Globe size={12} strokeWidth={2} aria-hidden />
+                            Company insights
                           </div>
                           <div className="assessment-item" style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
                             {assessment.company_insights}
@@ -317,19 +384,31 @@ export default function JobCard({
               href={job.url || '#'}
               target="_blank"
               rel="noopener noreferrer"
-              className="apply-btn"
+              className="apply-btn btn-icon-inline"
               style={{ textDecoration: 'none', opacity: job.url ? 1 : 0.4 }}
             >
-              Apply Now →
+              Apply now
+              <Building2 size={14} strokeWidth={1.75} aria-hidden />
             </a>
             {resumeProfile && onReassess && (
               <button
-                className="apply-btn"
+                type="button"
+                className="apply-btn btn-icon-inline"
                 style={{ background: 'transparent', border: '1px solid var(--border-bright)', color: 'var(--gold)' }}
                 onClick={onReassess}
                 disabled={assessing}
               >
-                {assessing ? <><div className="spinner" style={{ width: 10, height: 10 }} /> Analyzing…</> : '↺ Re-assess'}
+                {assessing ? (
+                  <>
+                    <div className="spinner" style={{ width: 10, height: 10 }} />
+                    Analyzing…
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={14} strokeWidth={1.75} aria-hidden />
+                    Re-assess
+                  </>
+                )}
               </button>
             )}
             {/* Bookmark / Application Tracker */}
@@ -337,11 +416,13 @@ export default function JobCard({
               <div className="bookmark-actions">
                 {!bookmarkStatus ? (
                   <button
-                    className="apply-btn"
+                    type="button"
+                    className="apply-btn btn-icon-inline"
                     style={{ background: 'transparent', border: '1px solid var(--border-bright)', color: 'var(--text-muted)' }}
                     onClick={() => onBookmark('saved')}
                   >
-                    ☆ Save
+                    <Star size={14} strokeWidth={1.75} aria-hidden />
+                    Save
                   </button>
                 ) : (
                   <>
@@ -350,11 +431,11 @@ export default function JobCard({
                       value={bookmarkStatus}
                       onChange={e => onBookmark(e.target.value as BookmarkStatus)}
                     >
-                      <option value="saved">☆ Saved</option>
-                      <option value="applied">📨 Applied</option>
-                      <option value="interview">🎯 Interview</option>
-                      <option value="rejected">✕ Rejected</option>
-                      <option value="offer">🎉 Offer</option>
+                      <option value="saved">Saved</option>
+                      <option value="applied">Applied</option>
+                      <option value="interview">Interview</option>
+                      <option value="rejected">Rejected</option>
+                      <option value="offer">Offer</option>
                     </select>
                     <button
                       className="apply-btn"

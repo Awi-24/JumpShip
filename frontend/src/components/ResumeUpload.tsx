@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { Check, FileUp } from 'lucide-react';
 import type { ResumeProfile } from '../types';
 
 interface ResumeUploadProps {
@@ -40,7 +41,10 @@ export default function ResumeUpload({ profile, isLoading, onUpload }: ResumeUpl
   if (profile) {
     return (
       <div className="resume-loaded">
-        <div className="resume-name">{'\u2713'} {fileName || 'resume.pdf'}</div>
+        <div className="resume-name resume-name--row">
+          <Check size={14} strokeWidth={2} aria-hidden />
+          {fileName || 'resume.pdf'}
+        </div>
         <div
           className="resume-profile"
           style={{ marginBottom: 8, fontFamily: 'Syne', fontWeight: 700, color: 'var(--text)' }}
@@ -71,7 +75,9 @@ export default function ResumeUpload({ profile, isLoading, onUpload }: ResumeUpl
         accept=".pdf,.docx"
         onChange={(e) => handleFile(e.target.files?.[0])}
       />
-      <span className="upload-icon">{'\uD83D\uDCC4'}</span>
+      <span className="upload-icon" aria-hidden>
+        <FileUp size={32} strokeWidth={1.5} />
+      </span>
       <div className="upload-title">Drop your resume</div>
       <div className="upload-sub">PDF or DOCX · Parsed locally</div>
     </div>

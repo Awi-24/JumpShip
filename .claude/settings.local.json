@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find C:UsersadriwDocumentsGithubJobSpy -name requirements.txt -o -name Dockerfile*)",
+      "Bash(python -c \":*)",
+      "Bash(npx tsc:*)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(python -m pytest tests/test_agents.py -v)"
+    ]
+  }
+}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { ArrowLeft, Check } from 'lucide-react';
 import type { UserProfile, WorkExperience, Education, CustomQA } from '../types';
 
 interface ProfileProps {
@@ -146,14 +147,18 @@ export default function Profile({ onBack }: ProfileProps) {
       {/* ── Header ── */}
       <header className="profile-header">
         <div className="profile-header-left">
-          <button className="btn-ghost" onClick={onBack}>← Back</button>
+          <button type="button" className="btn-ghost btn-with-icon" onClick={onBack}>
+            <ArrowLeft size={18} strokeWidth={1.75} aria-hidden />
+            Back
+          </button>
           <div>
             <h1 className="profile-title">My Profile</h1>
             <p className="profile-subtitle">Agents use this data to auto-fill job applications</p>
           </div>
         </div>
-        <button className="btn-primary profile-save-btn" onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save Profile'}
+        <button type="button" className="btn-primary profile-save-btn btn-with-icon" onClick={handleSave} disabled={saving}>
+          {saved && !saving && <Check size={16} strokeWidth={2} aria-hidden />}
+          {saving ? 'Saving…' : saved ? 'Saved' : 'Save profile'}
         </button>
       </header>
 
@@ -381,8 +386,9 @@ export default function Profile({ onBack }: ProfileProps) {
 
         {/* ── Save button (bottom) ── */}
         <div className="profile-footer">
-          <button className="btn-primary" onClick={handleSave} disabled={saving} style={{ minWidth: 160 }}>
-            {saving ? 'Saving…' : saved ? '✓ Profile Saved' : 'Save Profile'}
+          <button type="button" className="btn-primary btn-with-icon" onClick={handleSave} disabled={saving} style={{ minWidth: 160 }}>
+            {saved && !saving && <Check size={16} strokeWidth={2} aria-hidden />}
+            {saving ? 'Saving…' : saved ? 'Profile saved' : 'Save profile'}
           </button>
         </div>
 
