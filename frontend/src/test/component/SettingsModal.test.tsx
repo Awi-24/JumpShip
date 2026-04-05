@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import SettingsModal from '../../components/SettingsModal';
 import { DEFAULT_SETTINGS } from '../../hooks/useSettings';
 
@@ -17,13 +17,13 @@ describe('SettingsModal', () => {
 
   it('does not render when open=false', () => {
     render(<SettingsModal {...defaultProps} open={false} />);
-    expect(screen.queryByRole('heading', { name: /settings/i })).toBeNull();
+    expect(screen.queryByText('Settings')).toBeNull();
   });
 
-  it('renders settings title and provider field', () => {
+  it('renders both tabs', () => {
     render(<SettingsModal {...defaultProps} />);
-    expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument();
-    expect(screen.getByText(/^Provider$/i)).toBeInTheDocument();
+    expect(screen.getByText(/LLM Provider/i)).toBeInTheDocument();
+    expect(screen.getByText(/Search Defaults/i)).toBeInTheDocument();
   });
 
   it('calls onClose when Cancel is clicked', () => {
@@ -32,9 +32,9 @@ describe('SettingsModal', () => {
     expect(defaultProps.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onClose when close button is clicked', () => {
+  it('calls onClose when X button is clicked', () => {
     render(<SettingsModal {...defaultProps} />);
-    fireEvent.click(screen.getByRole('button', { name: /close/i }));
+    fireEvent.click(screen.getByText('✕'));
     expect(defaultProps.onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -53,6 +53,20 @@ describe('SettingsModal', () => {
   it('shows Base URL input for local providers', () => {
     render(<SettingsModal {...defaultProps} initial={{ ...DEFAULT_SETTINGS, llmProvider: 'ollama' }} />);
     expect(screen.getByPlaceholderText(/localhost:11434/)).toBeInTheDocument();
+  });
+
+  it('switches to Search Defaults tab', () => {
+    render(<SettingsModal {...defaultProps} />);
+    fireEvent.click(screen.getByText(/Search Defaults/i));
+    expect(screen.getByText(/Default location/i)).toBeInTheDocument();
+    expect(screen.getByText(/Results per search/i)).toBeInTheDocument();
+  });
+
+  it('shows site checkboxes in Search Defaults tab', () => {
+    render(<SettingsModal {...defaultProps} />);
+    fireEvent.click(screen.getByText(/Search Defaults/i));
+    expect(screen.getByText('linkedin')).toBeInTheDocument();
+    expect(screen.getByText('indeed')).toBeInTheDocument();
   });
 
   it('closes on backdrop click', () => {

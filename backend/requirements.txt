@@ -13,18 +13,18 @@ aiofiles>=24.1.0
 pdfminer.six>=20221105
 python-docx>=1.1.2
 
-# ── LLM providers ───────────────────────
-anthropic>=0.40.0
-# openai>=1.58.0
-# google-generativeai>=0.8.0
-
-# ── Browser automation (agents) ──────────
-playwright>=1.44.0
-# After install run: playwright install chromium
+# ── LangChain + Ollama ───────────────────
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-ollama>=0.2.0
 
 # ── Legacy dependencies ─────────────────
 pandas>=2.2.0
 alembic>=1.14.0
+
+# ── Auto-apply browser agent ────────────
+# After pip install, also run: playwright install chromium
+playwright>=1.49.0
 
 # ── jobspy transitive dependencies ──────
 requests>=2.32.0

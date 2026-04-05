@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, Check, FlaskConical, Rocket, Settings as SettingsIcon, X, Zap } from 'lucide-react';
+import { Settings2, X, Check, Microscope, Zap, Rocket } from 'lucide-react';
 import CustomSelect from './CustomSelect';
 import type { Settings } from '../hooks/useSettings';
 import type { LLMProvider } from '../types';
@@ -36,6 +36,7 @@ interface Props {
 export default function SettingsModal({ open, initial, onSave, onClose }: Props) {
   const [draft, setDraft] = useState<Settings>(initial);
   const [status, setStatus] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
+  const [testMessage, setTestMessage] = useState('');
   const [liveModels, setLiveModels] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
 
@@ -91,16 +92,33 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
     const defaultModel = PROVIDER_MODELS[p][0] ?? '';
     setDraft(d => ({ ...d, llmProvider: p, llmModel: defaultModel }));
     setStatus('idle');
+    setTestMessage('');
   };
 
   const testConnection = async () => {
     setStatus('checking');
+    setTestMessage('');
     try {
-      const res = await fetch('/api/health');
+      const res = await fetch('/api/test-llm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: draft.llmProvider,
+          base_url: draft.ollamaUrl || '',
+          model: draft.llmModel || '',
+          api_key: apiKey || '',
+        }),
+      });
       const data = await res.json();
-      setStatus(data.llm_available ? 'ok' : 'error');
+      setStatus(data.ok ? 'ok' : 'error');
+      setTestMessage(data.message || '');
+      // If a different URL worked (e.g. 127.0.0.1 instead of localhost), auto-update
+      if (data.ok && data.resolved_url && data.resolved_url !== draft.ollamaUrl) {
+        setDraft(d => ({ ...d, ollamaUrl: data.resolved_url }));
+      }
     } catch {
       setStatus('error');
+      setTestMessage('Could not reach backend.');
     }
   };
 
@@ -129,13 +147,8 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
 
         {/* Header */}
         <div className="modal-header">
-          <div className="modal-title modal-title-row" role="heading" aria-level={2}>
-            <SettingsIcon size={22} strokeWidth={1.75} aria-hidden />
-            Settings
-          </div>
-          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
-            <X size={18} strokeWidth={1.75} aria-hidden />
-          </button>
+          <div className="modal-title"><Settings2 size={16} style={{ verticalAlign: 'middle', marginRight: 6 }} />Settings</div>
+          <button className="modal-close" onClick={onClose}><X size={16} /></button>
         </div>
 
         {/* Body */}
@@ -167,25 +180,13 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
                   className="config-input"
                   value={draft.ollamaUrl}
                   onChange={e => set('ollamaUrl', e.target.value)}
-                  placeholder="http://localhost:11434"
+                  placeholder="default (host.docker.internal:11434)"
                 />
-                {isOllamaUnreachable && (
-                  <div className="settings-hint settings-hint-warn-block">
-                    <span className="settings-hint-warn-title">
-                      <AlertTriangle size={14} strokeWidth={1.75} aria-hidden />
-                      Cannot reach Ollama. Common fixes:
-                    </span>
-                    <ul style={{ margin: '4px 0 0 0', paddingLeft: 16, lineHeight: 1.7 }}>
-                      <li><strong>macOS / Windows Docker:</strong> use <code>http://host.docker.internal:11434</code></li>
-                      <li><strong>Linux Docker:</strong> use <code>http://host.docker.internal:11434</code> — the server auto-maps this to the host gateway</li>
-                      <li><strong>Without Docker:</strong> <code>http://localhost:11434</code> (default)</li>
-                      <li>Make sure Ollama is running: <code>ollama serve</code></li>
-                    </ul>
-                  </div>
-                )}
                 <div className="settings-hint">
-                  Leave blank to use the server's configured URL. The backend automatically retries with
-                  <code> host.docker.internal</code> on Linux Docker if <code>localhost</code> fails.
+                  Leave blank — the server uses its own configured URL (auto-set to{' '}
+                  <code>host.docker.internal:11434</code> in Docker).
+                  Linux (if unreachable): try <code>http://127.0.0.1:11434</code> or set{' '}
+                  <code>OLLAMA_HOST=0.0.0.0 ollama serve</code> on the host.
                 </div>
               </div>
             )}
@@ -278,13 +279,7 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
                     onClick={() => set('assessmentSpeed', mode)}
                   >
                     <span className="speed-mode-icon">
-                      {mode === 'careful' ? (
-                        <FlaskConical size={22} strokeWidth={1.75} aria-hidden />
-                      ) : mode === 'balanced' ? (
-                        <Zap size={22} strokeWidth={1.75} aria-hidden />
-                      ) : (
-                        <Rocket size={22} strokeWidth={1.75} aria-hidden />
-                      )}
+                      {mode === 'careful' ? <Microscope size={16} strokeWidth={1.5} /> : mode === 'balanced' ? <Zap size={16} strokeWidth={1.5} /> : <Rocket size={16} strokeWidth={1.5} />}
                     </span>
                     <span className="speed-mode-label">{mode.charAt(0).toUpperCase() + mode.slice(1)}</span>
                     <span className="speed-mode-desc">
@@ -299,24 +294,29 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
             </div>
 
             {/* Connection test */}
-            <div className="settings-row settings-row--inline" style={{ marginTop: 20 }}>
-              <button className="test-btn" onClick={testConnection} disabled={status === 'checking'}>
-                {status === 'checking'
-                  ? <><div className="spinner" style={{ width: 12, height: 12 }} /> Testing…</>
-                  : 'Test Connection'}
-              </button>
-              {status === 'ok' && (
-                <span className="test-result ok test-result--row">
-                  <Check size={14} strokeWidth={2} aria-hidden />
-                  Connected
-                </span>
-              )}
-              {status === 'error' && (
-                <span className="test-result error test-result--row">
-                  <X size={14} strokeWidth={2} aria-hidden />
-                  Unreachable
-                  {!isCloud && <span className="test-hint"> — is {draft.llmProvider} running?</span>}
-                </span>
+            <div style={{ marginTop: 20 }}>
+              <div className="settings-row settings-row--inline">
+                <button className="test-btn" onClick={testConnection} disabled={status === 'checking'}>
+                  {status === 'checking'
+                    ? <><div className="spinner" style={{ width: 12, height: 12 }} /> Testing…</>
+                    : 'Test Connection'}
+                </button>
+                {status === 'ok'    && <span className="test-result ok"><Check size={12} style={{ verticalAlign: 'middle', marginRight: 3 }} />Connected</span>}
+                {status === 'error' && <span className="test-result error"><X size={12} style={{ verticalAlign: 'middle', marginRight: 3 }} />Failed</span>}
+              </div>
+              {testMessage && (
+                <div style={{
+                  marginTop: 8,
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  background: status === 'ok' ? 'rgba(74,222,128,0.06)' : 'rgba(248,113,113,0.06)',
+                  border: `1px solid ${status === 'ok' ? 'rgba(74,222,128,0.2)' : 'rgba(248,113,113,0.2)'}`,
+                  color: status === 'ok' ? '#4ade80' : '#f87171',
+                }}>
+                  {testMessage}
+                </div>
               )}
             </div>
 

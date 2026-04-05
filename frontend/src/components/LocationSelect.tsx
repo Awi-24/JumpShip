@@ -1,38 +1,31 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-/** Brazilian cities + remote-in-Brazil (boards use these strings as location). */
-const BRAZIL_CITIES = [
-  'Brasil — Remoto',
-  'São Paulo',
-  'Rio de Janeiro',
-  'Belo Horizonte',
-  'Curitiba',
-  'Porto Alegre',
-  'Brasília',
-  'Florianópolis',
-  'Salvador',
-  'Recife',
-  'Fortaleza',
-  'Manaus',
-  'Goiânia',
-  'Belém',
-  'Campinas',
-];
-
 const POPULAR_LOCATIONS = [
   {
-    group: 'Remote & hybrid',
+    group: 'Remote & Hybrid',
     items: [
       'Remote',
-      'Remote (worldwide)',
       'Hybrid',
-      'Brasil — Remoto',
     ],
   },
   {
     group: '🇧🇷 Brasil',
-    items: ['Brasil (todo o país)', 'Brazil', ...BRAZIL_CITIES],
+    items: [
+      'Brasil (todo o país)',
+      'Brasil — Remoto',
+      'São Paulo',
+      'Rio de Janeiro',
+      'Belo Horizonte',
+      'Curitiba',
+      'Porto Alegre',
+      'Brasília',
+      'Florianópolis',
+      'Salvador',
+      'Recife',
+      'Fortaleza',
+      'Campinas',
+    ],
   },
   {
     group: '🇺🇸 United States',
@@ -212,6 +205,7 @@ export default function LocationSelect({ value, onChange }: Props) {
           className="custom-select-list location-select-list"
           style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 9999 }}
         >
+          {/* Search bar — fixed at top, never scrolls */}
           <div className="location-search-wrap">
             <input
               ref={inputRef}
@@ -224,36 +218,39 @@ export default function LocationSelect({ value, onChange }: Props) {
             />
           </div>
 
-          {query.trim() && !filtered.some(g => g.items.some(i => i.toLowerCase() === query.toLowerCase())) && (
-            <div
-              className="custom-select-option"
-              style={{ fontStyle: 'italic', color: 'var(--gold)' }}
-              onMouseDown={e => { e.preventDefault(); pick(query.trim()); }}
-            >
-              Use "{query.trim()}"
-            </div>
-          )}
+          {/* Scrollable options body */}
+          <div className="custom-select-list-body">
+            {query.trim() && !filtered.some(g => g.items.some(i => i.toLowerCase() === query.toLowerCase())) && (
+              <div
+                className="custom-select-option"
+                style={{ fontStyle: 'italic', color: 'var(--gold)' }}
+                onMouseDown={e => { e.preventDefault(); pick(query.trim()); }}
+              >
+                Use "{query.trim()}"
+              </div>
+            )}
 
-          {filtered.map(g => (
-            <div key={g.group}>
-              <div className="custom-select-group">{g.group}</div>
-              {g.items.map(loc => (
-                <div
-                  key={loc}
-                  className={`custom-select-option${loc === value ? ' selected' : ''}`}
-                  onMouseDown={e => { e.preventDefault(); pick(loc); }}
-                >
-                  {loc}
-                </div>
-              ))}
-            </div>
-          ))}
+            {filtered.map(g => (
+              <div key={g.group}>
+                <div className="custom-select-group">{g.group}</div>
+                {g.items.map(loc => (
+                  <div
+                    key={loc}
+                    className={`custom-select-option${loc === value ? ' selected' : ''}`}
+                    onMouseDown={e => { e.preventDefault(); pick(loc); }}
+                  >
+                    {loc}
+                  </div>
+                ))}
+              </div>
+            ))}
 
-          {filtered.length === 0 && (
-            <div style={{ padding: '12px', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
-              No matches — type a country or city and press Enter, or pick below
-            </div>
-          )}
+            {filtered.length === 0 && (
+              <div style={{ padding: '12px', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
+                No matches — type a city or country name, or use "{query.trim()}"
+              </div>
+            )}
+          </div>
         </div>,
         document.body
       )}

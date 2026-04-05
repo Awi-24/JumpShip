@@ -102,26 +102,28 @@ export default function CustomSelect({ value, onChange, options, className = '',
           style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 9999 }}
           role="listbox"
         >
-          {groups.map(({ group, opts }) => (
-            <div key={group || '__default__'}>
-              {group && <div className="custom-select-group">{group}</div>}
-              {opts.map(opt => (
-                <div
-                  key={opt.value}
-                  className={`custom-select-option${opt.value === value ? ' selected' : ''}`}
-                  role="option"
-                  aria-selected={opt.value === value}
-                  onMouseDown={e => {
-                    e.preventDefault();
-                    onChange(opt.value);
-                    setOpen(false);
-                  }}
-                >
-                  {opt.label}
-                </div>
-              ))}
-            </div>
-          ))}
+          <div className="custom-select-list-body">
+            {groups.map(({ group, opts }) => (
+              <div key={group || '__default__'}>
+                {group && <div className="custom-select-group">{group}</div>}
+                {opts.map(opt => (
+                  <div
+                    key={opt.value}
+                    className={`custom-select-option${opt.value === value ? ' selected' : ''}`}
+                    role="option"
+                    aria-selected={opt.value === value}
+                    onMouseDown={e => {
+                      e.preventDefault();
+                      onChange(opt.value);
+                      setOpen(false);
+                    }}
+                  >
+                    {opt.label}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
         </div>,
         document.body
       )}

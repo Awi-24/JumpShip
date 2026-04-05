@@ -47,6 +47,8 @@ class JobResult(BaseModel):
     url: str = ""
     site: str = ""
     match_score: int | None = None
+    is_remote: bool | None = None   # populated from jobspy's is_remote field
+    tags: list[str] = []            # e.g. ["remote", "senior", "python", "fintech"]
 
 
 class AssessmentRequest(LLMOverride):
@@ -64,7 +66,7 @@ class JobAssessment(BaseModel):
     company_insights: str = ""   # web-researched company info summary
     income_range: str = ""       # estimated market salary range for this role/location
     is_relevant: bool = True     # False when job is completely unrelated to candidate's field
-    job_tags: list[str] = []     # Characteristic tags: tech stack, work mode, salary hint, etc.
+    job_tags: list[str] = []     # LLM-extracted tags: stack, seniority, work-mode, domain
 
 
 class HealthResponse(BaseModel):

@@ -17,9 +17,71 @@ _search_cache: dict[str, tuple[float, list[dict]]] = {}
 _CACHE_TTL = 900  # 15 minutes
 
 # Sites handled by JobSpy
-_JOBSPY_SITES = {"linkedin", "indeed", "glassdoor", "zip_recruiter", "bayt"}
+_JOBSPY_SITES = {"linkedin", "indeed", "glassdoor", "zip_recruiter", "bayt", "google"}
 # Sites handled by our extra scrapers
 _EXTRA_SITES = {"remoteok", "arbeitnow", "gupy", "programathor", "trampos"}
+
+# ZipRecruiter only returns results for US locations.
+# When the user searches "Remote" or a non-US location, we swap in a broad US fallback.
+_ZIPRECRUITER_US_FALLBACK = "United States"
+
+# Glassdoor is heavily protected; we silently add "google" as a parallel source
+# whenever glassdoor is selected so we always get some results.
+_GLASSDOOR_FALLBACK_SITE = "google"
+
+
+_US_STATES = {
+    "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA",
+    "KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
+    "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT",
+    "VA","WA","WV","WI","WY","DC",
+}
+
+def _is_us_location(location: str) -> bool:
+    """Return True when the location string looks like a US place."""
+    loc = location.upper()
+    if "UNITED STATES" in loc or "USA" in loc:
+        return True
+    # "City, ST" pattern
+    parts = loc.split(",")
+    if len(parts) == 2 and parts[1].strip() in _US_STATES:
+        return True
+    return False
+
+
+# Lightweight static PT-BR equivalents for the most common tech search terms.
+# Only covers terms that Brazilian job boards index in Portuguese.
+_EN_TO_PT: dict[str, str] = {
+    "software engineer": "engenheiro de software",
+    "software developer": "desenvolvedor de software",
+    "backend": "backend",
+    "frontend": "frontend",
+    "full stack": "full stack",
+    "data engineer": "engenheiro de dados",
+    "data scientist": "cientista de dados",
+    "machine learning": "aprendizado de máquina",
+    "product manager": "gerente de produto",
+    "devops": "devops",
+    "cloud": "nuvem",
+    "mobile": "mobile",
+    "android": "android",
+    "ios": "ios",
+    "qa": "qa",
+    "quality assurance": "garantia de qualidade",
+    "security": "segurança",
+    "designer": "designer",
+    "ux": "ux",
+    "analyst": "analista",
+}
+
+def _pt_keywords(keywords: list[str]) -> list[str]:
+    """Return keywords enriched with PT-BR equivalents for Brazilian job boards."""
+    result = list(keywords)
+    for kw in keywords:
+        pt = _EN_TO_PT.get(kw.lower())
+        if pt and pt not in result:
+            result.append(pt)
+    return result
 
 
 def _normalize_text(s: str) -> str:
@@ -79,11 +141,31 @@ async def search_jobs(
     jobspy_sites = [s for s in sites if s in _JOBSPY_SITES]
     extra_sites = [s for s in sites if s in _EXTRA_SITES]
 
+    # When Glassdoor is selected, also run Google Jobs in parallel as a fallback —
+    # Glassdoor's anti-bot measures frequently block results entirely.
+    if "glassdoor" in jobspy_sites and _GLASSDOOR_FALLBACK_SITE not in jobspy_sites:
+        jobspy_sites = list(jobspy_sites) + [_GLASSDOOR_FALLBACK_SITE]
+
     tasks = []
     if jobspy_sites:
-        tasks.append(_search_jobspy(keywords, location, job_type, jobspy_sites, results_wanted))
-    for site in extra_sites:
+        # ZipRecruiter needs a US location — run it separately with the fallback if needed.
+        if "zip_recruiter" in jobspy_sites:
+            other_sites = [s for s in jobspy_sites if s != "zip_recruiter"]
+            if other_sites:
+                tasks.append(_search_jobspy(keywords, location, job_type, other_sites, results_wanted))
+            zr_location = location if _is_us_location(location) else _ZIPRECRUITER_US_FALLBACK
+            tasks.append(_search_jobspy(keywords, zr_location, job_type, ["zip_recruiter"], results_wanted))
+        else:
+            tasks.append(_search_jobspy(keywords, location, job_type, jobspy_sites, results_wanted))
+
+    # BR sources work better with PT-BR keywords — translate on the fly if needed
+    br_sites = [s for s in extra_sites if s in {"gupy", "programathor", "trampos"}]
+    other_extra = [s for s in extra_sites if s not in {"gupy", "programathor", "trampos"}]
+    br_keywords = _pt_keywords(keywords)
+    for site in other_extra:
         tasks.append(_search_extra(site, keywords, location, results_wanted))
+    for site in br_sites:
+        tasks.append(_search_extra(site, br_keywords, location, results_wanted))
 
     results_nested = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -161,6 +243,20 @@ async def _search_jobspy(
         if description == "nan":
             description = ""
 
+        # Derive is_remote from jobspy's is_remote field or location string
+        raw_is_remote = row.get("is_remote")
+        location_str = str(row.get("location", "")).lower()
+        if raw_is_remote is True or str(raw_is_remote).lower() == "true":
+            is_remote = True
+        elif any(w in location_str for w in ("remote", "remoto", "home office", "anywhere", "distributed")):
+            is_remote = True
+        elif any(w in location_str for w in ("híbrido", "hibrido", "hybrid")):
+            is_remote = None  # hybrid — not fully remote, not fully onsite
+        else:
+            is_remote = False if location_str and location_str not in ("nan", "") else None
+
+        tags = _basic_tags(row, is_remote)
+
         results.append(
             {
                 "id": job_id,
@@ -175,6 +271,8 @@ async def _search_jobspy(
                 "url": str(row.get("job_url", "")),
                 "site": str(row.get("site", "")),
                 "match_score": None,
+                "is_remote": is_remote,
+                "tags": tags,
             }
         )
     return results
@@ -194,6 +292,38 @@ async def _search_extra(site: str, keywords: list[str], location: str, results_w
     elif site == "trampos":
         return await fetch_trampos(keywords, results_wanted)
     return []
+
+
+def _basic_tags(row, is_remote: bool | None) -> list[str]:
+    """Generate lightweight tags from raw job data (no LLM needed)."""
+    tags: list[str] = []
+
+    # Work mode
+    location_str = str(row.get("location", "")).lower()
+    if is_remote is True:
+        tags.append("remote")
+    elif any(w in location_str for w in ("híbrido", "hibrido", "hybrid")):
+        tags.append("hybrid")
+    elif is_remote is False and location_str not in ("nan", "", "none"):
+        tags.append("on-site")
+
+    # Seniority from title
+    title = str(row.get("title", "")).lower()
+    if any(w in title for w in ("senior", "sênior", "sr.", " sr ", "staff", "principal", "lead")):
+        tags.append("senior")
+    elif any(w in title for w in ("junior", "júnior", "jr.", " jr ", "entry")):
+        tags.append("junior")
+    elif any(w in title for w in ("mid", "pleno", "ii", "iii")):
+        tags.append("mid-level")
+
+    # Contract type
+    job_type = str(row.get("job_type", "")).lower()
+    if "contract" in job_type or "freelan" in job_type:
+        tags.append("contract")
+    elif "parttime" in job_type or "part-time" in job_type or "part time" in job_type:
+        tags.append("part-time")
+
+    return tags
 
 
 def _format_salary(row) -> str:

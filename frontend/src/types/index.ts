@@ -38,6 +38,8 @@ export interface JobResult {
   url: string;
   site: string;
   match_score?: number | null;
+  is_remote?: boolean | null;
+  tags?: string[];
 }
 
 export interface AssessmentRequest {
@@ -91,70 +93,70 @@ export interface BookmarkedJob {
   assessment?: JobAssessment;
 }
 
-// ── User Profile ──────────────────────────────────────────────────────────────
+// ─── Agent / Model Discovery ────────────────────────────────────────────────
 
-export interface WorkExperience {
-  company: string;
-  title: string;
-  start_date: string;
-  end_date: string;
-  current: boolean;
-  description: string;
-  location: string;
-}
-
-export interface Education {
-  institution: string;
-  degree: string;
-  field: string;
-  start_date: string;
-  end_date: string;
-  gpa: string;
-}
-
-export interface CustomQA {
-  question: string;
-  answer: string;
-}
-
-export interface UserProfile {
+export interface DiscoveredModel {
+  id: string;
   name: string;
-  email: string;
-  phone: string;
-  address: string;
-  city: string;
-  state: string;
-  country: string;
-  zip_code: string;
-  linkedin_url: string;
-  github_url: string;
-  portfolio_url: string;
-  professional_summary: string;
-  current_title: string;
-  years_experience: number;
-  skills: string[];
-  work_experience: WorkExperience[];
-  education: Education[];
-  expected_salary: string;
-  work_authorization: string;
-  willing_to_relocate: boolean;
-  remote_preference: string;
-  cover_letter_template: string;
-  custom_answers: CustomQA[];
+  size_gb?: number | null;
+  family?: string | null;
 }
 
-// ── Agents ────────────────────────────────────────────────────────────────────
+export interface DiscoveredProvider {
+  id: string;
+  name: string;
+  reachable: boolean;
+  base_url: string;
+  models: DiscoveredModel[];
+}
 
-export type AgentStatus = 'pending' | 'running' | 'completed' | 'failed' | 'stopped' | 'review_requested' | 'help_requested';
+export interface DiscoverResponse {
+  providers: DiscoveredProvider[];
+  active_provider?: string | null;
+  active_model?: string | null;
+}
+
+// ─── Agent Trace Events ─────────────────────────────────────────────────────
+
+export type TraceEventType = 'thinking' | 'tool_call' | 'tool_result' | 'error' | 'human_needed' | 'status';
+
+export interface TraceEvent {
+  id: string;
+  task_id: string;
+  step: number;
+  event_type: TraceEventType;
+  content: {
+    reasoning?: string;
+    summary?: string;
+    tool?: string;
+    args?: Record<string, unknown>;
+    result?: string;
+    error?: string;
+    screenshot_path?: string;
+    duration_ms?: number;
+  };
+  timestamp: string;
+}
+
+// ─── Application agents (Agent Monitor / auto-apply) ─────────────────────────
+
+export type AgentStatus =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'stopped'
+  | 'review_requested'
+  | 'help_requested';
 
 export interface AgentLogEntry {
-  timestamp: string;
+  level?: 'error' | 'warn' | 'info' | string;
   message: string;
-  level: 'info' | 'warn' | 'error';
+  timestamp: string;
 }
 
 export interface AgentInteraction {
-  type: 'review' | 'help';
+  type: 'review' | 'help' | string;
   message?: string;
   reason?: string;
   options: string[];
@@ -163,16 +165,16 @@ export interface AgentInteraction {
 
 export interface Agent {
   id: string;
-  job_url: string;
-  job_title: string;
-  company: string;
+  job_url?: string;
+  job_title?: string;
+  company?: string;
   status: AgentStatus;
   current_action: string;
   log: AgentLogEntry[];
-  screenshot_b64: string | null;
-  error: string | null;
-  application_id: string | null;
-  interaction_pending: AgentInteraction | null;
-  llm_provider: string;
-  llm_model: string;
+  screenshot_b64?: string | null;
+  error?: string | null;
+  application_id?: string | null;
+  interaction_pending?: AgentInteraction | null;
+  llm_provider?: string;
+  llm_model?: string;
 }

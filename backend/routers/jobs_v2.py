@@ -13,7 +13,7 @@ import re
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.models.schemas import (
     JobSearchRequest,
@@ -67,6 +67,140 @@ async def groq_models(
     except Exception as exc:
         logger.warning("Could not fetch Groq models: %s", exc)
         return _GROQ_FALLBACK_MODELS
+
+class TestLLMRequest(BaseModel):
+    provider: str
+    base_url: str = ""
+    model: str = ""
+    api_key: str = ""
+
+
+class TestLLMResponse(BaseModel):
+    ok: bool
+    message: str
+    resolved_url: str = ""
+
+
+@router.post("/api/test-llm", response_model=TestLLMResponse)
+async def test_llm_connection(req: TestLLMRequest):
+    """
+    Test the user-supplied LLM configuration and return a clear pass/fail message.
+    For Ollama: tries the given URL and common fallback addresses so we can
+    report which one actually works (helps Linux/Ubuntu users debug IP issues).
+    """
+    from backend.config import settings
+
+    if req.provider in ("ollama", "lmstudio", "openclaw"):
+        import os
+        # Build candidate URLs to try in order.
+        # Priority: user-supplied URL > server env var > localhost default.
+        raw = (req.base_url or settings.ollama_base_url).rstrip("/")
+        candidates = [raw]
+
+        # If the user typed localhost, also try the explicit IPv4 address
+        # because on Linux 'localhost' may resolve to ::1 (IPv6) while Ollama
+        # only binds to 127.0.0.1 (IPv4).
+        if "localhost" in raw:
+            candidates.append(raw.replace("localhost", "127.0.0.1"))
+        # And vice-versa
+        if "127.0.0.1" in raw:
+            candidates.append(raw.replace("127.0.0.1", "localhost"))
+
+        # When running inside Docker, also try host.docker.internal (reaches the
+        # host machine where Ollama is likely running).
+        port = raw.split(":")[-1] if ":" in raw else "11434"
+        docker_url = f"http://host.docker.internal:{port}"
+        if docker_url not in candidates and "host.docker.internal" not in raw:
+            candidates.append(docker_url)
+
+        # If the server config already resolved a different URL (e.g. host.docker.internal),
+        # ensure it's also tried even if the user sent the default localhost URL.
+        server_url = settings.ollama_base_url.rstrip("/")
+        if server_url not in candidates:
+            candidates.append(server_url)
+
+        last_error = ""
+        async with httpx.AsyncClient(timeout=4) as client:
+            for url in candidates:
+                try:
+                    r = await client.get(f"{url}/api/tags")
+                    if r.status_code == 200:
+                        models = [m["name"] for m in r.json().get("models", [])]
+                        model_hint = f" ({len(models)} model{'s' if len(models) != 1 else ''} installed)" if models else " (no models installed yet)"
+                        return TestLLMResponse(
+                            ok=True,
+                            message=f"Connected to {req.provider}{model_hint}",
+                            resolved_url=url,
+                        )
+                    last_error = f"HTTP {r.status_code}"
+                except httpx.ConnectError:
+                    last_error = "Connection refused"
+                except httpx.TimeoutException:
+                    last_error = "Timed out"
+                except Exception as exc:
+                    last_error = str(exc)[:80]
+
+        tried = ", ".join(candidates)
+        hint = ""
+        if "Connection refused" in last_error:
+            hint = (
+                f" — Is {req.provider} running? On Linux run: "
+                f"`OLLAMA_HOST=0.0.0.0 ollama serve` so it binds to all interfaces. "
+                f"Docker: set OLLAMA_BASE_URL=http://host.docker.internal:11434 in your .env"
+            )
+        return TestLLMResponse(
+            ok=False,
+            message=f"Could not reach {req.provider} at [{tried}]: {last_error}{hint}",
+        )
+
+    elif req.provider == "openai":
+        if not req.api_key:
+            return TestLLMResponse(ok=False, message="OpenAI API key is required.")
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                r = await client.get(
+                    "https://api.openai.com/v1/models",
+                    headers={"Authorization": f"Bearer {req.api_key}"},
+                )
+                if r.status_code == 200:
+                    return TestLLMResponse(ok=True, message="OpenAI key is valid.")
+                return TestLLMResponse(ok=False, message=f"OpenAI rejected the key: HTTP {r.status_code}")
+        except Exception as exc:
+            return TestLLMResponse(ok=False, message=f"OpenAI unreachable: {exc}")
+
+    elif req.provider == "anthropic":
+        if not req.api_key:
+            return TestLLMResponse(ok=False, message="Anthropic API key is required.")
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                r = await client.get(
+                    "https://api.anthropic.com/v1/models",
+                    headers={"x-api-key": req.api_key, "anthropic-version": "2023-06-01"},
+                )
+                if r.status_code in (200, 401):
+                    ok = r.status_code == 200
+                    return TestLLMResponse(ok=ok, message="Anthropic key is valid." if ok else "Anthropic rejected the key — check it and retry.")
+                return TestLLMResponse(ok=False, message=f"Anthropic returned HTTP {r.status_code}")
+        except Exception as exc:
+            return TestLLMResponse(ok=False, message=f"Anthropic unreachable: {exc}")
+
+    elif req.provider == "groq":
+        if not req.api_key:
+            return TestLLMResponse(ok=False, message="Groq API key is required.")
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                r = await client.get(
+                    "https://api.groq.com/openai/v1/models",
+                    headers={"Authorization": f"Bearer {req.api_key}"},
+                )
+                if r.status_code == 200:
+                    return TestLLMResponse(ok=True, message="Groq key is valid.")
+                return TestLLMResponse(ok=False, message=f"Groq rejected the key: HTTP {r.status_code}")
+        except Exception as exc:
+            return TestLLMResponse(ok=False, message=f"Groq unreachable: {exc}")
+
+    return TestLLMResponse(ok=False, message=f"Unknown provider: {req.provider}")
+
 
 _GROQ_FALLBACK_MODELS = [
     "llama-3.3-70b-versatile",
@@ -181,18 +315,19 @@ ASSESSMENT GUIDELINES:
   engineering culture, Glassdoor/Blind sentiment if known).
   Draw from the provided web data AND your training knowledge. Be specific and honest.
   If you have no reliable data, say so clearly.
-- income_range: Provide a realistic market salary range for this SPECIFIC role and location \
-  based on your training data and the provided web context. Format as e.g. \
-  "USD 90,000 – 130,000/yr" or "BRL 8,000 – 15,000/month". \
-  If the salary is already disclosed in the job post, use that as a reference and note the source. \
-  Use ranges from reliable sources (Glassdoor, LinkedIn Salary, Levels.fyi, local market data). \
-  Never leave this blank — always provide a best-effort estimate with a confidence note if uncertain.
-- job_tags: Short characteristic labels extracted directly from the job description (max 8 tags). \
-  Include: (1) work mode tag — exactly one of "Remote", "Hybrid", or "On-site"; \
-  (2) up to 4 main tech stack tags (e.g. "Python", "React", "AWS", "PostgreSQL"); \
-  (3) salary tag if disclosed in the posting (e.g. "$90k-120k", "BRL 12k/mês") — omit if not present; \
-  (4) contract type if mentioned (e.g. "Full-time", "Contract", "Part-time"). \
-  Tags must be short (1-3 words). Use title case. Extract from the job text — do NOT fabricate.
+- income_range: \
+  IMPORTANT: If the job post already discloses a salary (see "Salary" field in the job data), \
+  you MUST use that exact value verbatim — do not re-estimate or paraphrase it. \
+  Only when salary is NOT disclosed should you estimate a market range based on your training data, \
+  the role, location, and seniority. Format estimates as e.g. "USD 90,000 – 130,000/yr" or \
+  "BRL 8,000 – 15,000/month". Use reliable sources (Glassdoor, LinkedIn Salary, Levels.fyi). \
+  Add "(estimated)" when estimating, "(disclosed)" when using the job's own figure. \
+  Never leave this blank.
+
+- job_tags: Extract 3-8 short lowercase tags that best describe the job itself (not the candidate). \
+  Include: key technologies/frameworks from the stack, business domain (e.g. fintech, healthtech, \
+  e-commerce), seniority level (junior/mid-level/senior/staff), and work mode (remote/hybrid/on-site) \
+  if clearly stated. Keep each tag to 1-2 words. Do not include generic terms like "software" or "developer".
 
 CRITICAL: Return ONLY valid JSON — no markdown, no explanation, no trailing text."""
 
@@ -209,7 +344,7 @@ TARGET JOB:
 Title: {job.title}
 Company: {job.company}
 Location: {job.location}
-Salary: {job.salary_range or 'Not disclosed'}
+Salary (from job post): {job.salary_range if job.salary_range else 'NOT DISCLOSED — estimate from market data'}
 Source: {job.site}
 Description (first 2500 chars):
 {job.description[:2500] if job.description else 'No description available.'}
@@ -223,7 +358,8 @@ Assess the candidate's fit and return JSON matching this schema exactly:
   "gaps": ["<specific gap 1>", ...],
   "career_suggestions": ["<actionable suggestion 1>", ...],
   "company_insights": "<paragraph about the company: culture, reputation, growth stage>",
-  "income_range": "<realistic salary range for this role and location, e.g. USD 90,000 – 130,000/yr>"
+  "income_range": "<salary — use job's disclosed value with '(disclosed)' or estimate with '(estimated)'>",
+  "job_tags": ["<3-8 short tags describing the job: tech stack items, domain, seniority, work mode. e.g. python, react, fintech, senior, remote, b2b-saas>"]
 }}"""
 
     raw_response = ""
@@ -264,20 +400,12 @@ async def suggest_keywords(req: SynonymRequest):
 
     llm = _llm_from_request(req)
 
-    system = (
-        "You are a job search assistant. Given a list of skills/keywords, suggest related search terms "
-        "that would help find more relevant job postings. "
-        "IMPORTANT: Each keyword must be SHORT — 1 or 2 words maximum. "
-        "No phrases, no sentences, no articles or prepositions. "
-        "Think of atomic terms that someone types into a job board search box."
-    )
+    system = "You are a job search assistant. Given a list of skills/keywords, suggest related search terms that would help find more relevant job postings. Include synonyms, related technologies, and common job title variations."
     user = f"""Given these job search keywords: {', '.join(req.keywords)}
 
-Return a JSON array of 5-10 additional SHORT related keywords (1-2 words each) that would help find more relevant jobs.
+Return a JSON array of 5-10 additional related keywords/phrases that would help find more relevant jobs.
 Only include genuinely useful terms — no duplicates of the input.
-GOOD: ["fastapi", "django", "rest api", "aws", "docker"]
-BAD: ["Python backend developer with FastAPI", "cloud infrastructure management"]
-Return ONLY valid JSON array, no explanation."""
+Return ONLY valid JSON array, no explanation. Example: ["keyword1", "keyword2"]"""
 
     try:
         raw = await llm.complete(system, user)
@@ -286,17 +414,8 @@ Return ONLY valid JSON array, no explanation."""
         if isinstance(suggestions, list):
             # Filter out any that are already in the input
             input_lower = {k.lower() for k in req.keywords}
-            cleaned: list[str] = []
-            for s in suggestions:
-                if not isinstance(s, str):
-                    continue
-                s = s.strip()
-                if not s or s.lower() in input_lower:
-                    continue
-                # Truncate to first 2 words to enforce atomic keywords
-                words = s.split()
-                cleaned.append(" ".join(words[:2]) if len(words) > 2 else s)
-            return {"suggestions": cleaned[:10]}
+            suggestions = [s for s in suggestions if isinstance(s, str) and s.lower() not in input_lower]
+            return {"suggestions": suggestions[:10]}
     except Exception as exc:
         logger.warning("Keyword suggestion failed: %s", exc)
 

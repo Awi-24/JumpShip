@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, ChevronDown, Plus, X } from 'lucide-react';
-import type { Page } from '../App';
 
 interface JobTrackerProps {
   onBack: () => void;
-  onNavigate?: (page: Page) => void;
+  /** Called after starting an agent so the shell can switch view (e.g. to agents). */
+  onNavigate?: (page: 'agents') => void;
 }
 
 export interface ApplicationRecord {

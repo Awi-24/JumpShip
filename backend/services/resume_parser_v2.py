@@ -53,12 +53,9 @@ Your task is to extract a precise, structured professional profile from a resume
 
 CRITICAL RULES:
 1. Return ONLY valid JSON — no markdown fences, no explanation, no commentary.
-2. "suggested_keywords" must be SHORT ATOMIC TERMS — single words or two-word pairs at most.
-   These are typed directly into a job board search field. Long phrases return zero results.
-   GOOD examples: "python", "react", "fastapi", "kubernetes", "mlops", "sql", "typescript"
-   BAD examples (DO NOT use): "Python backend developer", "React TypeScript frontend", "MLOps with Kubernetes"
-   Include: core technologies, frameworks, tools, and ONE seniority keyword (e.g. "senior", "lead").
-   Maximum 2 words per keyword. No sentences, no phrases with articles or prepositions.
+2. "suggested_keywords" must be SPECIFIC and SEARCH-READY — these are terms a recruiter would type
+   into a job board. Include: core technologies, frameworks, methodologies, seniority level, and domain.
+   Examples: "Python backend", "React TypeScript", "MLOps Kubernetes", "Staff Engineer", "fintech SaaS"
 3. "suggested_titles" must reflect actual job titles the candidate could apply for, ordered by best fit.
 4. "skills" must be specific (e.g. "FastAPI" not just "web frameworks", "PostgreSQL" not just "databases").
 5. Infer seniority from experience_years, job titles held, and complexity of responsibilities.
@@ -103,27 +100,9 @@ RESUME:
             if not isinstance(data[field], list):
                 data[field] = []
 
-        # Sanitize suggested_keywords: strip overly long phrases (> 3 words).
-        # This prevents small LLMs from polluting keywords with full sentences.
-        sanitized_kws: list[str] = []
-        for kw in data["suggested_keywords"]:
-            kw = kw.strip()
-            if not kw:
-                continue
-            words = kw.split()
-            if len(words) <= 3:
-                sanitized_kws.append(kw)
-            else:
-                # Keep only the first two words as a fallback atomic term
-                sanitized_kws.append(" ".join(words[:2]))
-        # Deduplicate (case-insensitive) while preserving order
-        seen_kws: set[str] = set()
-        deduped_kws: list[str] = []
-        for kw in sanitized_kws:
-            if kw.lower() not in seen_kws:
-                seen_kws.add(kw.lower())
-                deduped_kws.append(kw)
-        data["suggested_keywords"] = deduped_kws[:15]
+        # Normalize suggested_keywords: split camelCase, lowercase, deduplicate,
+        # reject anything longer than 3 words (too specific for job board search).
+        data["suggested_keywords"] = _normalize_keywords(data["suggested_keywords"])
 
         return data
 
@@ -139,6 +118,44 @@ RESUME:
             "suggested_titles": [],
             "raw_text": text[:8000],
         }
+
+
+def _normalize_keywords(keywords: list) -> list:
+    """
+    Post-process LLM-generated keywords:
+    - Split camelCase/PascalCase into words (e.g. "MachineLearning" → "machine learning")
+    - Lowercase everything
+    - Strip leading/trailing whitespace
+    - Drop keywords longer than 3 words (too narrow for job board queries)
+    - Deduplicate (case-insensitive)
+    """
+    import re
+
+    def split_camel(s: str) -> str:
+        # Insert space before uppercase letters preceded by lowercase or digits
+        s = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', s)
+        # Insert space before sequences of uppercase followed by lowercase (e.g. "RESTApi" → "REST Api")
+        s = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1 \2', s)
+        return s
+
+    seen: set[str] = set()
+    result: list[str] = []
+    for kw in keywords:
+        if not isinstance(kw, str):
+            continue
+        normalized = split_camel(kw).strip().lower()
+        # Remove duplicate internal spaces
+        normalized = re.sub(r'\s+', ' ', normalized)
+        # Drop if > 3 words
+        if len(normalized.split()) > 3:
+            continue
+        # Drop if empty or too short
+        if len(normalized) < 2:
+            continue
+        if normalized not in seen:
+            seen.add(normalized)
+            result.append(normalized)
+    return result
 
 
 def _clean_json_response(response: str) -> str:

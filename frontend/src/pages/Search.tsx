@@ -1,38 +1,25 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
-  Bot,
-  ClipboardList,
-  FileSpreadsheet,
-  FileJson,
-  Search as SearchIcon,
-  Settings,
-  Sparkles,
-  User,
-  AlertTriangle,
-  Eye,
-  X,
-  Star,
-  ArrowRight,
-  Globe,
-  Rocket,
-  Telescope,
+  User, Settings2, Search as SearchIcon, Bookmark, Bot, Rocket,
+  Eye, X, AlertTriangle, Globe, FileDown, FileText, Zap, PenLine,
+  Banknote, Star,
 } from 'lucide-react';
 import ResumeUpload from '../components/ResumeUpload';
 import JobCard from '../components/JobCard';
 import SettingsModal from '../components/SettingsModal';
+import ThemeToggle from '../components/ThemeToggle';
+import Profile from './Profile';
+import AgentQueue from './AgentQueue';
 import CustomSelect from '../components/CustomSelect';
 import AssessmentLoader from '../components/AssessmentLoader';
 import LocationSelect from '../components/LocationSelect';
 import { useResumeParse } from '../hooks/useResume';
 import { useJobSearch } from '../hooks/useJobs';
 import { useSettings } from '../hooks/useSettings';
-import { loadSearchSession, saveSearchSession, clearSearchSession } from '../hooks/searchSessionCache';
 import type { ResumeProfile, JobResult, JobAssessment, SortOption, BookmarkStatus } from '../types';
-import type { Page } from '../App';
 
 interface SearchProps {
   onBack: () => void;
-  onNavigate?: (page: Page) => void;
 }
 
 const ALL_SITES = ['linkedin', 'indeed', 'glassdoor', 'zip_recruiter', 'remoteok', 'arbeitnow', 'gupy', 'programathor', 'trampos'];
@@ -138,50 +125,49 @@ function exportJSON(jobs: JobResult[], assessments: Record<string, JobAssessment
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
-export default function Search({ onBack, onNavigate }: SearchProps) {
+export default function Search({ onBack }: SearchProps) {
   const { settings, saveSettings } = useSettings();
-  const sessionSnapshot = useMemo(() => loadSearchSession(), []);
-  const skipAssessOnceRef = useRef(
-    !!sessionSnapshot?.jobs?.length &&
-      !!sessionSnapshot.resumeProfile &&
-      sessionSnapshot.jobs.every(j => sessionSnapshot.assessments?.[j.id])
-  );
-
   const settingsRef = useRef(settings);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
 
   const ASSESS_CONCURRENCY = settings.assessmentSpeed === 'careful' ? 1 : settings.assessmentSpeed === 'turbo' ? 6 : 3;
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [autoApplyJob, setAutoApplyJob] = useState<JobResult | null>(null);
+  const [autoApplyRunning, setAutoApplyRunning] = useState(false);
+  const [autoApplyMsg, setAutoApplyMsg] = useState('');
   const [llmStatus, setLlmStatus] = useState<'green' | 'yellow' | 'red'>('yellow');
 
   // Resume
   const resumeMutation = useResumeParse();
-  const [resumeProfile, setResumeProfile] = useState<ResumeProfile | null>(sessionSnapshot?.resumeProfile ?? null);
+  const [resumeProfile, setResumeProfile] = useState<ResumeProfile | null>(null);
 
   // Search filters
-  const [keywords, setKeywords] = useState<string[]>(sessionSnapshot?.keywords ?? []);
-  const [location, setLocation] = useState(sessionSnapshot?.location ?? settings.defaultLocation);
-  const [jobType, setJobType] = useState(sessionSnapshot?.jobType ?? 'all');
-  const [sortBy, setSortBy] = useState<SortOption>(sessionSnapshot?.sortBy ?? 'match');
+  const [keywords, setKeywords] = useState<string[]>([]);
+  const [location, setLocation] = useState(settings.defaultLocation);
+  const [jobType, setJobType] = useState('all');
+  const [sortBy, setSortBy] = useState<SortOption>('match');
   const [newKeyword, setNewKeyword] = useState('');
   const [activeSites, setActiveSites] = useState<string[]>(
-    sessionSnapshot?.activeSites?.length
-      ? sessionSnapshot.activeSites
-      : (settings.defaultSites?.length ? settings.defaultSites : ['linkedin', 'indeed', 'glassdoor'])
+    settings.defaultSites?.length ? settings.defaultSites : ['linkedin', 'indeed', 'glassdoor']
   );
-  const [resultsWanted, setResultsWanted] = useState(sessionSnapshot?.resultsWanted ?? settings.resultsWanted ?? 20);
+  const [resultsWanted, setResultsWanted] = useState(settings.resultsWanted ?? 20);
 
   // Pagination
-  const [visibleCount, setVisibleCount] = useState(sessionSnapshot?.visibleCount ?? PAGE_SIZE);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   // Search history
   const [searchHistory, setSearchHistory] = useState<SearchHistoryEntry[]>(loadHistory);
 
+  // Active tab
+  const [activeTab, setActiveTab] = useState<'search' | 'saved' | 'agents'>('search');
+  const [agentActiveCount, setAgentActiveCount] = useState(0);
+
   // Bookmarks
   const [bookmarks, setBookmarks] = useState<Record<string, BookmarkEntry>>(loadBookmarks);
-  const [showBookmarksOnly, setShowBookmarksOnly] = useState(sessionSnapshot?.showBookmarksOnly ?? false);
-  const [showHidden, setShowHidden] = useState(sessionSnapshot?.showHidden ?? false);
+  const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
 
   // Keyword suggestions & translations
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -195,54 +181,11 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     );
 
   // Assessments — owned by parent for sorting + auto-assess
-  const [assessments, setAssessments] = useState<Record<string, JobAssessment>>(sessionSnapshot?.assessments ?? {});
+  const [assessments, setAssessments] = useState<Record<string, JobAssessment>>({});
   const [assessingIds, setAssessingIds] = useState<Set<string>>(new Set());
-  const [cachedJobs, setCachedJobs] = useState<JobResult[] | null>(
-    sessionSnapshot?.jobs != null ? sessionSnapshot.jobs : null
-  );
 
   const jobSearch = useJobSearch();
-  const jobs: JobResult[] = jobSearch.data ?? cachedJobs ?? [];
-
-  useEffect(() => {
-    if (jobSearch.data) setCachedJobs(jobSearch.data);
-  }, [jobSearch.data]);
-
-  useEffect(() => {
-    const id = window.setTimeout(() => {
-      const jobList = jobSearch.data ?? cachedJobs ?? [];
-      saveSearchSession({
-        v: 1,
-        resumeProfile,
-        keywords,
-        location,
-        jobType,
-        sortBy,
-        activeSites,
-        resultsWanted,
-        visibleCount,
-        jobs: jobList,
-        assessments,
-        showBookmarksOnly,
-        showHidden,
-      });
-    }, 450);
-    return () => clearTimeout(id);
-  }, [
-    resumeProfile,
-    keywords,
-    location,
-    jobType,
-    sortBy,
-    activeSites,
-    resultsWanted,
-    visibleCount,
-    jobSearch.data,
-    cachedJobs,
-    assessments,
-    showBookmarksOnly,
-    showHidden,
-  ]);
+  const jobs: JobResult[] = jobSearch.data || [];
 
   // Poll LLM health
   useEffect(() => {
@@ -278,7 +221,14 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     setResumeProfile(profile);
     setAssessments({});
     setAssessingIds(new Set());
-    if (profile.suggested_keywords?.length) setKeywords(profile.suggested_keywords);
+    if (profile.suggested_keywords?.length) {
+      // Normalize incoming keywords from LLM: lowercase + deduplicate
+      const seen = new Set<string>();
+      const normalized = profile.suggested_keywords
+        .map(k => k.trim().toLowerCase())
+        .filter(k => k.length > 0 && !seen.has(k) && seen.add(k));
+      setKeywords(normalized);
+    }
     if (!location && s.defaultLocation) setLocation(s.defaultLocation);
     else if (!location) setLocation('Remote');
   }, [resumeMutation, location]);
@@ -288,8 +238,6 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     setKeywords([]);
     setAssessments({});
     setAssessingIds(new Set());
-    setCachedJobs(null);
-    clearSearchSession();
   };
 
   // ── Auto-assess all jobs ──────────────────────────────────────────────────
@@ -343,10 +291,6 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const jobIds = jobs.map(j => j.id).join(',');
   useEffect(() => {
     if (!resumeProfile || !jobs.length) return;
-    if (skipAssessOnceRef.current) {
-      skipAssessOnceRef.current = false;
-      return;
-    }
     setAssessments({});
     setAssessingIds(new Set());
 
@@ -409,8 +353,11 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   // ── Keywords ───────────────────────────────────────────────────────────────
   const removeKeyword = (kw: string) => setKeywords(k => k.filter(x => x !== kw));
   const addKeyword = (kw?: string) => {
-    const keyword = (kw || newKeyword).trim();
-    if (keyword && !keywords.includes(keyword)) setKeywords(k => [...k, keyword]);
+    // Normalize: lowercase + trim so "Python" and "python" are the same keyword
+    const keyword = (kw || newKeyword).trim().toLowerCase();
+    if (keyword && !keywords.some(k => k.toLowerCase() === keyword)) {
+      setKeywords(k => [...k, keyword]);
+    }
     if (!kw) setNewKeyword('');
   };
 
@@ -478,26 +425,12 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
       if (status === null) {
         delete next[jobId];
       } else {
-        const isNew = !prev[jobId];
         next[jobId] = {
           job,
           status,
           savedAt: prev[jobId]?.savedAt || new Date().toISOString(),
           assessment: assessments[jobId] || prev[jobId]?.assessment,
         };
-        if (isNew) {
-          fetch('/api/applications', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              job_title: job.title,
-              company_name: job.company,
-              job_url: job.url,
-              site: job.site,
-              status: 'saved',
-            }),
-          }).catch(() => {});
-        }
       }
       saveBookmarks(next);
       return next;
@@ -509,6 +442,36 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     setKeywords(entry.keywords);
     setLocation(entry.location);
     setActiveSites(entry.sites);
+  };
+
+  // ── Auto Apply — enqueue to orchestrator ────────────────────────────────────
+  const handleAutoApply = async (job: JobResult, dryRun = false) => {
+    setAutoApplyRunning(true);
+    setAutoApplyMsg('Adding to agent queue…');
+    try {
+      const res = await fetch('/api/auto-apply/queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_url:   job.url,
+          job_title: job.title,
+          company:   job.company,
+          dry_run:   dryRun,
+          headless:  true,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAutoApplyMsg('Queued! Switch to the Agents tab to track progress.');
+        setAgentActiveCount(c => c + 1);
+      } else {
+        setAutoApplyMsg(data.detail || 'Failed to queue job.');
+      }
+    } catch {
+      setAutoApplyMsg('Error communicating with backend.');
+    } finally {
+      setAutoApplyRunning(false);
+    }
   };
 
   // ── Sorting + relevance filter ──────────────────────────────────────────────
@@ -575,35 +538,73 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
           <img src="/logo-icon.png" alt="" className="nav-logo-icon" />
           <span>Jump<span className="logo-accent">Ship</span></span>
         </div>
-        <div className="search-header-actions">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <ThemeToggle compact />
           <div className="llm-status">
             <span className={`status-dot ${llmStatus}`} />
             {statusLabel}
           </div>
-          {onNavigate && (
-            <>
-              <button type="button" className="nav-pill" onClick={() => onNavigate('profile')} title="Edit profile">
-                <User size={16} strokeWidth={1.75} aria-hidden />
-                Profile
-              </button>
-              <button type="button" className="nav-pill" onClick={() => onNavigate('agents')} title="Agent monitor">
-                <Bot size={16} strokeWidth={1.75} aria-hidden />
-                Agents
-              </button>
-              <button type="button" className="nav-pill" onClick={() => onNavigate('tracker')} title="Job tracker">
-                <ClipboardList size={16} strokeWidth={1.75} aria-hidden />
-                Track
-              </button>
-            </>
-          )}
-          <button type="button" className="settings-trigger" onClick={() => setSettingsOpen(true)} title="Settings">
-            <Settings size={16} strokeWidth={1.75} aria-hidden />
-            Settings
+          <button className="settings-trigger" onClick={() => setProfileOpen(true)} title="Profile">
+            <User size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Profile
+          </button>
+          <button className="settings-trigger" onClick={() => setSettingsOpen(true)} title="Settings">
+            <Settings2 size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Settings
           </button>
         </div>
       </header>
 
       <SettingsModal open={settingsOpen} initial={settings} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />
+      {profileOpen && <Profile onClose={() => setProfileOpen(false)} />}
+
+      {/* ── Auto Apply dialog ── */}
+      {autoApplyJob && (
+        <div className="modal-backdrop" onClick={() => { setAutoApplyJob(null); setAutoApplyMsg(''); }}>
+          <div className="modal-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <div className="modal-title"><Zap size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} />Auto Apply</div>
+              <button className="modal-close" onClick={() => { setAutoApplyJob(null); setAutoApplyMsg(''); }}><X size={16} /></button>
+            </div>
+            <div className="modal-body" style={{ padding: '20px 24px' }}>
+              <div style={{ marginBottom: 16, fontSize: 13 }}>
+                <strong>{autoApplyJob.title}</strong> at <strong>{autoApplyJob.company}</strong>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
+                The agent will open a browser, log into the job platform, and fill the application form using your saved profile data.
+                Make sure your profile is complete before running.
+              </div>
+              {autoApplyMsg && (
+                <div
+                  className={
+                    autoApplyMsg.toLowerCase().includes('error') || autoApplyMsg.toLowerCase().includes('fail')
+                      ? 'flash-message flash-message--error'
+                      : 'flash-message flash-message--success'
+                  }
+                >
+                  {autoApplyMsg}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" style={{ padding: '9px 20px', fontSize: 13 }}
+                onClick={() => setProfileOpen(true)}>
+                <PenLine size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Edit Profile
+              </button>
+              <button className="btn-secondary" style={{ padding: '9px 20px', fontSize: 13 }}
+                onClick={() => handleAutoApply(autoApplyJob, true)}
+                disabled={autoApplyRunning}>
+                Queue (Dry Run)
+              </button>
+              <button className="btn-primary" style={{ padding: '9px 20px', fontSize: 13 }}
+                onClick={() => handleAutoApply(autoApplyJob, false)}
+                disabled={autoApplyRunning}>
+                {autoApplyRunning
+                  ? <><span className="spinner" style={{ width: 10, height: 10, display: 'inline-block', marginRight: 6 }} />Queuing…</>
+                  : <><Zap size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Queue &amp; Apply</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="search-body">
         {/* ── SIDEBAR ── */}
@@ -619,12 +620,17 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
             />
             {resumeProfile && (
               <button
-                type="button"
-                className="btn-clear-resume"
                 onClick={handleResetResume}
+                style={{
+                  marginTop: 8, width: '100%', padding: '6px 0',
+                  background: 'none', border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 8, color: 'var(--text-muted)', fontSize: 12,
+                  cursor: 'pointer', transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = '#f87171')}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)')}
               >
-                <X size={14} strokeWidth={1.75} aria-hidden />
-                Clear résumé
+                <X size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />Clear résumé
               </button>
             )}
           </div>
@@ -641,10 +647,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
             </div>
             <div className="llm-status-model">{settings.llmModel}</div>
             {llmStatus === 'red' && (
-              <div className="llm-warning llm-warning--row">
-                <AlertTriangle size={14} strokeWidth={1.75} aria-hidden />
-                <span>{settings.llmProvider} not reachable — check Settings</span>
-              </div>
+              <div className="llm-warning"><AlertTriangle size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />{settings.llmProvider} not reachable — check Settings</div>
             )}
             {assessingCount > 0 && (
               <div style={{ marginTop: 8, fontSize: 11, color: 'var(--gold)' }}>
@@ -653,10 +656,8 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                 {assessedCount > 0 && ` (${assessedCount}/${jobs.length} done)`}
               </div>
             )}
-            <button type="button" className="llm-settings-link llm-settings-link--row" onClick={() => setSettingsOpen(true)}>
-              <Settings size={12} strokeWidth={1.75} aria-hidden />
-              <span>Change LLM or API keys</span>
-              <ArrowRight size={12} strokeWidth={1.75} aria-hidden />
+            <button className="llm-settings-link" onClick={() => setSettingsOpen(true)}>
+              <Settings2 size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />Change LLM or API keys →
             </button>
           </div>
 
@@ -692,9 +693,8 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                 <button className="add-kw-btn" onClick={() => addKeyword()}>+</button>
               </div>
               {newKeyword.split(' ').length > 2 && (
-                <div className="keyword-hint-warn">
-                  <AlertTriangle size={13} strokeWidth={1.75} aria-hidden />
-                  <span>Use short keywords (e.g. python, react). Long phrases may return no results.</span>
+                <div style={{ fontSize: 11, color: '#f5a623', marginTop: 4, lineHeight: 1.4 }}>
+                  <AlertTriangle size={10} style={{ verticalAlign: 'middle', marginRight: 4 }} />Use short keywords (e.g. python, react). Long phrases may return no results.
                 </div>
               )}
 
@@ -702,40 +702,24 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
               {keywords.length > 0 && llmStatus === 'green' && (
                 <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                   <button
-                    type="button"
-                    className="export-btn export-btn--grow"
+                    className="export-btn"
+                    style={{ flex: 1 }}
                     onClick={fetchSuggestions}
                     disabled={loadingSuggestions}
                   >
-                    {loadingSuggestions ? (
-                      <>
-                        <div className="spinner" style={{ width: 8, height: 8 }} />
-                        Loading…
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles size={13} strokeWidth={1.75} aria-hidden />
-                        Suggest related
-                      </>
-                    )}
+                    {loadingSuggestions
+                      ? <><div className="spinner" style={{ width: 8, height: 8 }} /> Loading…</>
+                      : 'Suggest related'}
                   </button>
                   <button
-                    type="button"
-                    className="export-btn export-btn--grow"
+                    className="export-btn"
+                    style={{ flex: 1 }}
                     onClick={fetchTranslations}
                     disabled={loadingTranslations}
                   >
-                    {loadingTranslations ? (
-                      <>
-                        <div className="spinner" style={{ width: 8, height: 8 }} />
-                        Loading…
-                      </>
-                    ) : (
-                      <>
-                        <Globe size={13} strokeWidth={1.75} aria-hidden />
-                        Translate PT
-                      </>
-                    )}
+                    {loadingTranslations
+                      ? <><div className="spinner" style={{ width: 8, height: 8 }} /> Loading…</>
+                      : <><Globe size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />Translate PT</>}
                   </button>
                 </div>
               )}
@@ -836,17 +820,9 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
             onClick={handleSearch}
             disabled={jobSearch.isPending || keywords.length === 0 || activeSites.length === 0}
           >
-            {jobSearch.isPending ? (
-              <>
-                <div className="spinner" style={{ width: 14, height: 14 }} />
-                Fetching jobs…
-              </>
-            ) : (
-              <>
-                <SearchIcon size={18} strokeWidth={1.75} aria-hidden />
-                Search jobs
-              </>
-            )}
+            {jobSearch.isPending
+              ? <><div className="spinner" style={{ width: 14, height: 14 }} /> Fetching jobs…</>
+              : <><SearchIcon size={14} style={{ verticalAlign: 'middle', marginRight: 5 }} />Search Jobs</>}
           </button>
 
           {keywords.length === 0 && (
@@ -881,11 +857,184 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
 
         {/* ── MAIN CONTENT ── */}
         <main className="main-content">
-          {!jobs.length && !jobSearch.isPending ? (
-            <div className="empty-state">
-              <div className="empty-icon" aria-hidden>
-                <Rocket />
+
+          {/* ── Tab switcher ── */}
+          <div className="main-tabs">
+            <button
+              className={`main-tab${activeTab === 'search' ? ' active' : ''}`}
+              onClick={() => setActiveTab('search')}
+            >
+              <SearchIcon size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Search Results
+              {jobs.length > 0 && <span className="tab-badge">{sortedJobs.length}</span>}
+            </button>
+            <button
+              className={`main-tab${activeTab === 'saved' ? ' active' : ''}`}
+              onClick={() => setActiveTab('saved')}
+            >
+              <Bookmark size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Saved Jobs
+              {Object.keys(bookmarks).length > 0 && (
+                <span className="tab-badge">{Object.keys(bookmarks).length}</span>
+              )}
+            </button>
+            <button
+              className={`main-tab${activeTab === 'agents' ? ' active' : ''}`}
+              onClick={() => { setActiveTab('agents'); setAgentActiveCount(0); }}
+            >
+              <Bot size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Agents
+              {agentActiveCount > 0 && (
+                <span className="tab-badge" style={{ background: 'var(--gold)', color: '#000' }}>
+                  {agentActiveCount}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* ── Saved Jobs tracking panel ── */}
+          {activeTab === 'saved' && (() => {
+            const allSaved = Object.values(bookmarks);
+            const STATUS_COLS: { key: BookmarkStatus; label: string; icon: React.ReactNode; color: string }[] = [
+              { key: 'saved',     label: 'Saved',     icon: <Bookmark size={12} />,  color: '#a78bfa' },
+              { key: 'applied',   label: 'Applied',   icon: <FileDown size={12} />,  color: '#60a5fa' },
+              { key: 'interview', label: 'Interview', icon: <Star size={12} />,      color: '#fbbf24' },
+              { key: 'offer',     label: 'Offer',     icon: <Rocket size={12} />,    color: '#4ade80' },
+              { key: 'rejected',  label: 'Rejected',  icon: <X size={12} />,         color: '#f87171' },
+            ];
+            if (allSaved.length === 0) {
+              return (
+                <div className="empty-state" style={{ marginTop: 60 }}>
+                  <div className="empty-icon"><Bookmark size={36} strokeWidth={1.2} /></div>
+                  <div className="empty-title">No saved jobs yet</div>
+                  <div className="empty-sub">Save jobs from search results to track your applications here.</div>
+                </div>
+              );
+            }
+            return (
+              <div className="tracking-board">
+                {/* Summary bar */}
+                <div className="tracking-summary">
+                  {STATUS_COLS.map(col => {
+                    const count = allSaved.filter(b => b.status === col.key).length;
+                    return count > 0 ? (
+                      <div key={col.key} className="tracking-summary-pill" style={{ borderColor: col.color }}>
+                        <span style={{ color: col.color }}>{col.icon}</span>
+                        <span>{col.label}</span>
+                        <span className="tracking-summary-count" style={{ background: col.color }}>{count}</span>
+                      </div>
+                    ) : null;
+                  })}
+                  <button
+                    className="export-btn"
+                    style={{ marginLeft: 'auto' }}
+                    onClick={() => {
+                      const rows = allSaved.map(b => [
+                        `"${(b.job.title || '').replace(/"/g, '""')}"`,
+                        `"${(b.job.company || '').replace(/"/g, '""')}"`,
+                        b.status,
+                        b.job.site,
+                        `"${(b.job.salary_range || '').replace(/"/g, '""')}"`,
+                        b.assessment?.match_score ?? '',
+                        b.savedAt.slice(0, 10),
+                        b.job.url,
+                      ].join(','));
+                      const csv = 'Title,Company,Status,Site,Salary,Score,Saved,URL\n' + rows.join('\n');
+                      const blob = new Blob([csv], { type: 'text/csv' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url; a.download = 'jumpship-saved.csv'; a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    <FileText size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Export CSV
+                  </button>
+                </div>
+
+                {/* Columns */}
+                <div className="tracking-columns">
+                  {STATUS_COLS.map(col => {
+                    const colJobs = allSaved.filter(b => b.status === col.key);
+                    return (
+                      <div key={col.key} className="tracking-col">
+                        <div className="tracking-col-header" style={{ borderTopColor: col.color }}>
+                          <span style={{ color: col.color }}>{col.icon}</span>
+                          <span>{col.label}</span>
+                          <span className="tracking-col-count">{colJobs.length}</span>
+                        </div>
+                        <div className="tracking-col-body">
+                          {colJobs.length === 0 && (
+                            <div className="tracking-empty-col">—</div>
+                          )}
+                          {colJobs.map(b => (
+                            <div key={b.job.id} className="tracking-card">
+                              <div className="tracking-card-title">{b.job.title}</div>
+                              <div className="tracking-card-company">{b.job.company}</div>
+                              {b.job.location && (
+                                <div className="tracking-card-location">{b.job.location}</div>
+                              )}
+                              <div className="tracking-card-meta">
+                                {b.job.site && <span className="tag">{b.job.site}</span>}
+                                {b.job.salary_range && <span className="tag salary"><Banknote size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />{b.job.salary_range}</span>}
+                                {b.assessment?.match_score != null && (
+                                  <span className="tag" style={{ color: 'var(--gold)' }}>
+                                    <Star size={10} style={{ verticalAlign: 'middle', marginRight: 2 }} />{b.assessment.match_score}%
+                                  </span>
+                                )}
+                              </div>
+                              <div className="tracking-card-saved">
+                                Saved {new Date(b.savedAt).toLocaleDateString()}
+                              </div>
+                              <div className="tracking-card-actions">
+                                <select
+                                  className="bookmark-status-select"
+                                  value={b.status}
+                                  onChange={e => handleBookmark(b.job.id, b.job, e.target.value as BookmarkStatus)}
+                                >
+                                  <option value="saved">☆ Saved</option>
+                                  <option value="applied">📨 Applied</option>
+                                  <option value="interview">🎯 Interview</option>
+                                  <option value="offer">🎉 Offer</option>
+                                  <option value="rejected">✕ Rejected</option>
+                                </select>
+                                <div style={{ display: 'flex', gap: 4 }}>
+                                  {b.job.url && (
+                                    <a
+                                      href={b.job.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="apply-btn"
+                                      style={{ textDecoration: 'none', padding: '4px 10px', fontSize: 11 }}
+                                    >
+                                      View →
+                                    </a>
+                                  )}
+                                  <button
+                                    className="apply-btn"
+                                    style={{ background: 'transparent', border: '1px solid rgba(248,113,113,0.3)', color: '#f87171', padding: '4px 10px', fontSize: 11 }}
+                                    onClick={() => handleBookmark(b.job.id, b.job, null)}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
+            );
+          })()}
+
+          {/* ── Agent Queue tab ── */}
+          {activeTab === 'agents' && (
+            <AgentQueue onOpenProfile={() => setProfileOpen(true)} />
+          )}
+
+          {activeTab === 'search' && (<>
+          {!jobSearch.data && !jobSearch.isPending ? (
+            <div className="empty-state">
+              <div className="empty-icon"><Rocket size={36} strokeWidth={1.2} /></div>
               <div className="empty-title">Ready to launch your search</div>
               <div className="empty-sub">
                 {resumeProfile
@@ -912,16 +1061,10 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                   <div className="results-count">{sortedJobs.length} jobs</div>
                   {filteredCount > 0 && (
                     <button
-                      type="button"
                       className={`filter-pill${showHidden ? ' active' : ''}`}
                       onClick={() => setShowHidden(v => !v)}
                     >
-                      {showHidden ? (
-                        <X size={13} strokeWidth={1.75} aria-hidden />
-                      ) : (
-                        <Eye size={13} strokeWidth={1.75} aria-hidden />
-                      )}
-                      {filteredCount} unrelated
+                      {showHidden ? <><X size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />Hide</> : <Eye size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />} {filteredCount} unrelated
                     </button>
                   )}
                   {assessingCount > 0 && (
@@ -933,12 +1076,10 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                   {/* Bookmark filter */}
                   {bookmarkCount > 0 && (
                     <button
-                      type="button"
                       className={`filter-pill${showBookmarksOnly ? ' active' : ''}`}
                       onClick={() => setShowBookmarksOnly(v => !v)}
                     >
-                      <Star size={13} strokeWidth={1.75} aria-hidden />
-                      {bookmarkCount} saved
+                      <Bookmark size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />{bookmarkCount} saved
                     </button>
                   )}
                 </div>
@@ -946,13 +1087,11 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                   {/* Export buttons */}
                   {sortedJobs.length > 0 && (
                     <div className="export-actions">
-                      <button type="button" className="export-btn" onClick={() => exportCSV(sortedJobs, assessments)}>
-                        <FileSpreadsheet size={13} strokeWidth={1.75} aria-hidden />
-                        CSV
+                      <button className="export-btn" onClick={() => exportCSV(sortedJobs, assessments)}>
+                        <FileText size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />CSV
                       </button>
-                      <button type="button" className="export-btn" onClick={() => exportJSON(sortedJobs, assessments)}>
-                        <FileJson size={13} strokeWidth={1.75} aria-hidden />
-                        JSON
+                      <button className="export-btn" onClick={() => exportJSON(sortedJobs, assessments)}>
+                        <FileDown size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />JSON
                       </button>
                     </div>
                   )}
@@ -988,6 +1127,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                     onReassess={() => handleReassess(job)}
                     bookmarkStatus={bookmarks[job.id]?.status}
                     onBookmark={(status) => handleBookmark(job.id, job, status)}
+                    onAutoApply={job.url ? () => { setAutoApplyJob(job); setAutoApplyMsg(''); } : undefined}
                   />
                 ))}
               </div>
@@ -1026,6 +1166,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                         onReassess={() => handleReassess(job)}
                         bookmarkStatus={bookmarks[job.id]?.status}
                         onBookmark={(status) => handleBookmark(job.id, job, status)}
+                        onAutoApply={job.url ? () => { setAutoApplyJob(job); setAutoApplyMsg(''); } : undefined}
                       />
                     ))}
                   </div>
@@ -1036,15 +1177,14 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
 
               {!resumeProfile && jobs.length === 0 && (
                 <div className="empty-state">
-                  <div className="empty-icon" aria-hidden>
-                    <Telescope />
-                  </div>
+                  <div className="empty-icon"><SearchIcon size={36} strokeWidth={1.2} /></div>
                   <div className="empty-title">No jobs found</div>
                   <div className="empty-sub">Try adjusting your keywords or location.</div>
                 </div>
               )}
             </>
           )}
+          </>)}
         </main>
       </div>
     </div>

@@ -84,6 +84,113 @@ class Application(Base):
     is_easy_apply = Column(Boolean, default=False)
 
 
+class UserProfile(Base):
+    """
+    Stores personal information used by the auto-apply agent to fill job forms.
+    Sensitive fields (phone, address) are stored locally in SQLite only —
+    never sent to cloud LLMs.
+    """
+    __tablename__ = "user_profiles"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+
+    # Identity
+    full_name       = Column(String)
+    email           = Column(String)
+    phone           = Column(String)
+    linkedin_url    = Column(String)
+    github_url      = Column(String)
+    portfolio_url   = Column(String)
+    location_city   = Column(String)
+    location_state  = Column(String)
+    location_country = Column(String)
+
+    # Work eligibility
+    work_authorization = Column(String)  # e.g. "Citizen", "Permanent Resident", "Need Sponsorship"
+    willing_to_relocate = Column(Boolean, default=False)
+    preferred_work_mode = Column(String)  # "remote", "hybrid", "on-site", "any"
+
+    # Experience
+    years_experience = Column(Integer, default=0)
+    highest_degree   = Column(String)  # "Bachelor's", "Master's", "PhD", "None"
+    university       = Column(String)
+    graduation_year  = Column(Integer)
+
+    # Salary expectations
+    salary_min       = Column(Integer)
+    salary_max       = Column(Integer)
+    salary_currency  = Column(String, default="USD")
+
+    # Platform credentials (stored locally, never sent to LLM)
+    linkedin_email    = Column(String)
+    linkedin_password = Column(String)  # encrypted in future; plaintext for local-only MVP
+
+    # Free-form answers for common application questions (JSON dict)
+    # e.g. {"cover_letter": "...", "why_this_company": "...", "biggest_achievement": "..."}
+    custom_answers   = Column(JSON, default=dict)
+
+    created_at  = Column(DateTime, server_default=func.now())
+    updated_at  = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class AutoApplyLog(Base):
+    """Tracks each automated application attempt."""
+    __tablename__ = "auto_apply_logs"
+
+    id          = Column(String, primary_key=True, default=gen_uuid)
+    job_id      = Column(String)
+    job_title   = Column(String)
+    company     = Column(String)
+    job_url     = Column(String)
+    platform    = Column(String)   # "linkedin", "indeed", etc.
+    status      = Column(String)   # "pending","running","success","failed","needs_review"
+    error       = Column(Text)     # error message if failed
+    screenshot  = Column(String)   # path to screenshot on failure
+    fields_filled = Column(JSON)   # dict of field_name → value that was filled
+    started_at  = Column(DateTime, server_default=func.now())
+    finished_at = Column(DateTime, nullable=True)
+
+
+class TraceEvent(Base):
+    """
+    Records each step of an agent's execution for observability.
+    Linked to an ApplyTask by task_id. Events include LLM thinking,
+    tool calls, tool results, errors, and human-help requests.
+    """
+    __tablename__ = "trace_events"
+
+    id         = Column(String, primary_key=True, default=gen_uuid)
+    task_id    = Column(String, index=True)
+    step       = Column(Integer, default=0)
+    event_type = Column(String)   # "thinking", "tool_call", "tool_result", "error", "human_needed", "status"
+    content    = Column(JSON)     # { reasoning, tool, args, result, error, screenshot_path, duration_ms, ... }
+    timestamp  = Column(DateTime, server_default=func.now())
+
+
+class AgentTask(Base):
+    """
+    Persisted agent task state. Mirrors the in-memory ApplyTask dataclass
+    but survives server restarts.
+    """
+    __tablename__ = "agent_tasks"
+
+    id            = Column(String, primary_key=True)
+    job_url       = Column(String, nullable=False)
+    job_title     = Column(String, default="")
+    company       = Column(String, default="")
+    platform      = Column(String, default="")
+    dry_run       = Column(Boolean, default=True)
+    status        = Column(String, default="queued")
+    message       = Column(Text, default="")
+    error         = Column(Text, default="")
+    fields_filled = Column(JSON, default=dict)
+    queued_at     = Column(DateTime, server_default=func.now())
+    started_at    = Column(DateTime, nullable=True)
+    finished_at   = Column(DateTime, nullable=True)
+    max_retries   = Column(Integer, default=1)
+    retry_count   = Column(Integer, default=0)
+
+
 class Settings(Base):
     """
     Key-value store for user settings.
@@ -95,30 +202,3 @@ class Settings(Base):
     key = Column(String, primary_key=True)
     value = Column(Text)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-
-
-class UserProfile(Base):
-    """Stores the user's full profile used by agents to auto-fill applications."""
-    __tablename__ = "user_profiles"
-
-    key = Column(String, primary_key=True, default="default")
-    value = Column(Text, nullable=False)  # JSON blob
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-
-
-class AgentTask(Base):
-    """Tracks each agent run for history and auditing."""
-    __tablename__ = "agent_tasks"
-
-    id = Column(String, primary_key=True, default=gen_uuid)
-    application_id = Column(String, nullable=True)
-    job_url = Column(String, nullable=False)
-    job_title = Column(String)
-    company = Column(String)
-    status = Column(String, default="pending")  # pending|running|completed|failed|stopped
-    log = Column(JSON, default=list)             # list of {timestamp, message, level}
-    error = Column(Text, nullable=True)
-    current_action = Column(String, nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-    completed_at = Column(DateTime, nullable=True)
