@@ -185,6 +185,9 @@ class ApplicationAgent:
         status_callback: StatusCB       = None,
         trace_callback:  TraceCB        = None,
         cancel_event:    asyncio.Event | None = None,
+        # V2 LangGraph integration helpers
+        _resume_text_override: str | None = None,   # pre-parsed text from apply_graph
+        _hitl_prefill:         str | None = None,   # user answer passed in on HITL resume
     ):
         self.job_url         = job_url
         self.profile         = profile
@@ -196,6 +199,8 @@ class ApplicationAgent:
         self._status         = status_callback or _noop
         self._trace          = trace_callback  or _noop_trace
         self.cancel_event    = cancel_event    or asyncio.Event()
+        self._resume_text_override = _resume_text_override
+        self._hitl_prefill         = _hitl_prefill
 
         # Runtime state
         self.page:           Any         = None
@@ -255,6 +260,10 @@ class ApplicationAgent:
     # ── Resume loading ────────────────────────────────────────────────────────
 
     def _load_resume_text(self):
+        # V2: use pre-parsed text from apply_graph (avoids re-parsing)
+        if self._resume_text_override:
+            self.resume_text = self._resume_text_override
+            return
         if not self.resume_path:
             return
         path = Path(self.resume_path)
@@ -531,7 +540,8 @@ class ApplicationAgent:
         parts.append(f"Title: {await page.title()}")
 
         headings = await page.locator("h1, h2, h3").all_inner_texts()
-        visible  = [h.strip() for h in headings if h.strip()]
+        # Truncate each heading and limit count to prevent prompt injection / token blowup
+        visible  = [h.strip()[:100] for h in headings if h.strip()]
         if visible:
             parts.append(f"Headings: {'; '.join(visible[:6])}")
 
@@ -541,12 +551,14 @@ class ApplicationAgent:
             ph = await el.get_attribute("placeholder")
             if ph:
                 placeholders.append(ph)
-        all_labels = list({l.strip() for l in labels + placeholders if l.strip()})
+        
+        # Clean and truncate labels
+        all_labels = list({l.strip()[:100] for l in labels + placeholders if l.strip()})
         if all_labels:
             parts.append(f"Form fields ({len(all_labels)}): {'; '.join(all_labels[:25])}")
 
         buttons   = await page.locator("button, input[type='submit'], a[role='button']").all_inner_texts()
-        btn_texts = [b.strip() for b in buttons if b.strip()]
+        btn_texts = [b.strip()[:100] for b in buttons if b.strip()]
         if btn_texts:
             parts.append(f"Buttons: {'; '.join(btn_texts[:12])}")
 
@@ -817,6 +829,14 @@ async def run_apply_agent(
         llm_model       = llm_model,
         ollama_base_url = ollama_base_url,
         resume_path     = resume_path,
+        dry_run         = dry_run,
+        headless        = headless,
+        status_callback = status_callback,
+        trace_callback  = trace_callback,
+        cancel_event    = cancel_event,
+    )
+    return await agent.run()
+     = resume_path,
         dry_run         = dry_run,
         headless        = headless,
         status_callback = status_callback,

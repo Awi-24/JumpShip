@@ -5,8 +5,11 @@ Run with: uvicorn backend.main:app --reload --port 8000
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from contextlib import asynccontextmanager
+
+logger = logging.getLogger(__name__)
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -29,6 +32,10 @@ from backend.routers import brazilian_jobs, concursos
 
 # v2 routers (JumpShip new API)
 from backend.routers import resume_v2, jobs_v2, profile, auto_apply, models
+# V2 agent system (LangGraph + WebSocket)
+from backend.routers import agents_ws
+# V2 inbox agent
+from backend.routers import inbox as inbox_router
 
 # Create all DB tables on startup
 Base.metadata.create_all(bind=engine)
@@ -56,13 +63,49 @@ _migrate_db()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Start the agent orchestrator
+    # Start the legacy asyncio orchestrator (kept for backward compat)
     orchestrator = AgentOrchestrator(max_workers=2)
     app.state.orchestrator = orchestrator
     await orchestrator.start()
+
+    # Start the inbox poll background loop
+    inbox_task = asyncio.create_task(_inbox_poll_loop(), name="inbox-poll-loop")
+    app.state.inbox_task = inbox_task
+
     yield
-    # Shutdown: stop workers gracefully
+
+    # Shutdown
+    inbox_task.cancel()
+    await asyncio.gather(inbox_task, return_exceptions=True)
     await orchestrator.stop()
+
+
+async def _inbox_poll_loop():
+    """Periodic inbox polling — runs every poll_minutes (default 15)."""
+    from backend.agents.inbox_graph import run_inbox_poll
+    from backend.models.db_models import InboxConfig
+    from sqlalchemy.orm import Session
+
+    def _get_active_config():
+        with Session(engine) as db:
+            return db.query(InboxConfig).filter(InboxConfig.active == True).first()
+
+    while True:
+        try:
+            loop = asyncio.get_running_loop()
+            cfg = await loop.run_in_executor(None, _get_active_config)
+
+            if cfg:
+                await run_inbox_poll()
+                interval = (cfg.poll_minutes or 15) * 60
+            else:
+                interval = 60  # check again in 1 min for config activation
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.warning("Inbox poll loop error: %s", exc)
+            interval = 60
+        await asyncio.sleep(interval)
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -95,8 +138,10 @@ app.include_router(resume_v2.router)
 app.include_router(jobs_v2.router)       # /api/ollama/models, /api/test-llm
 app.include_router(jobs_v2._jobs_router) # /api/jobs/search, /api/jobs/assess
 app.include_router(profile.router)       # /api/profile
-app.include_router(auto_apply.router)    # /api/auto-apply/*
+app.include_router(auto_apply.router)    # /api/auto-apply/*  (legacy SSE, kept for compat)
 app.include_router(models.router)        # /api/models/discover
+app.include_router(agents_ws.router)     # /api/ws/agents + /api/agents/* (V2 LangGraph)
+app.include_router(inbox_router.router)  # /api/inbox/* (V2 Inbox agent)
 
 # ── Legacy Routers (kept for backward compat) ─────────────────────────────────
 

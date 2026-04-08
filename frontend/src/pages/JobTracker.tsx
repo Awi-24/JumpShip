@@ -1,9 +1,23 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, ChevronDown, Plus, X } from 'lucide-react';
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+} from '@dnd-kit/core';
+import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { ArrowLeft, ChevronDown, GripVertical, Plus, X } from 'lucide-react';
 
 interface JobTrackerProps {
   onBack: () => void;
-  /** Called after starting an agent so the shell can switch view (e.g. to agents). */
   onNavigate?: (page: 'agents') => void;
 }
 
@@ -53,19 +67,6 @@ function AddJobModal({ onClose, onAdd }: { onClose: () => void; onAdd: (job: Par
   const [status, setStatus] = useState<AppStatus>('saved');
   const [notes, setNotes] = useState('');
 
-  const handleSubmit = () => {
-    if (!jobTitle.trim()) return;
-    onAdd({
-      job_title: jobTitle.trim(),
-      company_name: company.trim(),
-      job_url: jobUrl.trim(),
-      status,
-      notes: notes.trim(),
-      site: '',
-      is_easy_apply: false,
-    });
-  };
-
   return (
     <div className="agent-detail-overlay" onClick={onClose}>
       <div className="agent-start-modal" onClick={e => e.stopPropagation()}>
@@ -73,11 +74,9 @@ function AddJobModal({ onClose, onAdd }: { onClose: () => void; onAdd: (job: Par
         <div className="profile-field">
           <label>Job Title *</label>
           <input
-            type="text"
-            value={jobTitle}
+            type="text" value={jobTitle}
             onChange={e => setJobTitle(e.target.value)}
-            placeholder="Software Engineer"
-            autoFocus
+            placeholder="Software Engineer" autoFocus
           />
         </div>
         <div className="profile-field">
@@ -91,31 +90,25 @@ function AddJobModal({ onClose, onAdd }: { onClose: () => void; onAdd: (job: Par
         <div className="profile-field">
           <label>Status</label>
           <select
-            value={status}
-            onChange={e => setStatus(e.target.value as AppStatus)}
+            value={status} onChange={e => setStatus(e.target.value as AppStatus)}
             style={{ background: 'var(--bg3)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '8px 12px', width: '100%' }}
           >
-            {STATUS_PIPELINE.map(s => (
-              <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-            ))}
+            {STATUS_PIPELINE.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
           </select>
         </div>
         <div className="profile-field">
           <label>Notes</label>
           <textarea
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            placeholder="Any notes about this application..."
-            rows={3}
+            value={notes} onChange={e => setNotes(e.target.value)}
+            placeholder="Any notes..." rows={3}
             style={{ width: '100%', background: 'var(--bg3)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '8px 12px', resize: 'vertical' }}
           />
         </div>
         <div style={{ display: 'flex', gap: 12, marginTop: 24, justifyContent: 'flex-end' }}>
           <button className="btn-secondary" onClick={onClose}>Cancel</button>
           <button
-            className="btn-primary"
-            disabled={!jobTitle.trim()}
-            onClick={handleSubmit}
+            className="btn-primary" disabled={!jobTitle.trim()}
+            onClick={() => { if (!jobTitle.trim()) return; onAdd({ job_title: jobTitle.trim(), company_name: company.trim(), job_url: jobUrl.trim(), status, notes: notes.trim(), site: '', is_easy_apply: false }); }}
           >
             Add Job
           </button>
@@ -125,100 +118,132 @@ function AddJobModal({ onClose, onAdd }: { onClose: () => void; onAdd: (job: Par
   );
 }
 
-// ── Tracker Card ──────────────────────────────────────────────────────────────
+// ── Draggable Card ────────────────────────────────────────────────────────────
 
-function TrackerCard({
-  app,
-  onStatusChange,
-  onDelete,
-  onStartAgent,
+function DraggableCard({
+  app, onStatusChange, onDelete, onStartAgent, isDragging = false,
 }: {
   app: ApplicationRecord;
   onStatusChange: (id: string, status: AppStatus) => void;
   onDelete: (id: string) => void;
   onStartAgent: (app: ApplicationRecord) => void;
+  isDragging?: boolean;
 }) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: app.id });
   const [showStatusMenu, setShowStatusMenu] = useState(false);
   const date = app.applied_at || app.created_at;
   const dateStr = date ? new Date(date).toLocaleDateString() : '';
 
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
   return (
-    <div className="tracker-card">
-      <div className="tracker-card-title">{app.job_title || 'Untitled Role'}</div>
-      <div className="tracker-card-company" style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 6 }}>
-        {app.company_name}
-      </div>
-      {app.notes && (
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, lineHeight: 1.4 }}>
-          {app.notes.slice(0, 80)}{app.notes.length > 80 ? '…' : ''}
-        </div>
-      )}
-      {dateStr && (
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>{dateStr}</div>
-      )}
-      <div className="tracker-card-actions">
-        <div style={{ position: 'relative' }}>
-          <button
-            type="button"
-            className="btn-secondary btn-with-icon"
-            style={{ fontSize: 12, padding: '4px 10px' }}
-            onClick={() => setShowStatusMenu(v => !v)}
-          >
-            Move
-            <ChevronDown size={14} strokeWidth={1.75} aria-hidden />
-          </button>
-          {showStatusMenu && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                zIndex: 10,
-                background: 'var(--bg3)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-                minWidth: 140,
-                boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
-              }}
-              onMouseLeave={() => setShowStatusMenu(false)}
-            >
-              {STATUS_PIPELINE.map(s => (
-                <div
-                  key={s}
-                  style={{
-                    padding: '8px 14px',
-                    fontSize: 13,
-                    cursor: 'pointer',
-                    color: s === app.status ? 'var(--gold)' : 'var(--text)',
-                  }}
-                  onClick={() => {
-                    onStatusChange(app.id, s);
-                    setShowStatusMenu(false);
-                  }}
-                >
-                  {STATUS_LABELS[s]}
-                </div>
-              ))}
+    <div ref={setNodeRef} style={style} className="tracker-card">
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+        <button
+          {...attributes} {...listeners}
+          style={{ cursor: 'grab', background: 'none', border: 'none', padding: '2px 0', color: 'var(--text-muted)', flexShrink: 0 }}
+          aria-label="Drag to reorder"
+        >
+          <GripVertical size={14} />
+        </button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="tracker-card-title">{app.job_title || 'Untitled Role'}</div>
+          <div className="tracker-card-company" style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 6 }}>
+            {app.company_name}
+          </div>
+          {app.notes && (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, lineHeight: 1.4 }}>
+              {app.notes.slice(0, 80)}{app.notes.length > 80 ? '…' : ''}
             </div>
           )}
+          {dateStr && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>{dateStr}</div>}
+          <div className="tracker-card-actions">
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button" className="btn-secondary btn-with-icon"
+                style={{ fontSize: 12, padding: '4px 10px' }}
+                onClick={() => setShowStatusMenu(v => !v)}
+              >
+                Move <ChevronDown size={14} strokeWidth={1.75} aria-hidden />
+              </button>
+              {showStatusMenu && (
+                <div
+                  style={{ position: 'absolute', top: '100%', left: 0, zIndex: 10, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', minWidth: 140, boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}
+                  onMouseLeave={() => setShowStatusMenu(false)}
+                >
+                  {STATUS_PIPELINE.map(s => (
+                    <div
+                      key={s}
+                      style={{ padding: '8px 14px', fontSize: 13, cursor: 'pointer', color: s === app.status ? 'var(--gold)' : 'var(--text)' }}
+                      onClick={() => { onStatusChange(app.id, s); setShowStatusMenu(false); }}
+                    >
+                      {STATUS_LABELS[s]}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {app.job_url && (
+              <button className="btn-secondary" style={{ fontSize: 12, padding: '4px 10px' }} onClick={() => onStartAgent(app)}>
+                Auto-Apply
+              </button>
+            )}
+            <button
+              className="btn-secondary"
+              style={{ fontSize: 12, padding: '4px 10px', color: '#f87171', borderColor: 'rgba(248,113,113,0.3)' }}
+              onClick={() => onDelete(app.id)}
+            >
+              Delete
+            </button>
+          </div>
         </div>
-        {app.job_url && (
-          <button
-            className="btn-secondary"
-            style={{ fontSize: 12, padding: '4px 10px' }}
-            onClick={() => onStartAgent(app)}
-          >
-            Start Agent
-          </button>
-        )}
-        <button
-          className="btn-secondary"
-          style={{ fontSize: 12, padding: '4px 10px', color: '#f87171', borderColor: 'rgba(248,113,113,0.3)' }}
-          onClick={() => onDelete(app.id)}
-        >
-          Delete
-        </button>
       </div>
+    </div>
+  );
+}
+
+// ── Droppable Column ──────────────────────────────────────────────────────────
+
+function KanbanColumn({
+  status, apps, onStatusChange, onDelete, onStartAgent, activeId,
+}: {
+  status: AppStatus;
+  apps: ApplicationRecord[];
+  onStatusChange: (id: string, s: AppStatus) => void;
+  onDelete: (id: string) => void;
+  onStartAgent: (app: ApplicationRecord) => void;
+  activeId: string | null;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: status });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="pipeline-col"
+      style={{ outline: isOver ? `2px solid ${STATUS_COLORS[status]}` : undefined, borderRadius: 'var(--radius)' }}
+    >
+      <div className="pipeline-col-title" style={{ color: STATUS_COLORS[status] }}>
+        {STATUS_LABELS[status]}
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8, fontWeight: 400 }}>{apps.length}</span>
+      </div>
+      <SortableContext items={apps.map(a => a.id)} strategy={verticalListSortingStrategy}>
+        {apps.length === 0 && (
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0' }}>
+            Drop here
+          </div>
+        )}
+        {apps.map(app => (
+          <DraggableCard
+            key={app.id} app={app}
+            onStatusChange={onStatusChange} onDelete={onDelete} onStartAgent={onStartAgent}
+            isDragging={activeId === app.id}
+          />
+        ))}
+      </SortableContext>
     </div>
   );
 }
@@ -230,6 +255,11 @@ export default function JobTracker({ onBack, onNavigate }: JobTrackerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
 
   const fetchApplications = useCallback(async () => {
     try {
@@ -286,14 +316,13 @@ export default function JobTracker({ onBack, onNavigate }: JobTrackerProps) {
 
   const handleStartAgent = async (app: ApplicationRecord) => {
     try {
-      await fetch('/api/agents/start', {
+      // V2: use the new LangGraph apply endpoint
+      await fetch('/api/agents/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          job_url: app.job_url,
-          job_title: app.job_title,
-          company: app.company_name,
-          application_id: app.id,
+          job: { id: app.job_id || app.id, title: app.job_title, company: app.company_name, url: app.job_url, description: '', location: '', is_remote: false, site: app.site, date_posted: '', raw: {} },
+          dry_run: true,
         }),
       });
       if (onNavigate) onNavigate('agents');
@@ -302,7 +331,31 @@ export default function JobTracker({ onBack, onNavigate }: JobTrackerProps) {
     }
   };
 
-  // Stats
+  // ── dnd-kit drag handlers ─────────────────────────────────────────────────
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(String(event.active.id));
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    setActiveId(null);
+    const { active, over } = event;
+    if (!over) return;
+
+    const draggedApp = applications.find(a => a.id === active.id);
+    if (!draggedApp) return;
+
+    // over.id can be a column id (AppStatus) or a card id — resolve to a column
+    const targetCol = STATUS_PIPELINE.includes(over.id as AppStatus)
+      ? (over.id as AppStatus)
+      : applications.find(a => a.id === over.id)?.status as AppStatus | undefined;
+
+    if (targetCol && targetCol !== draggedApp.status) {
+      await handleStatusChange(draggedApp.id, targetCol);
+    }
+  };
+
+  const activeApp = applications.find(a => a.id === activeId);
   const stats = STATUS_PIPELINE.reduce<Record<string, number>>((acc, s) => {
     acc[s] = applications.filter(a => a.status === s).length;
     return acc;
@@ -310,7 +363,6 @@ export default function JobTracker({ onBack, onNavigate }: JobTrackerProps) {
 
   return (
     <div className="job-tracker-page">
-      {/* Header */}
       <header className="tracker-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <button type="button" className="btn-ghost btn-with-icon" onClick={onBack}>
@@ -320,7 +372,7 @@ export default function JobTracker({ onBack, onNavigate }: JobTrackerProps) {
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>Job Tracker</h1>
             <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-              Track your job applications through the pipeline
+              Drag cards between columns or use the Move menu
             </p>
           </div>
         </div>
@@ -330,7 +382,6 @@ export default function JobTracker({ onBack, onNavigate }: JobTrackerProps) {
         </button>
       </header>
 
-      {/* Stats bar */}
       <div className="tracker-stats">
         {STATUS_PIPELINE.map(s => (
           <div key={s} className="tracker-stat-item">
@@ -340,7 +391,6 @@ export default function JobTracker({ onBack, onNavigate }: JobTrackerProps) {
         ))}
       </div>
 
-      {/* Error */}
       {error && (
         <div className="agents-error-banner">
           {error}
@@ -350,47 +400,35 @@ export default function JobTracker({ onBack, onNavigate }: JobTrackerProps) {
         </div>
       )}
 
-      {/* Pipeline */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>Loading applications…</div>
       ) : (
-        <div className="tracker-pipeline">
-          {STATUS_PIPELINE.map(col => {
-            const colApps = applications.filter(a => a.status === col);
-            return (
-              <div key={col} className="pipeline-col">
-                <div className="pipeline-col-title" style={{ color: STATUS_COLORS[col] }}>
-                  {STATUS_LABELS[col]}
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8, fontWeight: 400 }}>
-                    {colApps.length}
-                  </span>
-                </div>
-                {colApps.length === 0 && (
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0' }}>
-                    No jobs
-                  </div>
-                )}
-                {colApps.map(app => (
-                  <TrackerCard
-                    key={app.id}
-                    app={app}
-                    onStatusChange={handleStatusChange}
-                    onDelete={handleDelete}
-                    onStartAgent={handleStartAgent}
-                  />
-                ))}
+        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <div className="tracker-pipeline">
+            {STATUS_PIPELINE.map(col => (
+              <KanbanColumn
+                key={col} status={col}
+                apps={applications.filter(a => a.status === col)}
+                onStatusChange={handleStatusChange}
+                onDelete={handleDelete}
+                onStartAgent={handleStartAgent}
+                activeId={activeId}
+              />
+            ))}
+          </div>
+          <DragOverlay>
+            {activeApp ? (
+              <div className="tracker-card" style={{ opacity: 0.9, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', cursor: 'grabbing' }}>
+                <div className="tracker-card-title">{activeApp.job_title}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{activeApp.company_name}</div>
               </div>
-            );
-          })}
-        </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       )}
 
-      {/* Add Modal */}
       {showAddModal && (
-        <AddJobModal
-          onClose={() => setShowAddModal(false)}
-          onAdd={handleAddJob}
-        />
+        <AddJobModal onClose={() => setShowAddModal(false)} onAdd={handleAddJob} />
       )}
     </div>
   );

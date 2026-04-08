@@ -1,14 +1,16 @@
 import { useState, useCallback } from 'react';
-import { FileText, CheckCircle } from 'lucide-react';
+import { FileText, CheckCircle, Bot } from 'lucide-react';
 import type { ResumeProfile } from '../types';
 
 interface ResumeUploadProps {
   profile: ResumeProfile | null;
   isLoading: boolean;
+  isScouting?: boolean;
   onUpload: (file: File) => void;
+  onScout?: () => void;
 }
 
-export default function ResumeUpload({ profile, isLoading, onUpload }: ResumeUploadProps) {
+export default function ResumeUpload({ profile, isLoading, isScouting, onUpload, onScout }: ResumeUploadProps) {
   const [dragging, setDragging] = useState(false);
   const [fileName, setFileName] = useState('');
 
@@ -51,11 +53,25 @@ export default function ResumeUpload({ profile, isLoading, onUpload }: ResumeUpl
         <div className="resume-profile" style={{ marginBottom: 10 }}>
           Profile identified · Keywords extracted
         </div>
-        <div>
+        <div style={{ marginBottom: 12 }}>
           {profile.skills.map((s) => (
             <span key={s} className="profile-chip">{s}</span>
           ))}
         </div>
+        {onScout && (
+          <button
+            className="btn-primary"
+            onClick={onScout}
+            disabled={isScouting}
+            style={{ width: '100%', padding: '8px 0', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+          >
+            {isScouting ? (
+              <><div className="spinner" style={{ width: 12, height: 12 }} /> Scouting...</>
+            ) : (
+              <><Bot size={14} /> Launch Scout Agent</>
+            )}
+          </button>
+        )}
       </div>
     );
   }

@@ -138,17 +138,20 @@ body {
 .nav-logo > span { color: var(--text); }
 .nav-logo .logo-accent { color: var(--gold); }
 
-.nav-logo-icon {
-  width: 30px;
-  height: 30px;
+.nav-logo-mark {
+  height: 36px;
+  width: auto;
+  max-width: min(220px, 48vw);
   object-fit: contain;
+  object-position: left center;
   flex-shrink: 0;
 }
 
 /* Hero logo (replaces Briefcase3D) */
 .hero-logo-full {
   margin: 56px auto 0;
-  width: 240px;
+  width: min(480px, 92vw);
+  max-width: 560px;
   animation: fadeUp 0.8s 0.4s ease both;
   filter: drop-shadow(0 16px 40px rgba(245,166,35,0.2));
   align-self: center;
@@ -376,18 +379,6 @@ body {
   animation: fadeUp 0.8s 0.4s ease both;
 }
 
-.briefcase-3d {
-  width: 100%;
-  height: 100%;
-  position: relative;
-  transform-style: preserve-3d;
-  animation: float3d 6s ease-in-out infinite;
-}
-
-@keyframes float3d {
-  0%, 100% { transform: rotateX(8deg) rotateY(-12deg) translateY(0); }
-  50% { transform: rotateX(12deg) rotateY(8deg) translateY(-16px); }
-}
 
 .section-label {
   font-size: 11px;
@@ -644,33 +635,6 @@ body {
   margin: 2px;
 }
 
-/* LLM Config */
-.llm-config {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.config-select {
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 9px 12px;
-  color: var(--text);
-  font-family: 'DM Sans', sans-serif;
-  font-size: 13px;
-  cursor: pointer;
-  outline: none;
-  transition: border-color 0.2s;
-  width: 100%;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  padding-right: 30px;
-}
-
-.config-select:focus { border-color: var(--gold); }
 
 /* ── SELECT WRAPPER (legacy fallback) ───────────────────────────────── */
 .select-wrapper {

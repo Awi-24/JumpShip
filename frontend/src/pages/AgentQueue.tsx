@@ -6,6 +6,10 @@
  * auto-discovers local providers.
  */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useAgentSocket } from '../hooks/useAgentSocket';
+import type { AgentThread } from '../hooks/useAgentSocket';
+import AgentChatDrawer from '../components/AgentChatDrawer';
+import AgentGraphDrawer from '../components/AgentGraphDrawer';
 import {
   Clock, Zap, CheckCircle, Eye, XCircle, Minus,
   Building2, Leaf, Settings2, Building, Calendar,
@@ -326,6 +330,38 @@ export default function AgentQueue({ onOpenProfile }: Props) {
   const [traceEvents, setTraceEvents] = useState<Record<string, TraceEvent[]>>({});
   const esRef = useRef<EventSource | null>(null);
 
+  // ── V2 WebSocket + agent threads ────────────────────────────────────────────
+  const [v2Threads, setV2Threads] = useState<AgentThread[]>([]);
+  const [drawerThread, setDrawerThread] = useState<AgentThread | null>(null);
+  const [activeGraph, setActiveGraph] = useState<'scout' | 'matcher' | 'apply' | 'inbox' | null>(null);
+
+  const { connected: wsConnected, sendHitlResponse, cancelThread } = useAgentSocket(
+    useCallback((evt: any) => {
+      if (evt.type === 'thread_update') {
+        const thread = evt.thread as AgentThread;
+        setV2Threads(prev => {
+          const idx = prev.findIndex(t => t.thread_id === thread.thread_id);
+          return idx >= 0 ? prev.map(t => t.thread_id === thread.thread_id ? { ...t, ...thread } : t) : [thread, ...prev];
+        });
+      } else if (evt.type === 'hitl_needed') {
+        const thread_id = evt.thread_id as string;
+        const question  = evt.question as string;
+        setV2Threads(prev => {
+          const updated = prev.map(t => t.thread_id === thread_id ? { ...t, status: 'waiting_hitl' as const, hitl_question: question } : t);
+          // Auto-open the drawer for the thread that needs help
+          const hitlThread = updated.find(t => t.thread_id === thread_id);
+          if (hitlThread) setDrawerThread(hitlThread);
+          return updated;
+        });
+      }
+    }, []),
+  );
+
+  // Fetch existing threads on mount
+  useEffect(() => {
+    fetch('/api/agents/threads').then(r => r.json()).then(setV2Threads).catch(() => {});
+  }, []);
+
   // ── SSE connection ──────────────────────────────────────────────────────────
   useEffect(() => {
     const connect = () => {
@@ -442,7 +478,12 @@ export default function AgentQueue({ onOpenProfile }: Props) {
         <div className="agent-queue-title">
           <Bot size={15} style={{ verticalAlign: 'middle', marginRight: 6 }} />Agent Queue
           <span className={`sse-dot ${connected ? 'connected' : ''}`}
-                title={connected ? 'Live' : 'Reconnecting…'} />
+                title={connected ? 'SSE Live' : 'SSE Reconnecting…'} />
+          <span
+            className={`sse-dot ${wsConnected ? 'connected' : ''}`}
+            title={wsConnected ? 'WS Live (V2)' : 'WS Reconnecting…'}
+            style={{ marginLeft: 4 }}
+          />
         </div>
 
         <div className="agent-queue-stats">
@@ -525,6 +566,90 @@ export default function AgentQueue({ onOpenProfile }: Props) {
               trace={traceEvents[task.id] || []}
               onCancel={() => handleCancel(task.id)}
             />
+          ))}
+        </div>
+      )}
+
+      {/* ── V2 LangGraph Threads ──────────────────────────────────────────── */}
+      {/* HITL Chat Drawer */}
+      {drawerThread && (
+        <AgentChatDrawer
+          thread={drawerThread}
+          onSend={(threadId, response) => {
+            sendHitlResponse(threadId, response);
+            // Optimistically mark thread as running again
+            setV2Threads(prev => prev.map(t => t.thread_id === threadId ? { ...t, status: 'running' as const, hitl_question: undefined } : t));
+          }}
+          onClose={() => setDrawerThread(null)}
+        />
+      )}
+
+      {/* Agent Graph Visualization Drawer */}
+      <AgentGraphDrawer
+        graphName={activeGraph}
+        onClose={() => setActiveGraph(null)}
+      />
+
+      {v2Threads.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingLeft: 2 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              V2 Agent Threads
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {(['scout', 'matcher', 'apply', 'inbox'] as const).map(g => (
+                <button
+                  key={g}
+                  className="btn-secondary"
+                  style={{ fontSize: 10, padding: '2px 6px', textTransform: 'capitalize' }}
+                  onClick={() => setActiveGraph(g)}
+                >
+                  View {g} Graph
+                </button>
+              ))}
+            </div>
+          </div>
+          {v2Threads.map(thread => (
+            <div
+              key={thread.thread_id}
+              style={{
+                background: 'var(--bg2)',
+                border: '1px solid var(--border)',
+                borderLeft: `3px solid ${thread.status === 'success' ? '#4ade80' : thread.status === 'failed' ? '#f87171' : thread.status === 'waiting_hitl' ? '#F5A623' : '#60a5fa'}`,
+                borderRadius: 'var(--radius)',
+                padding: '10px 14px',
+                marginBottom: 8,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>{thread.job_title || thread.graph_name}</span>
+                  {thread.company && <span style={{ color: 'var(--text-muted)', fontSize: 12, marginLeft: 8 }}>{thread.company}</span>}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{thread.status}</span>
+                  <button
+                    className="btn-secondary"
+                    style={{ fontSize: 11, padding: '2px 8px', color: '#f87171', borderColor: 'rgba(248,113,113,0.3)' }}
+                    onClick={() => cancelThread(thread.thread_id)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+              {thread.summary && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{thread.summary}</div>}
+
+              {/* HITL — open chat drawer */}
+              {thread.status === 'waiting_hitl' && (
+                <button
+                  className="btn-primary"
+                  style={{ marginTop: 8, fontSize: 12, padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6 }}
+                  onClick={() => setDrawerThread(thread)}
+                >
+                  <span style={{ fontSize: 14 }}>💬</span> Answer agent
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}

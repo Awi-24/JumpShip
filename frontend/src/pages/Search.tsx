@@ -20,6 +20,7 @@ import type { ResumeProfile, JobResult, JobAssessment, SortOption, BookmarkStatu
 
 interface SearchProps {
   onBack: () => void;
+  onNavigate: (page: 'tracker' | 'agents') => void;
 }
 
 const ALL_SITES = ['linkedin', 'indeed', 'glassdoor', 'zip_recruiter', 'remoteok', 'arbeitnow', 'gupy', 'programathor', 'trampos'];
@@ -125,7 +126,7 @@ function exportJSON(jobs: JobResult[], assessments: Record<string, JobAssessment
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
-export default function Search({ onBack }: SearchProps) {
+export default function Search({ onBack, onNavigate }: SearchProps) {
   const { settings, saveSettings } = useSettings();
   const settingsRef = useRef(settings);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
@@ -142,6 +143,7 @@ export default function Search({ onBack }: SearchProps) {
   // Resume
   const resumeMutation = useResumeParse();
   const [resumeProfile, setResumeProfile] = useState<ResumeProfile | null>(null);
+  const [scoutRunning, setScoutRunning] = useState(false);
 
   // Search filters
   const [keywords, setKeywords] = useState<string[]>([]);
@@ -350,6 +352,35 @@ export default function Search({ onBack }: SearchProps) {
     setTranslations([]);
   };
 
+  // ── Scout ──────────────────────────────────────────────────────────────────
+  const handleScout = async () => {
+    if (!resumeProfile) return;
+    setScoutRunning(true);
+    try {
+      const res = await fetch('/api/agents/scout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resume_text: resumeMutation.data?.raw_text || '', // Assuming hook returns raw_text
+          preferences: {
+            location,
+            keywords,
+            results_per_query: resultsWanted,
+            sites: activeSites,
+          },
+        }),
+      });
+      await res.json();
+      if (res.ok) {
+        setActiveTab('agents'); // Switch to agents tab to see progress
+      }
+    } catch (err) {
+      console.error('Scout failed:', err);
+    } finally {
+      setScoutRunning(false);
+    }
+  };
+
   // ── Keywords ───────────────────────────────────────────────────────────────
   const removeKeyword = (kw: string) => setKeywords(k => k.filter(x => x !== kw));
   const addKeyword = (kw?: string) => {
@@ -535,10 +566,15 @@ export default function Search({ onBack }: SearchProps) {
       {/* ── HEADER ── */}
       <header className="search-header">
         <div className="search-logo" onClick={onBack}>
-          <img src="/logo-icon.png" alt="" className="nav-logo-icon" />
-          <span>Jump<span className="logo-accent">Ship</span></span>
+          <img src="/jumpship-logo.png" alt="JumpShip" className="nav-logo-mark" />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <button className="settings-trigger" onClick={() => onNavigate('tracker')} title="Job Tracker">
+            <Zap size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Tracker
+          </button>
+          <button className="settings-trigger" onClick={() => onNavigate('agents')} title="Agent Monitor">
+            <Bot size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Monitor
+          </button>
           <ThemeToggle compact />
           <div className="llm-status">
             <span className={`status-dot ${llmStatus}`} />
@@ -616,7 +652,9 @@ export default function Search({ onBack }: SearchProps) {
             <ResumeUpload
               profile={resumeProfile}
               isLoading={resumeMutation.isPending}
+              isScouting={scoutRunning}
               onUpload={handleResumeUpload}
+              onScout={handleScout}
             />
             {resumeProfile && (
               <button

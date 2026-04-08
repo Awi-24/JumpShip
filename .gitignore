@@ -46,6 +46,13 @@ uploads/
 # OS
 Thumbs.db
 
+# Claude/Cursor tooling artifacts
+.claude/worktrees/
+.cursor/context/
+
+# Frontend build output
+frontend/dist/
+
 # Logs
 *.log
 logs/

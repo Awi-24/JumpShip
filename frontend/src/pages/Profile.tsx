@@ -3,7 +3,7 @@
  * Data is stored locally (SQLite via backend) and used by the auto-apply agent.
  */
 import { useState, useEffect } from 'react';
-import { User, Briefcase, GraduationCap, Banknote, Link, PenLine, X, Check } from 'lucide-react';
+import { User, Briefcase, GraduationCap, Banknote, Link, PenLine, X, Check, Globe } from 'lucide-react';
 
 interface ProfileData {
   full_name?: string;
@@ -50,15 +50,34 @@ const COMMON_QUESTIONS = [
 
 export default function Profile({ onClose }: Props) {
   const [data, setData] = useState<ProfileData>({});
+  const [inbox, setInbox] = useState({
+    imap_host: '',
+    imap_port: 993,
+    username: '',
+    password: '',
+    use_ssl: true,
+    active: false,
+    poll_minutes: 15,
+  });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<string>('identity');
 
   useEffect(() => {
-    fetch('/api/profile')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) setData(d); })
+    Promise.all([
+      fetch('/api/profile').then(r => r.ok ? r.json() : null),
+      fetch('/api/inbox/config').then(r => r.ok ? r.json() : null),
+    ])
+      .then(([profile, inboxCfg]) => {
+        if (profile) setData(profile);
+        if (inboxCfg) {
+          setInbox({
+            ...inboxCfg,
+            password: '', // never returned by backend anyway
+          });
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -72,11 +91,18 @@ export default function Profile({ onClose }: Props) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await fetch('/api/profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
+      await Promise.all([
+        fetch('/api/profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        }),
+        fetch('/api/inbox/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(inbox),
+        }),
+      ]);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch { /* ignore */ }
@@ -89,6 +115,7 @@ export default function Profile({ onClose }: Props) {
     { id: 'education', label: 'Education',     Icon: GraduationCap },
     { id: 'salary',    label: 'Salary',        Icon: Banknote },
     { id: 'linkedin',  label: 'LinkedIn',      Icon: Link },
+    { id: 'inbox',     label: 'Email Inbox',   Icon: Globe }, // Reusing Globe icon or finding another
     { id: 'answers',   label: 'Custom Q&A',   Icon: PenLine },
   ];
 
@@ -248,6 +275,37 @@ export default function Profile({ onClose }: Props) {
               </Row>
               <Row label="LinkedIn Password">
                 <input className="config-input" type="password" value={data.linkedin_password || ''} onChange={e => set('linkedin_password', e.target.value)} autoComplete="new-password" />
+              </Row>
+            </div>
+          )}
+
+          {/* Inbox section */}
+          {activeSection === 'inbox' && (
+            <div className="profile-section">
+              <div className="settings-hint" style={{ marginBottom: 16, fontSize: 12 }}>
+                Configure your email inbox to allow the AI to track job applications, rejections, and interview requests.
+              </div>
+              <Row label="Active">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                  <input type="checkbox" checked={inbox.active} onChange={e => setInbox(i => ({ ...i, active: e.target.checked }))} />
+                  Enable automatic background polling
+                </label>
+              </Row>
+              <Row label="IMAP Host">
+                <input className="config-input" value={inbox.imap_host} onChange={e => setInbox(i => ({ ...i, imap_host: e.target.value }))} placeholder="imap.gmail.com" />
+              </Row>
+              <Row label="IMAP Port">
+                <input className="config-input" type="number" value={inbox.imap_port} onChange={e => setInbox(i => ({ ...i, imap_port: Number(e.target.value) }))} />
+              </Row>
+              <Row label="Username / Email">
+                <input className="config-input" value={inbox.username} onChange={e => setInbox(i => ({ ...i, username: e.target.value }))} placeholder="user@gmail.com" />
+              </Row>
+              <Row label="Password / App Key">
+                <input className="config-input" type="password" value={inbox.password} onChange={e => setInbox(i => ({ ...i, password: e.target.value }))} placeholder="••••••••••••••••" />
+                <div className="settings-hint">Use an "App Password" if you use 2FA (recommended).</div>
+              </Row>
+              <Row label="Poll Interval (min)">
+                <input className="config-input" type="number" min={1} value={inbox.poll_minutes} onChange={e => setInbox(i => ({ ...i, poll_minutes: Number(e.target.value) }))} />
               </Row>
             </div>
           )}

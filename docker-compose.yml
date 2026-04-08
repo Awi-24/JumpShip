@@ -11,12 +11,16 @@ services:
     volumes:
       - jumpship-db:/app/data
       - jumpship-uploads:/app/uploads
+      - jumpship-agents:/app/agents_db
     environment:
       DATABASE_URL: sqlite:////app/data/jobspy_ui.db
       UPLOAD_DIR: /app/uploads
+      LANGGRAPH_DB_PATH: /app/agents_db/jumpship_agents.db
       # Allow requests from the nginx frontend container and direct API access
       CORS_ORIGINS: "http://localhost,http://localhost:80,http://localhost:8000"
-      # LLM config — override via .env file passed with --env-file
+      # Agent V2 Config
+      V2_AGENTS_ENABLED: "true"
+      # LLM config
       LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
       LLM_MODEL: ${LLM_MODEL:-llama3}
       # Ollama runs on the host; host.docker.internal reaches it from inside the container.
@@ -54,3 +58,4 @@ services:
 volumes:
   jumpship-db:
   jumpship-uploads:
+  jumpship-agents:

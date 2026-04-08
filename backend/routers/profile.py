@@ -9,15 +9,17 @@ PUT  /api/profile        → partial update
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
 
 from backend.database import engine
 from backend.models.db_models import UserProfile
+from backend.services.crypto import encrypt, decrypt
+from backend.services.auth import verify_api_key
 
-router = APIRouter(tags=["profile"])
+router = APIRouter(tags=["profile"], dependencies=[Depends(verify_api_key)])
 
 
 # ── Pydantic schema ────────────────────────────────────────────────────────────
@@ -49,6 +51,16 @@ class ProfileSchema(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ProfileOut(ProfileSchema):
+    """Schema for returning profile data, with password fields removed."""
+    linkedin_password: Optional[str] = None
+
+    def model_dump(self, *args, **kwargs):
+        d = super().model_dump(*args, **kwargs)
+        d.pop("linkedin_password", None)
+        return d
+
+
 _PROFILE_ID = "singleton"  # single-user app — one profile per installation
 
 
@@ -56,13 +68,13 @@ def _get_db():
     return Session(engine)
 
 
-@router.get("/api/profile", response_model=ProfileSchema)
+@router.get("/api/profile", response_model=ProfileOut)
 def get_profile():
     with _get_db() as db:
         p = db.get(UserProfile, _PROFILE_ID)
         if not p:
             raise HTTPException(status_code=404, detail="Profile not set up yet.")
-        return ProfileSchema.model_validate(p)
+        return ProfileOut.model_validate(p)
 
 
 @router.post("/api/profile", response_model=ProfileSchema)
@@ -73,7 +85,12 @@ def upsert_profile(data: ProfileSchema):
         if not p:
             p = UserProfile(id=_PROFILE_ID)
             db.add(p)
-        for field, val in data.model_dump(exclude_none=True).items():
+        
+        dump = data.model_dump(exclude_none=True)
+        if dump.get("linkedin_password"):
+            dump["linkedin_password"] = encrypt(dump["linkedin_password"])
+            
+        for field, val in dump.items():
             setattr(p, field, val)
         db.commit()
         db.refresh(p)

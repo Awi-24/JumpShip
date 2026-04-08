@@ -128,10 +128,7 @@ export default function Landing({ onEnter }: LandingProps) {
 
       <nav className="nav">
         <div className="nav-logo">
-          <img src="/logo-icon.png" alt="JumpShip" className="nav-logo-icon" />
-          <span>
-            Jump<span className="logo-accent">Ship</span>
-          </span>
+          <img src="/jumpship-logo.png" alt="JumpShip" className="nav-logo-mark" />
         </div>
         <ul className="nav-links">
           <li><a href="#how">How it works</a></li>
@@ -158,7 +155,7 @@ export default function Landing({ onEnter }: LandingProps) {
 
       <section className="hero">
         <div className="hero-logo-full">
-          <img src="/logo-full.png" alt="JumpShip" />
+          <img src="/jumpship-logo.png" alt="JumpShip" />
         </div>
         <div className="hero-badge">Open Source · AI-Powered · Privacy-First</div>
         <h1 className="hero-title">

@@ -8,15 +8,33 @@ pydantic-settings>=2.6.0
 httpx>=0.28.0
 python-dotenv>=1.0.1
 aiofiles>=24.1.0
+cryptography>=44.0.0
 
 # ── Resume parsing ───────────────────────
 pdfminer.six>=20221105
 python-docx>=1.1.2
 
-# ── LangChain + Ollama ───────────────────
+# ── AI Providers (Native SDKs) ───────────
+anthropic>=0.40.0
+openai>=1.55.0
+google-generativeai>=0.8.0
+
+# ── LangChain Ecosystem ──────────────────
 langchain>=0.3.0
 langchain-core>=0.3.0
 langchain-ollama>=0.2.0
+langchain-openai>=0.2.0
+langchain-anthropic>=0.3.0
+langchain-google-genai>=2.0.0
+langchain-groq>=0.2.0
+langchain-community>=0.3.0
+
+# ── LangGraph (stateful multi-agent) ─────
+langgraph>=0.2.0
+langgraph-checkpoint-sqlite>=2.0.0
+
+# ── Inbox agent (email classification) ───
+imapclient>=3.0.1
 
 # ── Legacy dependencies ─────────────────
 pandas>=2.2.0
