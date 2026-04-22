@@ -127,7 +127,7 @@ class GeneratedResume(Base):
     job_title   = Column(String, default="")
     company     = Column(String, default="")
     match_score = Column(Integer, default=0)
-    markdown    = Column(Text)           # raw LLM markdown output
+    markdown    = Column(Text)           # raw LLM output (HTML fragment; legacy column name)
     pdf_path    = Column(String)         # absolute path to generated PDF on disk
     provider    = Column(String, default="ollama")
     model       = Column(String, default="")

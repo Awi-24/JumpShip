@@ -57,8 +57,8 @@ async def generate_resume(
     """
     Generate a tailored resume PDF for a specific job.
 
-    - LLM produces Markdown tailored to the job description + assessment gaps
-    - Markdown is converted to a styled PDF via weasyprint
+    - LLM produces HTML (ATS-oriented template) tailored to the job + assessment gaps
+    - HTML is converted to a styled single-page PDF via xhtml2pdf
     - Returns the PDF as a file download
     - Stores metadata in `generated_resumes` table
     """

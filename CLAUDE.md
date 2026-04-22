@@ -99,7 +99,7 @@ FastAPI app (`main.py`). Config: pydantic-settings (`config.py`), reading **repo
 - `services/llm_client.py` — unified LLM calls (local semaphore for Ollama/LM Studio)
 - `services/resume_parser_v2.py` — PDF/DOCX → `ResumeProfile`
 - `services/ai_evaluator.py` — helpers still used by legacy analysis routes and résumé Markdown generation
-- `services/resume_generator.py` — tailored résumé Markdown → fpdf2 PDF
+- `services/resume_generator.py` — tailored résumé HTML (LLM template) → xhtml2pdf PDF
 - `services/llm_service.py` — lightweight Ollama probe for `/api/health`
 
 **Database:** SQLite (`jobspy_ui.db` by default). Notable tables include `SavedJob`, `Application`, `UserProfile`, `GeneratedResume`.

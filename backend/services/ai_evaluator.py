@@ -56,51 +56,176 @@ Return EXACTLY this JSON structure (no extra keys, no markdown):
   "keywords_missing": ["<keyword absent from resume>"]
 }}"""
 
-_TAILORED_RESUME_SYSTEM = (
-    "You are a professional resume editor. Your ONLY task: take the candidate's existing "
-    "resume text and the job description, then output a tightened, better-aligned resume "
-    "in Markdown. You must not add commentary, footers, meta-notes, disclaimers, cover-letter "
-    "text, watermarks, 'tailored for…' lines, AI attribution, or anything that is not part of "
-    "a standard resume. Output Markdown body ONLY: start with the person's name as # heading, "
-    "then resume sections. One printed page when rendered at normal density: be concise; "
-    "prefer fewer bullets and shorter lines over dense walls of text. No HTML. No tables "
-    "unless absolutely necessary."
+# HTML fragment the LLM must follow (ATS-friendly, parsed by our PDF pipeline).
+_RESUME_HTML_SKELETON = """
+<div class="resume" id="resume-root">
+  <header class="hdr">
+    <h1 class="legal-name">Full Legal Name</h1>
+    <p class="contact-line">City, ST | email@ | phone | linkedin.com/in/… | github.com/…</p>
+  </header>
+  <section id="summary">
+    <h2>Professional Summary</h2>
+    <p>2–4 sentences from the source only; weave relevant job-posting keywords naturally for ATS.</p>
+  </section>
+  <section id="experience">
+    <h2>Professional Experience</h2>
+    <div class="job">
+      <h3><span class="role">Job Title</span><span class="dash"> — </span><span class="company">Company</span></h3>
+      <p class="job-meta"><em>Jan 2020 – Present · City, ST (Remote)</em></p>
+      <ul>
+        <li>Use <strong>tools/platforms</strong> from the source; outcome + metric when present in source.</li>
+      </ul>
+    </div>
+  </section>
+  <section id="education">
+    <h2>Education</h2>
+    <ul>
+      <li><strong>Degree / program</strong>, School — Year <em>(honors only if in source)</em></li>
+    </ul>
+  </section>
+  <section id="certifications">
+    <h2>Certifications &amp; Licenses</h2>
+    <ul>
+      <li>Credential, Issuer, Year (from source only)</li>
+    </ul>
+  </section>
+  <section id="skills">
+    <h2>Technical Skills &amp; Keywords</h2>
+    <p class="skills-block">Languages: … | Cloud / Data: … | Tools: … (list every technology from the source; shorten words, do not drop items)</p>
+  </section>
+</div>
+""".strip()
+
+_TAILORED_RESUME_SYSTEM_HTML = (
+    "You are a professional resume editor. Output ONE resume as an HTML fragment only — "
+    "no Markdown, no backticks, no commentary, no preamble or closing remarks. "
+    "The outer element MUST be exactly: <div class=\"resume\" id=\"resume-root\"> … </div>. "
+    "Use only these tags: div, header, section, h1, h2, h3, p, ul, li, span, em, strong. "
+    "For dates and locations use <em>…</em> (never raw asterisks). For emphasis use <strong>…</strong>. "
+    "Preserve ALL factual content from the original resume: every employer, title, date range, "
+    "location, degree, school, certification, license, project, and substantive bullet. "
+    "Never drop Education or Certifications when those facts exist in the source — merge wording "
+    "instead. Target one printed page by tightening language, not by deleting sections. "
+    "Mirror ATS-relevant keywords from the job description only where they honestly match the source."
 )
 
-_TAILORED_RESUME_USER = """You will compare the ORIGINAL RESUME to the TARGET JOB and produce ONE revised resume in Markdown.
+_TAILORED_RESUME_USER_HTML_HEAD = """Compare the ORIGINAL RESUME to the TARGET JOB. Return ONLY the HTML fragment (start with <div class="resume" id="resume-root">, end with </div>).
 
-## ORIGINAL RESUME (source of truth; do not fabricate facts)
-{resume}
+## ORIGINAL RESUME (source of truth — do not invent employers, dates, degrees, tools, or metrics)
+"""
 
-## TARGET JOB (for alignment only)
-Title: {job_title} at {company_name}
-{job_description}
+_TAILORED_RESUME_USER_HTML_TAIL = """
+## TARGET JOB (alignment only)
+Title: __JOB_TITLE__ at __COMPANY__
 
-## CANDIDATE CONTEXT (contact and preferences; use only what helps the resume)
-{candidate_context}
+__JOB_DESCRIPTION__
 
-## PRIOR FIT SIGNALS (optional; do not repeat verbatim as prose)
-Match score (0-100): {score}
-Notable gaps vs posting: {gaps}
-Useful keywords from posting still weak in resume: {missing_keywords}
+## CANDIDATE CONTEXT (use for contact line when missing from resume text)
+__CANDIDATE_CONTEXT__
 
-OBJECTIVE
-- Improve clarity and relevance to this job by reordering, rephrasing, and emphasizing what already exists.
-- Address gaps only by reframing honest experience or skills already implied in the resume; never invent employers, dates, degrees, tools, or metrics.
-- Keep standard sections (e.g. Summary/Profile, Experience, Education, Skills). Merge or shorten sections if needed to stay on one page.
+## PRIOR FIT SIGNALS (do not paste as a narrative)
+Match score (0-100): __SCORE__
+Gaps vs posting: __GAPS__
+Posting keywords still weak in resume: __MISSING_KW__
 
-STRICTLY FORBIDDEN (do not output any of these anywhere, including end of document)
-- Footnotes, endnotes, "Notes:", "Disclaimer", "Generated by", model names, or system prompts
-- Letters to the employer, salary discussion, or negotiation text
-- URLs or text that were not present in the resume or candidate context (except you may format existing contact fields)
-- More than one page worth of content: if too long, cut lowest-priority bullets first
+RULES
+1. Copy the skeleton structure below exactly (same section ids and classes). Replace placeholder text with real content from the resume only.
+2. Include <section id="education"> with every school/degree/program found in the source. If the source truly has none, omit that entire section.
+3. Include <section id="certifications"> with every certificate/license in the source. If none, omit that entire section (no "N/A" paragraphs).
+4. Repeat <div class="job">…</div> once per role in the source (most recent first).
+5. skills-block must stay one or two dense lines of ATS keywords — include every skill/tool from the source; compress wording, never truncate mid-list with a dangling comma.
+6. No <style>, <script>, <html>, or <body> tags.
 
-MARKDOWN FORMAT
-- # Full name (first line)
-- ## Section headings; use - bullets for lists; ### only if needed
-- No horizontal rules unless essential
+## SKELETON (structure to follow)
+""" + _RESUME_HTML_SKELETON + """
 
-Return ONLY the Markdown resume. No preamble after the rules. No closing line."""
+## OUTPUT
+Return the filled HTML fragment only.
+"""
+
+_COMPACT_RESUME_SYSTEM_HTML = (
+    "You compress resume HTML so it fits one printed A4 page. Preserve EVERY fact and every "
+    "<section id=\"education\"> and <section id=\"certifications\"> entry when present. "
+    "Shorten <p> and <li> text only; keep the same outer <div class=\"resume\" id=\"resume-root\">. "
+    "Same allowed tags only. No commentary outside the fragment."
+)
+
+_COMPACT_RESUME_USER_HTML = (
+    "The HTML resume below is too tall for one PDF page. Rewrite with tighter wording only.\n\n"
+)
+
+
+def _build_tailored_resume_user_html(
+    resume: str,
+    job_description: str,
+    job_title: str,
+    company_name: str,
+    candidate_context: str,
+    score: object,
+    gaps: str,
+    missing_keywords: str,
+) -> str:
+    # Placeholder replace (not str.format) so job descriptions can contain "{" or "}".
+    tail = (
+        _TAILORED_RESUME_USER_HTML_TAIL.replace("__JOB_TITLE__", job_title or "")
+        .replace("__COMPANY__", company_name or "")
+        .replace("__JOB_DESCRIPTION__", job_description or "")
+        .replace("__CANDIDATE_CONTEXT__", candidate_context or "")
+        .replace("__SCORE__", str(score))
+        .replace("__GAPS__", gaps or "N/A")
+        .replace("__MISSING_KW__", missing_keywords or "N/A")
+    )
+    return _TAILORED_RESUME_USER_HTML_HEAD + resume + tail
+
+
+def generate_tailored_resume_html(
+    resume_text: str,
+    job_description: str,
+    job_title: str,
+    company_name: str,
+    assessment: Optional[dict] = None,
+    client: Optional[LLMClient] = None,
+    user_profile: Optional[dict] = None,
+) -> str:
+    """
+    Generate tailored resume HTML for a specific job (fragment inside #resume-root).
+    Stored in DB column `markdown` for historical reasons.
+    """
+    llm = client or LLMClient.from_settings()
+
+    a = assessment or {}
+    gaps_list = list(a.get("gaps") or [])
+    gaps = ", ".join(gaps_list[:5]) or "N/A"
+    missing_kw = ", ".join((a.get("keywords_missing") or [])[:10]) or "N/A"
+    score = a.get("match_score", a.get("score", "N/A"))
+
+    candidate_context = _build_candidate_context(user_profile or {})
+
+    user_prompt = _build_tailored_resume_user_html(
+        resume=(resume_text or "")[:8000],
+        job_description=(job_description or "")[:5000],
+        job_title=job_title,
+        company_name=company_name,
+        candidate_context=candidate_context,
+        score=score,
+        gaps=gaps,
+        missing_keywords=missing_kw,
+    )
+
+    return llm.complete(_TAILORED_RESUME_SYSTEM_HTML, user_prompt)
+
+
+def compact_tailored_resume_html(fragment: str, client: Optional[LLMClient] = None) -> str:
+    """Second-pass HTML compression when PDF layout exceeds one page."""
+    llm = client or LLMClient.from_settings()
+    body = (fragment or "").strip()
+    user = _COMPACT_RESUME_USER_HTML + body
+    return llm.complete(_COMPACT_RESUME_SYSTEM_HTML, user)
+
+
+def compact_tailored_resume_markdown(markdown: str, client: Optional[LLMClient] = None) -> str:
+    """Legacy name — input/output are HTML resume fragments."""
+    return compact_tailored_resume_html(markdown, client=client)
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
@@ -195,32 +320,17 @@ def generate_tailored_resume_markdown(
     user_profile: Optional[dict] = None,
 ) -> str:
     """
-    Generate a Markdown-formatted tailored resume for a specific job.
-    user_profile: dict from UserProfile DB row (name, email, phone, linkedin_url, etc.)
-    Returns raw Markdown string.
+    Legacy name — returns an HTML fragment (stored in DB column `markdown`).
     """
-    llm = client or LLMClient.from_settings()
-
-    a = assessment or {}
-    gaps_list = list(a.get("gaps") or [])
-    gaps = ", ".join(gaps_list[:5]) or "N/A"
-    missing_kw = ", ".join((a.get("keywords_missing") or [])[:10]) or "N/A"
-    score = a.get("match_score", a.get("score", "N/A"))
-
-    candidate_context = _build_candidate_context(user_profile or {})
-
-    user_prompt = _TAILORED_RESUME_USER.format(
-        resume=resume_text[:8000],
-        job_description=job_description[:5000],
+    return generate_tailored_resume_html(
+        resume_text=resume_text,
+        job_description=job_description,
         job_title=job_title,
         company_name=company_name,
-        score=score,
-        gaps=gaps,
-        missing_keywords=missing_kw,
-        candidate_context=candidate_context,
+        assessment=assessment,
+        client=client,
+        user_profile=user_profile,
     )
-
-    return llm.complete(_TAILORED_RESUME_SYSTEM, user_prompt)
 
 
 def _build_candidate_context(p: dict) -> str:

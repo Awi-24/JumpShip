@@ -35,7 +35,7 @@ Employers automate candidate filtering before anyone reads a résumé. JumpShip 
 | **Job aggregation** | Unified search across many boards (via JobSpy and related sources: LinkedIn, Indeed, Glassdoor, and regional boards such as Gupy, Programathor, Trampos, etc., depending on configuration). |
 | **AI scoring** | LLM assesses each job (0–100), strengths, gaps, salary line, and company-oriented notes, grounded in your parsed résumé. |
 | **Batch assessment** | Cloud-capable providers can assess many jobs concurrently; **local** providers share a semaphore so one GPU-heavy call runs at a time. |
-| **Tailored résumé PDFs** | LLM rewrites content for a specific job → Markdown → **fpdf2** PDF (pure Python; no extra system PDF stack on Windows). |
+| **Tailored résumé PDFs** | LLM fills an ATS-oriented **HTML** template → **xhtml2pdf** one-page PDF. Locally, pip usually installs pre-built wheels; **Docker** uses a multi-stage image so **pycairo** (a transitive dependency) can compile in the builder without keeping a compiler in the runtime image (see [How to run (with Docker)](#how-to-run-with-docker)). |
 | **Job tracker** | Kanban-style flow: Saved → Applied → Interview → Offer → Rejected (drag-and-drop UI). |
 | **Local-first** | Ollama or LM Studio by default; Anthropic, OpenAI, Groq, Gemini, and others supported when API keys are set (see `.env.example`). |
 
@@ -46,7 +46,7 @@ Employers automate candidate filtering before anyone reads a résumé. JumpShip 
 **Backend:** Python 3.11 · FastAPI · SQLAlchemy 2.0 (SQLite) · JobSpy / custom scrapers · unified `LLMClient`  
 **Frontend:** React 19 · TypeScript · Vite · TanStack Query v5 · @dnd-kit  
 **LLM:** Ollama (default) · LM Studio (OpenAI-compatible) · Anthropic · OpenAI · Groq · Google Gemini · additional providers wired in `LLMClient`  
-**PDF:** fpdf2 (+ Markdown pipeline)
+**PDF:** xhtml2pdf (+ HTML résumé template; requires **libcairo2** at runtime and, in Docker, a **builder** stage with Cairo headers + a C toolchain to build **pycairo**)
 
 ---
 
@@ -55,6 +55,7 @@ Employers automate candidate filtering before anyone reads a résumé. JumpShip 
 ```
 JumpShip/
 ├── backend/
+│   ├── Dockerfile       # Multi-stage backend image (wheels for pycairo / xhtml2pdf; slim runtime)
 │   ├── models/          # SQLAlchemy models + Pydantic schemas
 │   ├── routers/         # FastAPI routers (jobs_v2, resume_v2, resume_gen, profile, …)
 │   ├── services/        # job_scraper_v2, ai_evaluator, resume_parser_v2, resume_generator, llm_client, …
@@ -157,6 +158,17 @@ npm run preview    # serves the built assets; still expects API at /api or confi
 ## How to run (with Docker)
 
 Compose builds a **backend** image (FastAPI on port **8000**) and a **frontend** image (static build behind nginx on port **80**).
+
+### Backend image (`backend/Dockerfile`)
+
+The backend Dockerfile is **multi-stage** so `python:3.11-slim` stays small while dependencies that need native builds still install cleanly:
+
+| Stage | What it installs | Why |
+|--------|-------------------|-----|
+| **builder** | `build-essential`, `pkg-config`, `libcairo2-dev` | Lets `pip wheel -r backend/requirements.txt` build wheels for packages that compile from source—especially **pycairo** (pulled in by **xhtml2pdf** → svglib / rlpycairo). On slim images there is no `gcc` by default, which otherwise causes Meson errors like “Unknown compiler(s): cc, gcc, clang…”. |
+| **final** | `curl`, `libcairo2` | `curl` is for the container healthcheck. **libcairo2** is the runtime shared library **pycairo** links against. Python packages are installed with `pip install --no-index --find-links=/wheels`, then `/wheels` is deleted—**no compiler or `-dev` headers** remain in the running image. |
+
+If you fork the Dockerfile, keep **libcairo2** in the final stage and keep building wheels in a stage that has **libcairo2-dev** (or equivalent) whenever **xhtml2pdf** stays in `requirements.txt`.
 
 ### 1. Configure environment for containers
 
@@ -279,7 +291,7 @@ Frontend: `cd frontend && npm run test:run`
 Set `PYTHONPATH` to the **repository root** (not `backend/`) before `uvicorn`.
 
 **`UnicodeEncodeError` or odd characters in PDFs**  
-fpdf2 is encoding-sensitive; the pipeline sanitises many symbols. If something slips through, simplify special characters in the source résumé and retry.
+Tailored PDFs use UTF-8 HTML (DejaVu Sans via xhtml2pdf). If a rare glyph fails, simplify that character in the source résumé and retry.
 
 **Job search returns few or no results**  
 Some boards rate-limit or require specific sites/keywords. Narrow sites, reduce `results_wanted`, or retry later.
@@ -289,6 +301,9 @@ Check browser console for CORS errors; align `CORS_ORIGINS` with the exact URL y
 
 **Docker: LLM unreachable**  
 Confirm Ollama is listening on the host and that `OLLAMA_BASE_URL` / `OLLAMA_HOST` in Compose points at `host.docker.internal` (or your host IP on Linux if you customise it).
+
+**Docker: `pip install` fails on `pycairo` / Meson “Unknown compiler(s)”**  
+`xhtml2pdf` depends on **svglib**, which pulls **pycairo**. On minimal images, pycairo often builds from source and needs a C compiler plus Cairo **development** headers. The repo’s **`backend/Dockerfile`** fixes this with a **builder** stage (`build-essential`, `pkg-config`, `libcairo2-dev`) and `pip wheel`, then installs from those wheels in the final image with **`libcairo2`** only. If you see this error, ensure you are using the current Dockerfile (or add the same build deps before `pip install`). Rebuild with `docker compose build backend --no-cache`.
 
 ---
 

@@ -22,6 +22,8 @@ google-generativeai>=0.8.0
 # ── PDF generation ───────────────────────
 fpdf2>=2.7.9
 markdown>=3.7
+xhtml2pdf>=0.2.16
+pypdf>=5.0.0
 
 # ── jobspy transitive dependencies ──────
 requests>=2.32.0
