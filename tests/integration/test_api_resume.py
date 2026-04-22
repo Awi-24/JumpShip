@@ -35,7 +35,6 @@ class TestResumeParse:
         with (
             patch("backend.routers.resume_v2.extract_text", new_callable=AsyncMock) as mock_extract,
             patch("backend.routers.resume_v2.parse_profile", new_callable=AsyncMock) as mock_parse,
-            patch("backend.routers.resume_v2.get_llm_service") as mock_llm_factory,
         ):
             mock_extract.return_value = "Ada Lovelace — ML Engineer..."
             mock_parse.return_value = {
@@ -48,7 +47,6 @@ class TestResumeParse:
                 "suggested_titles": ["ML Engineer"],
                 "raw_text": "Ada Lovelace — ML Engineer...",
             }
-            mock_llm_factory.return_value = AsyncMock()
 
             resp = self._upload(client, b"%PDF-1.4 fake content", "ada.pdf")
 
@@ -62,7 +60,6 @@ class TestResumeParse:
         with (
             patch("backend.routers.resume_v2.extract_text", new_callable=AsyncMock) as mock_extract,
             patch("backend.routers.resume_v2.parse_profile", new_callable=AsyncMock) as mock_parse,
-            patch("backend.routers.resume_v2.get_llm_service") as mock_llm_factory,
         ):
             mock_extract.return_value = "Bob Smith — Software Engineer..."
             mock_parse.return_value = {
@@ -71,7 +68,6 @@ class TestResumeParse:
                 "suggested_keywords": ["golang"], "suggested_titles": ["SWE"],
                 "raw_text": "Bob Smith — Software Engineer...",
             }
-            mock_llm_factory.return_value = AsyncMock()
 
             resp = client.post(
                 "/api/resume/parse",
@@ -82,12 +78,8 @@ class TestResumeParse:
         assert resp.json()["name"] == "Bob Smith"
 
     def test_empty_text_returns_422(self, client):
-        with (
-            patch("backend.routers.resume_v2.extract_text", new_callable=AsyncMock) as mock_extract,
-            patch("backend.routers.resume_v2.get_llm_service") as mock_llm_factory,
-        ):
+        with patch("backend.routers.resume_v2.extract_text", new_callable=AsyncMock) as mock_extract:
             mock_extract.return_value = "   "  # blank
-            mock_llm_factory.return_value = AsyncMock()
             resp = self._upload(client, b"%PDF-empty", "empty.pdf")
 
         assert resp.status_code == 422

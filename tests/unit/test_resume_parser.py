@@ -2,7 +2,7 @@
 Unit tests for resume_parser_v2 — text extraction and LLM profile parsing.
 """
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from backend.services.resume_parser_v2 import extract_text, parse_profile
 
 
@@ -30,8 +30,8 @@ class TestExtractText:
 class TestParseProfile:
     @pytest.mark.asyncio
     async def test_valid_json_response(self):
-        llm = AsyncMock()
-        llm.complete = AsyncMock(return_value="""{
+        llm = MagicMock()
+        llm.complete = MagicMock(return_value="""{
             "name": "Ada",
             "title": "ML Engineer",
             "skills": ["Python", "GCP"],
@@ -48,8 +48,8 @@ class TestParseProfile:
 
     @pytest.mark.asyncio
     async def test_json_in_markdown_fences(self):
-        llm = AsyncMock()
-        llm.complete = AsyncMock(return_value="""```json
+        llm = MagicMock()
+        llm.complete = MagicMock(return_value="""```json
 {"name": "Bob", "title": "SWE", "skills": [], "experience_years": 2,
  "domains": [], "suggested_keywords": [], "suggested_titles": []}
 ```""")
@@ -58,8 +58,8 @@ class TestParseProfile:
 
     @pytest.mark.asyncio
     async def test_invalid_json_returns_empty_profile(self):
-        llm = AsyncMock()
-        llm.complete = AsyncMock(return_value="I cannot parse this resume.")
+        llm = MagicMock()
+        llm.complete = MagicMock(return_value="I cannot parse this resume.")
         result = await parse_profile("some text", llm)
         # Should not raise; returns safe defaults
         assert result["name"] == ""
@@ -69,7 +69,7 @@ class TestParseProfile:
     @pytest.mark.asyncio
     async def test_raw_text_truncated_to_8000(self):
         long_text = "x" * 10000
-        llm = AsyncMock()
-        llm.complete = AsyncMock(return_value='{"name":"","title":"","skills":[],"experience_years":0,"domains":[],"suggested_keywords":[],"suggested_titles":[]}')
+        llm = MagicMock()
+        llm.complete = MagicMock(return_value='{"name":"","title":"","skills":[],"experience_years":0,"domains":[],"suggested_keywords":[],"suggested_titles":[]}')
         result = await parse_profile(long_text, llm)
         assert len(result["raw_text"]) == 8000

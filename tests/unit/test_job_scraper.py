@@ -77,8 +77,8 @@ class TestSearchJobs:
         assert results == []
 
     @pytest.mark.asyncio
-    async def test_deduplicates_via_md5(self):
-        """Two identical rows produce the same ID."""
+    async def test_deduplicates_identical_rows(self):
+        """Identical title+company rows collapse after post-processing dedup."""
         row = {
             "title": "Dev", "company": "Acme", "location": "NY",
             "job_type": "fulltime", "min_amount": None, "max_amount": None,
@@ -87,14 +87,17 @@ class TestSearchJobs:
         }
         mock_df = pd.DataFrame([row, row])
         _mock_jobspy.scrape_jobs.return_value = mock_df
-        results = await search_jobs(keywords=["dev"])
-        assert results[0]["id"] == results[1]["id"]
+        # Avoid default "Remote" post-filter dropping on-site "NY" rows.
+        results = await search_jobs(keywords=["dev"], location="")
+        assert len(results) == 1
+        assert results[0]["title"] == "Dev"
 
     @pytest.mark.asyncio
-    async def test_scrape_exception_propagates(self):
+    async def test_scrape_exception_yields_empty_batch(self):
+        """JobSpy failures are logged; parallel gather keeps other batches (here: none)."""
         _mock_jobspy.scrape_jobs.side_effect = RuntimeError("network error")
         try:
-            with pytest.raises(RuntimeError, match="network error"):
-                await search_jobs(keywords=["python"])
+            results = await search_jobs(keywords=["python"])
+            assert results == []
         finally:
             _mock_jobspy.scrape_jobs.side_effect = None  # reset for other tests

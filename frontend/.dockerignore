@@ -1,3 +1,9 @@
 node_modules
 dist
+.vite
+coverage
 *.md
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+vitest.config.ts

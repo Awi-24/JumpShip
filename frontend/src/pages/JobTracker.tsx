@@ -18,7 +18,6 @@ import { ArrowLeft, ChevronDown, GripVertical, Plus, X } from 'lucide-react';
 
 interface JobTrackerProps {
   onBack: () => void;
-  onNavigate?: (page: 'agents') => void;
 }
 
 export interface ApplicationRecord {
@@ -121,12 +120,11 @@ function AddJobModal({ onClose, onAdd }: { onClose: () => void; onAdd: (job: Par
 // ── Draggable Card ────────────────────────────────────────────────────────────
 
 function DraggableCard({
-  app, onStatusChange, onDelete, onStartAgent, isDragging = false,
+  app, onStatusChange, onDelete, isDragging = false,
 }: {
   app: ApplicationRecord;
   onStatusChange: (id: string, status: AppStatus) => void;
   onDelete: (id: string) => void;
-  onStartAgent: (app: ApplicationRecord) => void;
   isDragging?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: app.id });
@@ -188,9 +186,15 @@ function DraggableCard({
               )}
             </div>
             {app.job_url && (
-              <button className="btn-secondary" style={{ fontSize: 12, padding: '4px 10px' }} onClick={() => onStartAgent(app)}>
-                Auto-Apply
-              </button>
+              <a
+                href={app.job_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-secondary"
+                style={{ fontSize: 12, padding: '4px 10px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+              >
+                Open listing
+              </a>
             )}
             <button
               className="btn-secondary"
@@ -209,13 +213,12 @@ function DraggableCard({
 // ── Droppable Column ──────────────────────────────────────────────────────────
 
 function KanbanColumn({
-  status, apps, onStatusChange, onDelete, onStartAgent, activeId,
+  status, apps, onStatusChange, onDelete, activeId,
 }: {
   status: AppStatus;
   apps: ApplicationRecord[];
   onStatusChange: (id: string, s: AppStatus) => void;
   onDelete: (id: string) => void;
-  onStartAgent: (app: ApplicationRecord) => void;
   activeId: string | null;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
@@ -239,7 +242,7 @@ function KanbanColumn({
         {apps.map(app => (
           <DraggableCard
             key={app.id} app={app}
-            onStatusChange={onStatusChange} onDelete={onDelete} onStartAgent={onStartAgent}
+            onStatusChange={onStatusChange} onDelete={onDelete}
             isDragging={activeId === app.id}
           />
         ))}
@@ -250,7 +253,7 @@ function KanbanColumn({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export default function JobTracker({ onBack, onNavigate }: JobTrackerProps) {
+export default function JobTracker({ onBack }: JobTrackerProps) {
   const [applications, setApplications] = useState<ApplicationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -311,23 +314,6 @@ export default function JobTracker({ onBack, onNavigate }: JobTrackerProps) {
       await fetchApplications();
     } catch {
       setError('Failed to add job.');
-    }
-  };
-
-  const handleStartAgent = async (app: ApplicationRecord) => {
-    try {
-      // V2: use the new LangGraph apply endpoint
-      await fetch('/api/agents/apply', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          job: { id: app.job_id || app.id, title: app.job_title, company: app.company_name, url: app.job_url, description: '', location: '', is_remote: false, site: app.site, date_posted: '', raw: {} },
-          dry_run: true,
-        }),
-      });
-      if (onNavigate) onNavigate('agents');
-    } catch {
-      setError('Failed to start agent.');
     }
   };
 
@@ -392,7 +378,7 @@ export default function JobTracker({ onBack, onNavigate }: JobTrackerProps) {
       </div>
 
       {error && (
-        <div className="agents-error-banner">
+        <div className="tracker-error-banner">
           {error}
           <button type="button" className="btn-ghost btn-icon-btn" onClick={() => setError(null)} style={{ marginLeft: 12 }} aria-label="Dismiss">
             <X size={18} strokeWidth={1.75} aria-hidden />
@@ -411,7 +397,6 @@ export default function JobTracker({ onBack, onNavigate }: JobTrackerProps) {
                 apps={applications.filter(a => a.status === col)}
                 onStatusChange={handleStatusChange}
                 onDelete={handleDelete}
-                onStartAgent={handleStartAgent}
                 activeId={activeId}
               />
             ))}

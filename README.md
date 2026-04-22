@@ -1,6 +1,6 @@
 # JumpShip
 
-> AI-powered, privacy-first job search and auto-apply tool. Aggregates job boards, scores fit with LLM, and autonomously fills applications via a browser agent — all running locally on your machine.
+> AI-powered job search built around your résumé. Aggregates multiple job boards, scores each listing with an LLM (local or cloud), and generates **tailored résumé PDFs** per job, designed to run locally with your data under your control.
 
 ---
 
@@ -11,68 +11,42 @@
 3. [Stack](#stack)
 4. [Repository layout](#repository-layout)
 5. [Prerequisites](#prerequisites)
-6. [How to run](#how-to-run)
-7. [Ollama setup (required for agents)](#ollama-setup-required-for-agents)
-8. [Environment variables](#environment-variables)
-9. [API overview](#api-overview)
-10. [Docker Compose](#docker-compose)
+6. [How to run (without Docker)](#how-to-run-without-docker)
+7. [How to run (with Docker)](#how-to-run-with-docker)
+8. [LLM setup](#llm-setup)
+9. [Environment variables](#environment-variables)
+10. [API overview](#api-overview)
 11. [Troubleshooting](#troubleshooting)
 12. [Roadmap](#roadmap)
-13. [Credits & license](#credits--license)
+13. [License](#license)
 
 ---
 
 ## Why JumpShip exists
 
-Many companies automate candidate filtering: ATS rules and keyword scoring remove people before anyone reads their story. JumpShip rebalances that dynamic — if employers use automation to screen people out, job seekers deserve tools that help them find fit, understand gaps, and apply efficiently.
+Employers automate candidate filtering before anyone reads a résumé. JumpShip helps you respond in kind: find roles that fit, see honest gaps and salary context, and export materials tuned to each posting, with optional cloud LLMs or fully **local** inference (Ollama / LM Studio).
 
 ---
 
 ## What it does
 
-### Job search
-- **9 job boards**: LinkedIn, Indeed, Glassdoor, ZipRecruiter (via python-jobspy), RemoteOK, Arbeitnow, Gupy, Programathor, Trampos.
-- OR-style keyword queries, deduplication, 15-minute in-memory cache.
-- Paginated UI with location picker, remote toggle, and per-board filters.
-
-### AI assessment
-- Per-job **match score (0–100)**, summary, strengths, gaps, and suggestions.
-- Optional company research (culture, salary hints) from the open web.
-- Assessment speed: Careful / Balanced / Turbo concurrency.
-
-### Resume intelligence
-- Upload PDF or DOCX — extracts text, builds structured profile via LLM.
-- Auto-fills keyword chips. Suggests related keywords and PT translations.
-
-### Auto-apply agent (LangChain + Playwright)
-- **ReAct agent loop**: reads the page → reasons → calls tools → fills fields → navigates → repeats.
-- **Resume adaptation**: before filling, the agent rewrites your resume in the job's vocabulary (no lies — rephrasing and reordering only).
-- **Platform strategies** with hints for Greenhouse, Lever, LinkedIn Easy Apply, Indeed, generic ATS.
-- **Dry-run mode**: fills everything but stops before submitting — review screenshots first.
-- **Human-help pause**: agent calls `request_human_help` for CAPTCHAs, login walls, or ambiguous questions; resumes when you respond via `POST /api/auto-apply/queue/{id}/help`.
-- **SSE live updates**: every agent step streams to the UI in real time.
-- 1–5 parallel workers, pause/resume queue.
-
-### Profile
-- Full form: identity, work eligibility, education, salary, LinkedIn credentials, custom Q&A answers.
-- Stored locally in SQLite — credentials never leave your machine.
-
-### Job tracking
-- Kanban board: Saved → Applied → Interview → Offer → Rejected.
-- Export CSV/JSON. Search history with one-click restore.
+| Feature | Details |
+|--------|---------|
+| **Job aggregation** | Unified search across many boards (via JobSpy and related sources: LinkedIn, Indeed, Glassdoor, and regional boards such as Gupy, Programathor, Trampos, etc., depending on configuration). |
+| **AI scoring** | LLM assesses each job (0–100), strengths, gaps, salary line, and company-oriented notes, grounded in your parsed résumé. |
+| **Batch assessment** | Cloud-capable providers can assess many jobs concurrently; **local** providers share a semaphore so one GPU-heavy call runs at a time. |
+| **Tailored résumé PDFs** | LLM rewrites content for a specific job → Markdown → **fpdf2** PDF (pure Python; no extra system PDF stack on Windows). |
+| **Job tracker** | Kanban-style flow: Saved → Applied → Interview → Offer → Rejected (drag-and-drop UI). |
+| **Local-first** | Ollama or LM Studio by default; Anthropic, OpenAI, Groq, Gemini, and others supported when API keys are set (see `.env.example`). |
 
 ---
 
 ## Stack
 
-| Layer | Technology |
-|-------|------------|
-| **Backend** | FastAPI (Python 3.11+), SQLAlchemy 2, SQLite, pydantic-settings, httpx |
-| **Agent** | LangChain + langchain-ollama, Playwright (Chromium) |
-| **LLM** | Ollama (local — default and only supported for agents) |
-| **Frontend** | React 19, TypeScript, Vite, TanStack Query, lucide-react |
-| **Resume** | pdfminer.six, python-docx |
-| **Job data** | python-jobspy + custom scrapers |
+**Backend:** Python 3.11 · FastAPI · SQLAlchemy 2.0 (SQLite) · JobSpy / custom scrapers · unified `LLMClient`  
+**Frontend:** React 19 · TypeScript · Vite · TanStack Query v5 · @dnd-kit  
+**LLM:** Ollama (default) · LM Studio (OpenAI-compatible) · Anthropic · OpenAI · Groq · Google Gemini · additional providers wired in `LLMClient`  
+**PDF:** fpdf2 (+ Markdown pipeline)
 
 ---
 
@@ -81,227 +55,254 @@ Many companies automate candidate filtering: ATS rules and keyword scoring remov
 ```
 JumpShip/
 ├── backend/
-│   ├── main.py                  # FastAPI app, CORS, lifespan, routers
-│   ├── config.py                # pydantic-settings — LLM_MODEL, OLLAMA_BASE_URL, etc.
-│   ├── database.py              # SQLAlchemy engine (SQLite)
-│   ├── models/
-│   │   ├── db_models.py         # ORM tables (SavedJob, UserProfile, AgentTask, TraceEvent…)
-│   │   └── schemas.py           # Pydantic v2 request/response models
-│   ├── routers/
-│   │   ├── auto_apply.py        # /api/auto-apply/* — queue, SSE, human help
-│   │   ├── jobs_v2.py           # /api/jobs/search, /api/jobs/assess, /api/ollama/models
-│   │   ├── resume_v2.py         # /api/resume/parse
-│   │   ├── profile.py           # /api/profile
-│   │   └── models.py            # /api/models/discover
-│   └── services/
-│       ├── apply_agent.py       # LangChain ApplicationAgent — the core agent
-│       ├── orchestrator.py      # asyncio worker pool + SSE broadcast
-│       ├── llm_service.py       # Thin Ollama wrapper (health checks, legacy routes)
-│       ├── ai_evaluator.py      # Multi-provider job assessment (non-agent LLM calls)
-│       ├── job_scraper_v2.py    # JobSpy + dedup + cache
-│       ├── extra_sources.py     # RemoteOK, Arbeitnow
-│       ├── br_sources.py        # Gupy, Programathor, Trampos
-│       └── resume_parser_v2.py  # PDF/DOCX → structured profile
+│   ├── models/          # SQLAlchemy models + Pydantic schemas
+│   ├── routers/         # FastAPI routers (jobs_v2, resume_v2, resume_gen, profile, …)
+│   ├── services/        # job_scraper_v2, ai_evaluator, resume_parser_v2, resume_generator, llm_client, …
+│   └── main.py          # App entry + router registration
 ├── frontend/
-│   ├── src/pages/               # Landing, Search, Profile, Agents, JobTracker
-│   ├── src/components/          # JobCard, SettingsModal, LLMConfig, ResumeUpload…
-│   └── vite.config.ts           # Dev proxy /api → localhost:8000
-├── docker-compose.yml
-├── start.sh                     # One-command local dev
-└── README.md
+│   └── src/
+│       ├── pages/       # Landing, Search, JobTracker
+│       └── components/  # Job cards, settings, upload, …
+├── start.sh             # Bash: backend :8000 + frontend :5173 (no Docker)
+├── docker-compose.yml   # Backend + nginx-served frontend
+└── .env.example         # Copy to `.env` at repo root (backend reads it from there)
 ```
 
 ---
 
 ## Prerequisites
 
-| Requirement | Notes |
-|-------------|-------|
-| Python 3.11+ | Backend |
-| Node.js 18+ | Frontend |
-| Ollama | Required for agents and LLM features |
-| RTX 3060 Ti / 8 GB VRAM or better | For running Llama3.1:8b or Gemma2:9b locally |
+**Local (no Docker)**
+
+- **Python 3.11+**
+- **Node.js 20+** (18+ usually works; LTS 20 recommended)
+- An LLM runtime: **Ollama** or **LM Studio** on the same machine, **or** API keys for cloud providers (see `.env.example`)
+
+**Docker**
+
+- **Docker** and **Docker Compose** v2 (`docker compose`)
+- For local models from containers: **Ollama on the host** (default compose URL points at `host.docker.internal`)
 
 ---
 
-## How to run
+## How to run (without Docker)
 
-### Quick start (local dev)
+### Option A: One command (macOS / Linux / Git Bash)
+
+From the repository root:
 
 ```bash
-# Install Python dependencies
+bash ./start.sh
+```
+
+This creates `.venv` if needed, installs `backend/requirements.txt`, copies `.env` from `.env.example` if missing, starts **uvicorn** on **http://localhost:8000**, and **Vite** on **http://localhost:5173**. Press `Ctrl+C` to stop both.
+
+### Option B: Manual (all platforms)
+
+**1. Environment**
+
+```bash
+# At repo root: copy example env if you do not have .env yet
+cp .env.example .env
+# Edit .env: set LLM_PROVIDER / LLM_MODEL and any API keys you need
+```
+
+**2. Backend**
+
+```bash
 python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+# Windows:
+.venv\Scripts\activate
+# macOS / Linux:
+source .venv/bin/activate
+
 pip install -r backend/requirements.txt
-playwright install chromium
 
-# Run backend
-export PYTHONPATH=$(pwd)           # Windows PowerShell: $env:PYTHONPATH = (pwd).Path
+# Repo root must be on PYTHONPATH so `backend` imports resolve
+# Windows PowerShell:
+$env:PYTHONPATH = (Get-Location).Path
+# Windows cmd:
+#   set PYTHONPATH=%CD%
+# macOS / Linux:
+export PYTHONPATH=$(pwd)
+
 uvicorn backend.main:app --reload --port 8000
+```
 
-# Second terminal — frontend
+- API: **http://localhost:8000**  
+- Interactive docs: **http://localhost:8000/docs**  
+- Health: **http://localhost:8000/api/health**  
+- LLM probe: **http://localhost:8000/api/health/llm**
+
+**3. Frontend** (new terminal, repo root)
+
+```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-| URL | Purpose |
-|-----|---------|
-| http://localhost:5173 | Web UI |
-| http://localhost:8000/docs | Swagger API docs |
-| http://localhost:8000/api/health | Health check |
-| http://localhost:8000/api/health/llm | LLM + Ollama diagnostic |
+- UI: **http://localhost:5173** (Vite proxies `/api` to `http://localhost:8000`)
 
-### Docker Compose
+**4. Production-style frontend build** (optional)
 
 ```bash
-docker compose build
-docker compose up -d
-# UI: http://localhost  |  API: http://localhost:8000
+cd frontend
+npm run build
+npm run preview    # serves the built assets; still expects API at /api or configure proxy/host
 ```
 
 ---
 
-## Ollama setup (required for agents)
+## How to run (with Docker)
 
-```bash
-# 1. Install Ollama — https://ollama.ai
-# 2. Pull a model that fits your VRAM:
-ollama pull llama3.1:8b            # recommended — best tool-calling, 6-7 GB VRAM
-# or:
-ollama pull gemma2:9b              # alternative, 6-7 GB VRAM
+Compose builds a **backend** image (FastAPI on port **8000**) and a **frontend** image (static build behind nginx on port **80**).
 
-# 3. Confirm it's available
-ollama list
-curl http://localhost:11434/api/tags
+### 1. Configure environment for containers
 
-# 4. Check JumpShip can reach it
-curl http://localhost:8000/api/health/llm
-```
+Create a `.env` file at the repo root (Compose substitutes variables from it). Minimum for local Ollama on the host:
 
-Set the model in `backend/.env`:
-```
+```env
 LLM_PROVIDER=ollama
 LLM_MODEL=llama3.1:8b
-OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+# Optional: OLLAMA_HOST=... (legacy alias, same purpose as OLLAMA_BASE_URL)
 ```
 
-The agent selects Ollama automatically. You can also pick the model in the UI Agent Queue header.
+Add cloud keys to the same file if you use OpenAI / Anthropic / Groq, etc. (see `.env.example` for names).
 
-### VRAM guide (RTX 3060 Ti — 8 GB)
+### 2. Build and start
 
-| Model | VRAM (Q4) | Tool-calling |
-|-------|-----------|--------------|
-| llama3.1:8b | ~6 GB | Yes |
-| gemma2:9b | ~6 GB | Yes |
-| mistral:7b | ~5 GB | Partial |
+```bash
+docker compose build
+docker compose up -d
+```
+
+| Service | URL |
+|--------|-----|
+| **Web UI** | http://localhost (port **80**) |
+| **API** | http://localhost:8000 |
+| **OpenAPI** | http://localhost:8000/docs |
+
+### 3. Ollama on the host
+
+The backend container talks to Ollama at **`host.docker.internal:11434`** by default (`docker-compose.yml`). On Linux, `extra_hosts` maps `host.docker.internal` to the host gateway. Start Ollama on the machine running Docker before relying on local models.
+
+### 4. Useful Docker commands
+
+```bash
+docker compose logs -f backend    # follow API logs
+docker compose logs -f frontend
+docker compose down               # stop and remove containers (named volumes kept)
+docker compose build --no-cache && docker compose up -d   # full rebuild
+```
+
+**Persistence:** Named volumes mount SQLite at `/app/data/jobspy_ui.db`, résumé uploads at `/app/uploads`, and generated PDFs at `/app/generated_resumes` inside the backend container (`docker-compose.yml`).
+
+**CORS:** Default `CORS_ORIGINS` in Compose includes `http://localhost` and `http://localhost:8000`. If you serve the UI from another origin, extend `CORS_ORIGINS` in `docker-compose.yml` or override via env supported by your deployment.
+
+---
+
+## LLM setup
+
+### Local: Ollama (default)
+
+```bash
+ollama pull gemma3:27b    # or a smaller model your GPU can hold
+ollama serve
+```
+
+Use `LLM_PROVIDER=ollama` and set `LLM_MODEL` to the pulled model name. Tailored résumé generation and job assessment use JSON-style structured completions; pick a model that follows instructions reliably.
+
+### Local: LM Studio
+
+Run LM Studio’s local server (OpenAI-compatible). Point the app at it (base URL and provider) via **Settings** in the UI or via `.env` / request overrides, depending on how you configure the project.
+
+### Cloud
+
+Set the appropriate API keys in `.env` (see `.env.example`) and choose the matching provider in settings. Cloud batches can run assessments in parallel; local providers stay behind the shared semaphore to avoid starving the GPU.
 
 ---
 
 ## Environment variables
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `LLM_PROVIDER` | `ollama` | Provider — `ollama` only for agents |
-| `LLM_MODEL` | `llama3` | Model name (e.g. `llama3.1:8b`) |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama API base URL |
-| `CORS_ORIGINS` | `http://localhost:5173,...` | Comma-separated browser origins |
-| `DATABASE_URL` | `sqlite:///./jobspy_ui.db` | SQLAlchemy connection string |
+Copy **`.env.example`** to **`.env`** at the repo root. Common entries:
+
+| Variable | Typical default | Notes |
+|----------|-----------------|--------|
+| `LLM_PROVIDER` | `ollama` | Also: `lmstudio`, `openai`, `anthropic`, `groq`, `gemini`, and others implemented in `LLMClient` |
+| `LLM_MODEL` | `gemma3:27b` | Must match a model available to that provider |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Use `http://host.docker.internal:11434` from Docker to reach host Ollama |
+| `OLLAMA_HOST` | _(optional)_ | Legacy alias; some health paths read it if `OLLAMA_BASE_URL` is unset |
+| `DATABASE_URL` | `sqlite:///./jobspy_ui.db` | Main SQLite database |
+| `UPLOAD_DIR` | `./uploads` | Parsed résumé uploads (legacy `/api/resume` paths) |
+| `CORS_ORIGINS` | `http://localhost:5173,...` | Comma-separated origins for browser access |
+| `RESUME_OUTPUT_DIR` | `./generated_resumes` | Directory for tailored PDF output (`resume_output_dir` in `backend/config.py`) |
+
+Pydantic-settings reads env with **case-insensitive** names; the full field list is in `backend/config.py`. **`.env.example`** lists the variables this repo expects day-to-day (extend with any extra keys your `LLMClient` provider needs).
 
 ---
 
 ## API overview
 
-### Health
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/health` | Basic health + `llm_available` |
-| GET | `/api/health/llm` | Full Ollama diagnostic — tests connectivity + a real completion |
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/api/jobs/search` | Search jobs (structured `JobResult` list) |
+| `POST` | `/api/jobs/assess` | Score one job against the résumé profile |
+| `POST` | `/api/jobs/assess-batch` | Batch assessments |
+| `POST` | `/api/resume/parse` | Parse PDF/DOCX → structured profile (v2 stack) |
+| `POST` | `/api/resume/generate` | Generate tailored résumé PDF for a job |
+| `GET` | `/api/resume/generated` | List generated résumé metadata |
+| `GET` | `/api/resume/generated/{id}/download` | Download a stored PDF |
+| `GET` | `/api/health` | Liveness + LLM provider summary |
+| `GET` | `/api/health/llm` | Connectivity + sample completion check |
 
-### Jobs
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/jobs/search` | Search all boards |
-| POST | `/api/jobs/assess` | Score a job against a resume |
-| GET | `/api/ollama/models` | List available Ollama models |
-
-### Resume
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/resume/parse` | Upload PDF/DOCX → structured profile |
-
-### Profile
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/profile` | Load user profile |
-| POST | `/api/profile` | Save user profile |
-
-### Agent queue
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/auto-apply/queue` | Add a job to the queue |
-| GET | `/api/auto-apply/queue` | Queue state + all tasks |
-| DELETE | `/api/auto-apply/queue/{id}` | Cancel a task |
-| POST | `/api/auto-apply/queue/{id}/retry` | Retry a failed task |
-| POST | `/api/auto-apply/queue/{id}/help` | Send human response to waiting agent |
-| POST | `/api/auto-apply/queue/clear` | Remove completed/cancelled tasks |
-| POST | `/api/auto-apply/pause` | Pause all workers |
-| POST | `/api/auto-apply/resume` | Resume workers |
-| POST | `/api/auto-apply/workers` | Set concurrency (1–5) |
-| POST | `/api/auto-apply/llm-config` | Set model for agents |
-| GET | `/api/auto-apply/stream` | SSE — live task updates |
+Legacy routes under `/api/...` from older modules may still be mounted for compatibility. Prefer the v2 `/api/jobs` and `/api/resume` paths above. Full detail: **`/docs`** on a running server.
 
 ---
 
-## Docker Compose
+## Tests (optional)
 
-| Service | Ports | Role |
-|---------|-------|------|
-| `backend` | `8000:8000` | FastAPI |
-| `frontend` | `80:80` | nginx SPA + `/api` proxy |
+From the repository root, install dev tools and run the Python suite:
 
-Ollama on host from Docker: use `OLLAMA_BASE_URL=http://host.docker.internal:11434`.
+```bash
+pip install -r backend/requirements.txt
+pip install -r requirements-dev.txt
+pytest
+```
 
----
+Frontend: `cd frontend && npm run test:run`
 
 ## Troubleshooting
 
-| Symptom | Fix |
-|---------|-----|
-| Agent stays `queued` forever | Hit `GET /api/health/llm` — see exact error. Common: Ollama not running (`ollama serve`) or model not pulled (`ollama pull llama3.1:8b`). |
-| Agent starts but freezes | Model loading cold into VRAM can take 60–120 s on first run. Check `nvidia-smi`. |
-| `Model not found` error | Run `ollama list` — name must match exactly (e.g. `llama3.1:8b` not `llama3.1`). |
-| CORS errors | Add your exact browser origin to `CORS_ORIGINS` in `.env`. |
-| Playwright not found | Run `playwright install chromium` in your virtualenv. |
-| Job boards empty | Third-party sites rate-limit or change layout — check backend logs. |
+**`ModuleNotFoundError: No module named 'backend'`**  
+Set `PYTHONPATH` to the **repository root** (not `backend/`) before `uvicorn`.
+
+**`UnicodeEncodeError` or odd characters in PDFs**  
+fpdf2 is encoding-sensitive; the pipeline sanitises many symbols. If something slips through, simplify special characters in the source résumé and retry.
+
+**Job search returns few or no results**  
+Some boards rate-limit or require specific sites/keywords. Narrow sites, reduce `results_wanted`, or retry later.
+
+**Docker: UI cannot reach API**  
+Check browser console for CORS errors; align `CORS_ORIGINS` with the exact URL you use (`http://localhost` vs `http://127.0.0.1`).
+
+**Docker: LLM unreachable**  
+Confirm Ollama is listening on the host and that `OLLAMA_BASE_URL` / `OLLAMA_HOST` in Compose points at `host.docker.internal` (or your host IP on Linux if you customise it).
 
 ---
 
 ## Roadmap
 
-**Shipped**
-- [x] 9-board job search + dedup + cache
-- [x] LLM resume parsing + per-job scoring
-- [x] Application tracking kanban
-- [x] LangChain ReAct auto-apply agent
-- [x] Resume adaptation per job (reword, no lies)
-- [x] Human-help pause/resume in agent
-- [x] Dry-run mode with screenshots
-- [x] SSE live step streaming
-
-**Planned**
-- [ ] Agent screenshot review UI
-- [ ] Scheduled auto-discovery (score new jobs overnight)
-- [ ] CAPTCHA handling improvements
-- [ ] Interview prep from job + profile gaps
-- [ ] Portuguese / full i18n
+| Item | Status |
+|------|--------|
+| Deeper Brazilian / regional aggregation | Planned |
+| Multi-résumé profiles (switch persona without re-upload) | Planned |
+| Interview prep from gap analysis | Planned |
+| Richer inbox / email workflows tied to the tracker | Planned |
 
 ---
 
-## Credits & license
+## License
 
-Built by [Adrian Widmer](https://awi-24.github.io).
-
-Job aggregation built on **[python-jobspy](https://github.com/Bunsly/JobSpy)** (Bunsly). This project inherits the license terms of that upstream project where applicable.
-
-`https://github.com/Awi-24/JumpShip.git`
+MIT. See `LICENSE`.

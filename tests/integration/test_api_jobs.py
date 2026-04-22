@@ -2,7 +2,7 @@
 Integration tests for POST /api/jobs/search and POST /api/jobs/assess.
 """
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 
 
@@ -92,8 +92,8 @@ class TestJobAssess:
     def test_assess_returns_assessment(self, client):
         good_json = '{"match_score": 88, "summary": "Great fit", "strong_points": ["Python", "GCP"], "gaps": ["Rust"], "career_suggestions": ["Learn Rust"]}'
         with patch("backend.routers.jobs_v2._llm_from_request") as mock_factory:
-            mock_llm = AsyncMock()
-            mock_llm.complete = AsyncMock(return_value=good_json)
+            mock_llm = MagicMock()
+            mock_llm.complete = MagicMock(return_value=good_json)
             mock_factory.return_value = mock_llm
             resp = client.post("/api/jobs/assess", json=self._assess_payload())
 
@@ -105,8 +105,8 @@ class TestJobAssess:
 
     def test_assess_bad_llm_json_returns_fallback(self, client):
         with patch("backend.routers.jobs_v2._llm_from_request") as mock_factory:
-            mock_llm = AsyncMock()
-            mock_llm.complete = AsyncMock(return_value="sorry I cannot help with that")
+            mock_llm = MagicMock()
+            mock_llm.complete = MagicMock(return_value="sorry I cannot help with that")
             mock_factory.return_value = mock_llm
             resp = client.post("/api/jobs/assess", json=self._assess_payload())
 
@@ -122,8 +122,11 @@ class TestJobAssess:
         def capture_req(req):
             captured["provider"] = req.llm_provider
             captured["key"] = req.llm_api_key
-            mock_llm = AsyncMock()
-            mock_llm.complete = AsyncMock(return_value='{"match_score":70,"summary":"ok","strong_points":[],"gaps":[],"career_suggestions":[]}')
+            mock_llm = MagicMock()
+            mock_llm.complete = MagicMock(
+                return_value='{"match_score":70,"summary":"ok","strong_points":[],"gaps":[],"career_suggestions":[],'
+                '"company_insights":"","income_range":"","job_tags":[],"keywords_matched":[],"keywords_missing":[]}'
+            )
             return mock_llm
 
         with patch("backend.routers.jobs_v2._llm_from_request", side_effect=capture_req):

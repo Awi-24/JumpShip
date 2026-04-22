@@ -1,13 +1,13 @@
 """
-Router for job applications tracking and automation.
+Router for job application tracking.
 """
 from __future__ import annotations
 
 import uuid
-from typing import Optional, List
+from typing import Optional
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -16,16 +16,7 @@ from backend.models.db_models import Application, SavedJob
 
 router = APIRouter(prefix="/api/applications", tags=["applications"])
 
-VALID_STATUSES = [
-    "saved",
-    "analyzing",
-    "approved",
-    "applying",
-    "applied",
-    "interviewing",
-    "rejected",
-    "offered",
-]
+VALID_STATUSES = ["saved", "applied", "interviewing", "offered", "rejected"]
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
@@ -37,7 +28,6 @@ class CreateApplicationRequest(BaseModel):
     company_name: Optional[str] = None
     job_url: Optional[str] = None
     site: Optional[str] = None
-    is_easy_apply: bool = False
     notes: Optional[str] = None
     analysis_id: Optional[str] = None
 
@@ -45,12 +35,6 @@ class CreateApplicationRequest(BaseModel):
 class UpdateStatusRequest(BaseModel):
     status: str
     notes: Optional[str] = None
-
-
-class ApplyRequest(BaseModel):
-    application_id: str
-    user_profile: dict  # name, email, phone, etc.
-    resume_path: Optional[str] = None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -104,7 +88,6 @@ def create_application(req: CreateApplicationRequest, db: Session = Depends(get_
         company_name=company_name,
         job_url=job_url,
         site=site,
-        is_easy_apply=req.is_easy_apply,
         notes=req.notes,
         analysis_id=req.analysis_id,
         status="saved",
@@ -143,40 +126,6 @@ def update_status(
     return _app_to_dict(app)
 
 
-@router.post("/{application_id}/apply")
-def trigger_apply(
-    application_id: str,
-    req: ApplyRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-):
-    """
-    Trigger browser automation to apply to a job.
-    Runs in background and updates application status.
-    """
-    app = db.query(Application).filter(Application.id == application_id).first()
-    if not app:
-        raise HTTPException(status_code=404, detail="Application not found.")
-
-    if not app.job_url:
-        raise HTTPException(status_code=400, detail="No job URL available for automation.")
-
-    # Update status to "applying"
-    app.status = "applying"
-    db.commit()
-
-    # Run automation in background
-    background_tasks.add_task(
-        _run_apply_task,
-        application_id=application_id,
-        job_url=app.job_url,
-        user_profile=req.user_profile,
-        resume_path=req.resume_path,
-    )
-
-    return {"message": "Application automation started", "application_id": application_id}
-
-
 @router.delete("/{application_id}")
 def delete_application(application_id: str, db: Session = Depends(get_db)):
     """Remove an application record."""
@@ -211,39 +160,9 @@ def _app_to_dict(a: Application) -> dict:
         "job_url": a.job_url,
         "site": a.site,
         "status": a.status,
-        "is_easy_apply": a.is_easy_apply,
         "notes": a.notes,
         "analysis_id": a.analysis_id,
         "applied_at": a.applied_at.isoformat() if a.applied_at else None,
         "created_at": a.created_at.isoformat() if a.created_at else None,
         "updated_at": a.updated_at.isoformat() if a.updated_at else None,
     }
-
-
-def _run_apply_task(application_id: str, job_url: str, user_profile: dict, resume_path: Optional[str]):
-    """Background task: run browser automation and update DB."""
-    from backend.database import SessionLocal
-    from backend.services.browser_agent import run_apply
-
-    db = SessionLocal()
-    try:
-        result = run_apply(job_url, user_profile, resume_path)
-        app = db.query(Application).filter(Application.id == application_id).first()
-        if app:
-            if result.get("success"):
-                app.status = "applied"
-                app.applied_at = datetime.utcnow()
-                existing_notes = app.notes or ""
-                app.notes = (existing_notes + "\n" + result.get("log", "")).strip()
-            else:
-                app.status = "approved"  # revert to awaiting manual apply
-                existing_notes = app.notes or ""
-                app.notes = (existing_notes + "\nAutomation failed: " + result.get("log", "")).strip()
-            db.commit()
-    except Exception as e:
-        app = db.query(Application).filter(Application.id == application_id).first()
-        if app:
-            app.status = "approved"
-            db.commit()
-    finally:
-        db.close()

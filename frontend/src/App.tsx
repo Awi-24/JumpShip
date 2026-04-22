@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Landing from './pages/Landing';
 import Search from './pages/Search';
 import JobTracker from './pages/JobTracker';
-import Agents from './pages/Agents';
 import './styles.css';
 
 const queryClient = new QueryClient({
@@ -13,7 +12,28 @@ const queryClient = new QueryClient({
   },
 });
 
-type Page = 'landing' | 'search' | 'tracker' | 'agents';
+type Page = 'landing' | 'search' | 'tracker';
+
+function AmbientBackground() {
+  return (
+    <div className="ambient-bg" aria-hidden>
+      <div className="ambient-bg__motion">
+        <div className="orb orb-1" />
+        <div className="orb orb-2" />
+        <div className="orb orb-3" />
+        <div className="bubble bubble-1" />
+        <div className="bubble bubble-2" />
+        <div className="bubble bubble-3" />
+        <div className="bubble bubble-4" />
+        <div className="bubble bubble-5" />
+        <div className="bubble bubble-6" />
+        <div className="bubble bubble-7" />
+        <div className="bubble bubble-8" />
+      </div>
+      <div className="grid-overlay" />
+    </div>
+  );
+}
 
 function AppContent() {
   const [page, setPage] = useState<Page>('landing');
@@ -21,15 +41,17 @@ function AppContent() {
   if (page === 'landing') return <Landing onEnter={() => setPage('search')} />;
   if (page === 'search')  return <Search onBack={() => setPage('landing')} onNavigate={setPage} />;
   if (page === 'tracker') return <JobTracker onBack={() => setPage('search')} />;
-  if (page === 'agents')  return <Agents onBack={() => setPage('search')} />;
-  
+
   return <Landing onEnter={() => setPage('search')} />;
 }
 
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AppContent />
+      <div className="app-shell">
+        <AmbientBackground />
+        <AppContent />
+      </div>
     </QueryClientProvider>
   );
 }

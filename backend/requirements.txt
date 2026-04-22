@@ -19,30 +19,9 @@ anthropic>=0.40.0
 openai>=1.55.0
 google-generativeai>=0.8.0
 
-# ── LangChain Ecosystem ──────────────────
-langchain>=0.3.0
-langchain-core>=0.3.0
-langchain-ollama>=0.2.0
-langchain-openai>=0.2.0
-langchain-anthropic>=0.3.0
-langchain-google-genai>=2.0.0
-langchain-groq>=0.2.0
-langchain-community>=0.3.0
-
-# ── LangGraph (stateful multi-agent) ─────
-langgraph>=0.2.0
-langgraph-checkpoint-sqlite>=2.0.0
-
-# ── Inbox agent (email classification) ───
-imapclient>=3.0.1
-
-# ── Legacy dependencies ─────────────────
-pandas>=2.2.0
-alembic>=1.14.0
-
-# ── Auto-apply browser agent ────────────
-# After pip install, also run: playwright install chromium
-playwright>=1.49.0
+# ── PDF generation ───────────────────────
+fpdf2>=2.7.9
+markdown>=3.7
 
 # ── jobspy transitive dependencies ──────
 requests>=2.32.0
@@ -51,3 +30,4 @@ tls-client>=1.0.1
 markdownify>=1.1.0
 regex>=2024.11.0
 numpy>=1.26.0
+pandas>=2.2.0

@@ -1,11 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import JobCard from '../../components/JobCard';
-import type { JobResult, ResumeProfile } from '../../types';
-
-// Mock global fetch
-const mockFetch = vi.fn();
-global.fetch = mockFetch;
+import type { JobResult, ResumeProfile, JobAssessment } from '../../types';
 
 const mockJob: JobResult = {
   id: 'job-1',
@@ -32,19 +28,22 @@ const mockProfile: ResumeProfile = {
   raw_text: 'Ada is an ML Engineer...',
 };
 
-const mockAssessment = {
+const mockAssessment: JobAssessment = {
   match_score: 88,
   summary: 'Great fit for this role.',
   strong_points: ['Strong Python skills', 'GCP experience matches'],
   gaps: ['No Rust experience'],
   career_suggestions: ['Learn MLflow for experiment tracking'],
+  company_insights: '',
+  income_range: '',
+  is_relevant: true,
+  job_tags: [],
+  keywords_matched: [],
+  keywords_missing: [],
+  resume_generation_triggered: false,
 };
 
 describe('JobCard', () => {
-  beforeEach(() => {
-    mockFetch.mockClear();
-  });
-
   it('renders job title and company', () => {
     render(<JobCard job={mockJob} resumeProfile={null} />);
     expect(screen.getByText('Senior ML Engineer')).toBeInTheDocument();
@@ -63,19 +62,14 @@ describe('JobCard', () => {
     expect(container.querySelector('.score-ring')).toBeNull();
   });
 
-  it('expands card on click', () => {
+  it('expands and collapses the card body', () => {
     const { container } = render(<JobCard job={mockJob} resumeProfile={null} />);
     const header = container.querySelector('.job-card-header')!;
     fireEvent.click(header);
-    expect(container.querySelector('.job-expanded.open')).toBeTruthy();
-  });
-
-  it('collapses card on second click', () => {
-    const { container } = render(<JobCard job={mockJob} resumeProfile={null} />);
-    const header = container.querySelector('.job-card-header')!;
+    expect(container.querySelector('.job-card.expanded')).toBeTruthy();
+    expect(container.querySelector('.job-expanded-body')).toBeTruthy();
     fireEvent.click(header);
-    fireEvent.click(header);
-    expect(container.querySelector('.job-expanded.open')).toBeNull();
+    expect(container.querySelector('.job-card.expanded')).toBeNull();
   });
 
   it('shows upload-resume prompt when no profile', () => {
@@ -84,72 +78,28 @@ describe('JobCard', () => {
     expect(screen.getByText(/Upload your résumé/i)).toBeInTheDocument();
   });
 
-  it('triggers assessment fetch when expanded with resume profile', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockAssessment,
-    });
-
+  it('renders assessment content when provided by parent', () => {
     const { container } = render(
-      <JobCard job={mockJob} resumeProfile={mockProfile} llmConfig={{ provider: 'ollama', model: 'llama3:8b', apiKey: '', baseUrl: 'http://localhost:11434' }} />
+      <JobCard job={mockJob} resumeProfile={mockProfile} assessment={mockAssessment} />
     );
     fireEvent.click(container.querySelector('.job-card-header')!);
-
-    await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/jobs/assess',
-        expect.objectContaining({ method: 'POST' })
-      );
-    });
+    expect(screen.getByText('Great fit for this role.')).toBeInTheDocument();
+    expect(screen.getByText('Strong Python skills')).toBeInTheDocument();
+    expect(screen.getByText('No Rust experience')).toBeInTheDocument();
   });
 
-  it('displays assessment results after fetch', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockAssessment,
-    });
-
+  it('calls onReassess when Re-assess is clicked', () => {
+    const onReassess = vi.fn();
     const { container } = render(
-      <JobCard job={mockJob} resumeProfile={mockProfile} />
+      <JobCard
+        job={mockJob}
+        resumeProfile={mockProfile}
+        assessment={mockAssessment}
+        onReassess={onReassess}
+      />
     );
     fireEvent.click(container.querySelector('.job-card-header')!);
-
-    await waitFor(() => {
-      expect(screen.getByText('Great fit for this role.')).toBeInTheDocument();
-      expect(screen.getByText('Strong Python skills')).toBeInTheDocument();
-      expect(screen.getByText('No Rust experience')).toBeInTheDocument();
-    });
-  });
-
-  it('shows error message on assessment failure', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: false, status: 500 });
-
-    const { container } = render(
-      <JobCard job={mockJob} resumeProfile={mockProfile} />
-    );
-    fireEvent.click(container.querySelector('.job-card-header')!);
-
-    await waitFor(() => {
-      expect(screen.getByText(/Assessment failed/i)).toBeInTheDocument();
-    });
-  });
-
-  it('does not re-fetch assessment on second expand', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockAssessment,
-    });
-
-    const { container } = render(
-      <JobCard job={mockJob} resumeProfile={mockProfile} />
-    );
-    const header = container.querySelector('.job-card-header')!;
-    fireEvent.click(header); // expand → fetch
-    await waitFor(() => screen.getByText('Great fit for this role.'));
-
-    fireEvent.click(header); // collapse
-    fireEvent.click(header); // re-expand → should NOT fetch again
-
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: /Re-assess/i }));
+    expect(onReassess).toHaveBeenCalledTimes(1);
   });
 });

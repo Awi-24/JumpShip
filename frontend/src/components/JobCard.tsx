@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   Banknote, AlertTriangle, Bookmark, Send, Target, Trophy, X,
-  FileText, Bot, Check, Sparkles, Tag, Globe, ChevronDown, Zap,
+  FileText, Bot, Check, Sparkles, Tag, Globe, ChevronDown, FileDown,
 } from 'lucide-react';
 import ScoreRing from './ScoreRing';
 import type { JobResult, JobAssessment, ResumeProfile, BookmarkStatus } from '../types';
@@ -18,13 +18,13 @@ interface JobCardProps {
   resumeProfile: ResumeProfile | null;
   llmConfig?: LLMConfig;
   keywords?: string[];
-  // Assessment state owned by parent (Search.tsx)
   assessment?: JobAssessment;
   assessing?: boolean;
   onReassess?: () => void;
   bookmarkStatus?: BookmarkStatus;
   onBookmark?: (status: BookmarkStatus | null) => void;
-  onAutoApply?: () => void;
+  onGenerateResume?: () => void;
+  generatingResume?: boolean;
 }
 
 /** Lightweight markdown → HTML (no external dep needed). */
@@ -68,7 +68,8 @@ export default function JobCard({
   onReassess,
   bookmarkStatus,
   onBookmark,
-  onAutoApply,
+  onGenerateResume,
+  generatingResume,
 }: JobCardProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -76,27 +77,24 @@ export default function JobCard({
 
   const locLower = (job.location || '').toLowerCase();
   const workStyle = (() => {
-    if (locLower.includes('híbrido') || locLower.includes('hibrido') || locLower.includes('hybrid')) {
-      return { cls: 'hybrid' as const, label: 'Hybrid' };
+    // Prefer the backend-resolved is_remote field; fall back to string scanning
+    if (job.is_remote === null || locLower.includes('híbrido') || locLower.includes('hibrido') || locLower.includes('hybrid')) {
+      return { cls: 'hybrid' as const, label: 'Híbrido' };
     }
-    if (
-      locLower.includes('remote') ||
-      locLower.includes('remoto') ||
-      locLower.includes('home office') ||
-      locLower.includes('anywhere') ||
-      locLower.includes('wfh') ||
-      locLower.includes('teletrabalho') ||
-      locLower.includes('trabalho remoto') ||
-      locLower.includes('distributed')
-    ) {
-      const label =
-        (locLower.includes('remoto') || locLower.includes('teletrabalho')) && !locLower.includes('remote')
-          ? 'Remoto'
-          : 'Remote';
-      return { cls: 'remote' as const, label };
+    if (job.is_remote === true) {
+      const isPortuguese = locLower.includes('remoto') || locLower.includes('teletrabalho');
+      return { cls: 'remote' as const, label: isPortuguese ? 'Remoto' : 'Remote' };
+    }
+    if (job.is_remote === false) {
+      return { cls: 'onsite' as const, label: 'Presencial' };
     }
     return { cls: '' as const, label: '' };
   })();
+
+  // LLM tags from assessment (stack, domain, etc.) — shown even before full expand
+  const llmTags: string[] = assessment?.job_tags ?? [];
+  // Scraper tags that aren't work-mode (already shown via workStyle)
+  const scraperTags = (job.tags ?? []).filter(t => !['remote','hybrid','on-site','remoto','presencial'].includes(t));
 
   const hits = matchedKeywords(job, keywords);
 
@@ -131,24 +129,35 @@ export default function JobCard({
           <div className="job-title">{job.title}</div>
           <div className="job-company">{job.company} · {job.location}</div>
           <div className="job-tags">
-            {workStyle.cls && <span className={`tag ${workStyle.cls}`}>{workStyle.label}</span>}
-            {/* Scraper-derived tags (seniority, contract type) */}
-            {job.tags?.filter(t => !['remote','hybrid','on-site'].includes(t)).map(t => (
+            {/* Work mode — from backend is_remote */}
+            {workStyle.cls && <span className={`tag tag-workmode ${workStyle.cls}`}>{workStyle.label}</span>}
+            {/* Seniority / contract from scraper */}
+            {scraperTags.map(t => (
               <span key={t} className="tag tag-feature">{t}</span>
             ))}
-            {job.site && <span className="tag">{job.site}</span>}
-            {job.posted_date && <span className="tag">{job.posted_date}</span>}
-            {/* Salary — green tag when available */}
-            {job.salary_range && (
-              <span className="tag salary"><Banknote size={11} style={{ verticalAlign: 'middle', marginRight: 3 }} />{job.salary_range}</span>
+            {/* Salary — green tag when available from scraper or LLM */}
+            {(job.salary_range || assessment?.income_range) && (
+              <span className="tag salary">
+                <Banknote size={11} style={{ verticalAlign: 'middle', marginRight: 3 }} />
+                {job.salary_range || assessment?.income_range}
+              </span>
             )}
-            {/* Matched keywords — gold highlight chips */}
+            {/* LLM stack/domain tags — shown as soon as assessment arrives */}
+            {llmTags.map(t => (
+              <span key={t} className="tag tag-llm">{t}</span>
+            ))}
+            {/* Source platform */}
+            {job.site && <span className="tag tag-source">{job.site}</span>}
+            {/* Posted date */}
+            {job.posted_date && <span className="tag tag-date">{job.posted_date}</span>}
+            {/* Matched keywords */}
             {hits.map(kw => (
               <span key={kw} className="tag kw-match">{kw}</span>
             ))}
-            {/* Description quality indicator */}
             {(!job.description || job.description.length < 100) && (
-              <span className="tag desc-warn" title="Short or missing description — AI assessment may be less accurate"><AlertTriangle size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />Low detail</span>
+              <span className="tag desc-warn" title="Short description: AI assessment may be less accurate">
+                <AlertTriangle size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />Low detail
+              </span>
             )}
           </div>
         </div>
@@ -317,6 +326,36 @@ export default function JobCard({
                         </div>
                       )}
 
+                      {/* Keywords matched / missing */}
+                      {((assessment.keywords_matched?.length ?? 0) > 0 || (assessment.keywords_missing?.length ?? 0) > 0) && (
+                        <div style={{ marginTop: 14 }}>
+                          {(assessment.keywords_matched?.length ?? 0) > 0 && (
+                            <div style={{ marginBottom: 8 }}>
+                              <div className="assessment-pros-title" style={{ color: '#4ade80', fontSize: 11, marginBottom: 5 }}>
+                                <Check size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />Keywords Matched
+                              </div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                {assessment.keywords_matched!.map(k => (
+                                  <span key={k} className="tag" style={{ fontSize: 10, background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', color: '#4ade80' }}>{k}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {(assessment.keywords_missing?.length ?? 0) > 0 && (
+                            <div>
+                              <div className="assessment-pros-title" style={{ color: '#f87171', fontSize: 11, marginBottom: 5 }}>
+                                <AlertTriangle size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />Keywords Missing
+                              </div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                {assessment.keywords_missing!.map(k => (
+                                  <span key={k} className="tag" style={{ fontSize: 10, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171' }}>{k}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {assessment.company_insights && (
                         <div style={{ marginTop: 16 }}>
                           <div className="assessment-pros-title" style={{ color: '#60a5fa' }}>
@@ -346,16 +385,33 @@ export default function JobCard({
             >
               Apply Now →
             </a>
-            {onAutoApply && (
+
+            {/* Generate tailored resume — shown when score meets threshold or manually triggered */}
+            {resumeProfile && onGenerateResume && (
               <button
                 className="apply-btn"
-                style={{ background: 'rgba(245,166,35,0.12)', border: '1px solid var(--border-bright)', color: 'var(--gold)' }}
-                onClick={onAutoApply}
-                title="Auto-fill this application with your profile data"
+                style={{
+                  background: assessment?.resume_generation_triggered
+                    ? 'rgba(74,222,128,0.12)'
+                    : 'rgba(245,166,35,0.08)',
+                  border: `1px solid ${assessment?.resume_generation_triggered ? 'rgba(74,222,128,0.35)' : 'var(--border-bright)'}`,
+                  color: assessment?.resume_generation_triggered ? '#4ade80' : 'var(--gold)',
+                }}
+                onClick={onGenerateResume}
+                disabled={generatingResume}
+                title={assessment?.resume_generation_triggered
+                  ? `Score ${assessment.match_score}%: auto-triggered resume generation`
+                  : 'Generate a tailored resume for this job'}
               >
-                <Zap size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} />Auto Apply
+                {generatingResume
+                  ? <><div className="spinner" style={{ width: 10, height: 10 }} /> Generating…</>
+                  : <><FileDown size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                    {assessment?.resume_generation_triggered ? 'Download Resume ↓' : 'Generate Resume'}
+                  </>
+                }
               </button>
             )}
+
             {resumeProfile && onReassess && (
               <button
                 className="apply-btn"
@@ -366,7 +422,7 @@ export default function JobCard({
                 {assessing ? <><div className="spinner" style={{ width: 10, height: 10 }} /> Analyzing…</> : '↺ Re-assess'}
               </button>
             )}
-            {/* Bookmark / Application Tracker */}
+
             {onBookmark && (
               <div className="bookmark-actions">
                 {!bookmarkStatus ? (
@@ -385,10 +441,10 @@ export default function JobCard({
                       onChange={e => onBookmark(e.target.value as BookmarkStatus)}
                     >
                       <option value="saved">☆ Saved</option>
-                      <option value="applied">📨 Applied</option>
-                      <option value="interview">🎯 Interview</option>
-                      <option value="rejected">✕ Rejected</option>
-                      <option value="offer">🎉 Offer</option>
+                      <option value="applied">Applied</option>
+                      <option value="interview">Interview</option>
+                      <option value="rejected">Rejected</option>
+                      <option value="offer">Offer</option>
                     </select>
                     <button
                       className="apply-btn"

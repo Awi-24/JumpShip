@@ -13,7 +13,7 @@ const POPULAR_LOCATIONS = [
     group: '🇧🇷 Brasil',
     items: [
       'Brasil (todo o país)',
-      'Brasil — Remoto',
+      'Brasil (Remoto)',
       'São Paulo',
       'Rio de Janeiro',
       'Belo Horizonte',
@@ -31,7 +31,7 @@ const POPULAR_LOCATIONS = [
     group: '🇺🇸 United States',
     items: [
       'United States (country-wide)',
-      'United States — Remote',
+      'United States (Remote)',
       'New York, NY',
       'San Francisco, CA',
       'Seattle, WA',
@@ -45,35 +45,35 @@ const POPULAR_LOCATIONS = [
   },
   {
     group: '🇨🇦 Canada',
-    items: ['Canada (country-wide)', 'Canada — Remote', 'Toronto', 'Vancouver', 'Montreal'],
+    items: ['Canada (country-wide)', 'Canada (Remote)', 'Toronto', 'Vancouver', 'Montreal'],
   },
   {
     group: '🇬🇧 United Kingdom',
-    items: ['United Kingdom (country-wide)', 'UK — Remote', 'London', 'Manchester', 'Edinburgh'],
+    items: ['United Kingdom (country-wide)', 'UK (Remote)', 'London', 'Manchester', 'Edinburgh'],
   },
   {
     group: '🇩🇪 Germany',
-    items: ['Germany (country-wide)', 'Germany — Remote', 'Berlin', 'Munich', 'Hamburg', 'Frankfurt'],
+    items: ['Germany (country-wide)', 'Germany (Remote)', 'Berlin', 'Munich', 'Hamburg', 'Frankfurt'],
   },
   {
     group: '🇫🇷 France',
-    items: ['France (country-wide)', 'France — Remote', 'Paris', 'Lyon', 'Toulouse'],
+    items: ['France (country-wide)', 'France (Remote)', 'Paris', 'Lyon', 'Toulouse'],
   },
   {
     group: '🇪🇸 Spain',
-    items: ['Spain (country-wide)', 'Spain — Remote', 'Madrid', 'Barcelona', 'Valencia'],
+    items: ['Spain (country-wide)', 'Spain (Remote)', 'Madrid', 'Barcelona', 'Valencia'],
   },
   {
     group: '🇵🇹 Portugal',
-    items: ['Portugal (country-wide)', 'Portugal — Remote', 'Lisbon', 'Porto'],
+    items: ['Portugal (country-wide)', 'Portugal (Remote)', 'Lisbon', 'Porto'],
   },
   {
     group: '🇳🇱 Netherlands',
-    items: ['Netherlands (country-wide)', 'Netherlands — Remote', 'Amsterdam', 'Rotterdam'],
+    items: ['Netherlands (country-wide)', 'Netherlands (Remote)', 'Amsterdam', 'Rotterdam'],
   },
   {
     group: '🇮🇪 Ireland',
-    items: ['Ireland (country-wide)', 'Ireland — Remote', 'Dublin', 'Cork'],
+    items: ['Ireland (country-wide)', 'Ireland (Remote)', 'Dublin', 'Cork'],
   },
   {
     group: '🇨🇭 Switzerland',
@@ -105,15 +105,15 @@ const POPULAR_LOCATIONS = [
   },
   {
     group: '🇦🇺 Australia',
-    items: ['Australia (country-wide)', 'Australia — Remote', 'Sydney', 'Melbourne', 'Brisbane'],
+    items: ['Australia (country-wide)', 'Australia (Remote)', 'Sydney', 'Melbourne', 'Brisbane'],
   },
   {
     group: '🇮🇳 India',
-    items: ['India (country-wide)', 'India — Remote', 'Bengaluru', 'Mumbai', 'Hyderabad', 'Pune'],
+    items: ['India (country-wide)', 'India (Remote)', 'Bengaluru', 'Mumbai', 'Hyderabad', 'Pune'],
   },
   {
     group: '🇯🇵 Japan',
-    items: ['Japan (country-wide)', 'Japan — Remote', 'Tokyo', 'Osaka'],
+    items: ['Japan (country-wide)', 'Japan (Remote)', 'Tokyo', 'Osaka'],
   },
   {
     group: '🇸🇬 Singapore',
@@ -205,7 +205,7 @@ export default function LocationSelect({ value, onChange }: Props) {
           className="custom-select-list location-select-list"
           style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 9999 }}
         >
-          {/* Search bar — fixed at top, never scrolls */}
+          {/* Search bar: fixed at top, never scrolls */}
           <div className="location-search-wrap">
             <input
               ref={inputRef}
@@ -247,7 +247,7 @@ export default function LocationSelect({ value, onChange }: Props) {
 
             {filtered.length === 0 && (
               <div style={{ padding: '12px', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
-                No matches — type a city or country name, or use "{query.trim()}"
+                No matches. Type a city or country name, or use "{query.trim()}"
               </div>
             )}
           </div>

@@ -3,6 +3,7 @@ JumpShip — Resume parser using pdfminer.six + python-docx + LLM extraction.
 """
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import logging
@@ -11,15 +12,33 @@ import re
 logger = logging.getLogger(__name__)
 
 
+def _clean_text(text: str) -> str:
+    """Remove PDF artefacts and normalize whitespace for LLM consumption."""
+    # Replace form feeds and other control chars with newlines
+    text = text.replace('\f', '\n').replace('\r', '\n')
+    # Replace non-breaking spaces and other unicode spaces
+    text = re.sub(r'[\xa0\u2000-\u200b\u202f\u3000]', ' ', text)
+    # Collapse 3+ consecutive newlines into 2
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    # Collapse multiple spaces into one
+    text = re.sub(r' {2,}', ' ', text)
+    # Strip each line
+    lines = [line.strip() for line in text.splitlines()]
+    # Remove lines that are pure noise (very short, only symbols)
+    lines = [l for l in lines if len(l) > 1 or l.isalpha()]
+    return '\n'.join(lines).strip()
+
+
 async def extract_text(file_bytes: bytes, filename: str) -> str:
-    """Extract plain text from PDF or DOCX bytes."""
+    """Extract and clean plain text from PDF or DOCX bytes."""
     lower = filename.lower()
     if lower.endswith(".pdf"):
-        return _extract_pdf(file_bytes)
+        raw = _extract_pdf(file_bytes)
     elif lower.endswith(".docx"):
-        return _extract_docx(file_bytes)
+        raw = _extract_docx(file_bytes)
     else:
         raise ValueError(f"Unsupported file type: {filename}")
+    return _clean_text(raw)
 
 
 def _extract_pdf(data: bytes) -> str:
@@ -48,38 +67,41 @@ async def parse_profile(text: str, llm) -> dict:
     """Use the LLM to extract a structured profile from resume text."""
 
     system = """\
-You are an expert technical recruiter and resume parser with 15+ years of experience.
-Your task is to extract a precise, structured professional profile from a resume.
+You are an expert technical recruiter parsing a resume for a Brazilian job platform.
+Extract a structured profile and generate bilingual job search keywords.
 
 CRITICAL RULES:
 1. Return ONLY valid JSON — no markdown fences, no explanation, no commentary.
-2. "suggested_keywords" must be SPECIFIC and SEARCH-READY — these are terms a recruiter would type
-   into a job board. Include: core technologies, frameworks, methodologies, seniority level, and domain.
-   Examples: "Python backend", "React TypeScript", "MLOps Kubernetes", "Staff Engineer", "fintech SaaS"
-3. "suggested_titles" must reflect actual job titles the candidate could apply for, ordered by best fit.
-4. "skills" must be specific (e.g. "FastAPI" not just "web frameworks", "PostgreSQL" not just "databases").
-5. Infer seniority from experience_years, job titles held, and complexity of responsibilities.
-6. If information is missing or unclear, use an empty array or 0 — never guess wildly.
+2. "suggested_keywords" = job titles the candidate should search for, in BOTH Portuguese AND English.
+   Include the same role in both languages. Keep each entry to 2-5 words.
+   Examples: ["Engenheiro de Dados", "Data Engineer", "Desenvolvedor Python", "Python Developer",
+              "Engenheiro MLOps", "MLOps Engineer", "Cientista de Dados Sênior", "Senior Data Scientist"]
+3. "suggested_titles" = same list but English-only, ordered by best fit (used as display labels).
+4. "skills" = specific tools/technologies only (e.g. "FastAPI", "PostgreSQL", "React", "Kubernetes").
+5. Infer seniority (Júnior/Pleno/Sênior or Junior/Mid/Senior) from years of experience and job titles.
+6. Use empty array [] or 0 for missing fields — never invent information.
 
-OUTPUT SCHEMA (strict):
+OUTPUT SCHEMA (strict — no extra keys):
 {
   "name": "Full Name",
-  "title": "Inferred current/most recent title + seniority (e.g. Senior ML Engineer)",
-  "skills": ["list of specific technical and soft skills, max 20"],
-  "experience_years": <integer: total years of relevant professional experience>,
-  "domains": ["business domains: e.g. FinTech, E-commerce, MLOps, Data Engineering, DevOps"],
-  "suggested_keywords": ["8-15 search-ready terms combining role+tech+domain"],
-  "suggested_titles": ["5-8 exact job titles to search for, ordered by best fit"]
+  "title": "Current/most recent role with seniority level in English",
+  "skills": ["up to 20 specific technologies and tools"],
+  "experience_years": <integer>,
+  "domains": ["industry domains, e.g. FinTech, E-commerce, Data Engineering, GenAI"],
+  "suggested_keywords": ["10-20 bilingual job titles: alternate PT and EN versions of each role"],
+  "suggested_titles": ["5-8 English job titles ordered by best fit"]
 }"""
 
     user = f"""\
-Parse the following resume and return the structured JSON profile.
-Focus on extracting actionable search keywords that will find relevant job listings.
+Parse this resume. Return ONLY the JSON object, nothing else.
 
 RESUME:
 {text[:5000]}"""
 
-    response = await llm.complete(system, user)
+    if asyncio.iscoroutinefunction(llm.complete):
+        response = await llm.complete(system, user)
+    else:
+        response = await asyncio.to_thread(llm.complete, system, user)
 
     try:
         cleaned = _clean_json_response(response)
@@ -100,14 +122,19 @@ RESUME:
             if not isinstance(data[field], list):
                 data[field] = []
 
-        # Normalize suggested_keywords: split camelCase, lowercase, deduplicate,
-        # reject anything longer than 3 words (too specific for job board search).
-        data["suggested_keywords"] = _normalize_keywords(data["suggested_keywords"])
+        # Deduplicate keywords; also merge suggested_titles as fallback
+        kw = _dedup_keywords(data["suggested_keywords"])
+        if not kw:
+            kw = _dedup_keywords(data["suggested_titles"])
+        data["suggested_keywords"] = kw
 
         return data
 
     except (json.JSONDecodeError, KeyError) as exc:
-        logger.error("Failed to parse LLM response as JSON: %s | response: %s", exc, response[:300])
+        logger.error(
+            "Resume JSON parse failed: %s\n--- LLM raw response (first 800 chars) ---\n%s\n---",
+            exc, response[:800],
+        )
         return {
             "name": "",
             "title": "",
@@ -120,41 +147,20 @@ RESUME:
         }
 
 
-def _normalize_keywords(keywords: list) -> list:
-    """
-    Post-process LLM-generated keywords:
-    - Split camelCase/PascalCase into words (e.g. "MachineLearning" → "machine learning")
-    - Lowercase everything
-    - Strip leading/trailing whitespace
-    - Drop keywords longer than 3 words (too narrow for job board queries)
-    - Deduplicate (case-insensitive)
-    """
-    import re
-
-    def split_camel(s: str) -> str:
-        # Insert space before uppercase letters preceded by lowercase or digits
-        s = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', s)
-        # Insert space before sequences of uppercase followed by lowercase (e.g. "RESTApi" → "REST Api")
-        s = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1 \2', s)
-        return s
-
+def _dedup_keywords(keywords: list) -> list:
+    """Deduplicate and clean job title keywords. Preserves original casing and allows multi-word titles."""
     seen: set[str] = set()
     result: list[str] = []
     for kw in keywords:
         if not isinstance(kw, str):
             continue
-        normalized = split_camel(kw).strip().lower()
-        # Remove duplicate internal spaces
-        normalized = re.sub(r'\s+', ' ', normalized)
-        # Drop if > 3 words
-        if len(normalized.split()) > 3:
+        cleaned = re.sub(r'\s+', ' ', kw.strip())
+        if len(cleaned) < 2:
             continue
-        # Drop if empty or too short
-        if len(normalized) < 2:
-            continue
-        if normalized not in seen:
-            seen.add(normalized)
-            result.append(normalized)
+        key = cleaned.lower()
+        if key not in seen:
+            seen.add(key)
+            result.append(cleaned)
     return result
 
 

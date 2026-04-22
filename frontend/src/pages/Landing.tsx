@@ -1,9 +1,9 @@
 import { motion, type Variants } from 'framer-motion';
 import {
-  Brain, FileText, Search, BarChart3, Globe, Lock, Star,
-  Bot, Bookmark, Zap, ChevronRight, Database,
+  Brain, FileText, Search, BarChart3, Globe, Lock,
+  Bookmark, Zap, ChevronRight, Database, Layers,
+  Map, Cpu, GitBranch, Mail, Rocket,
 } from 'lucide-react';
-import ParticleCanvas from '../components/ParticleCanvas';
 import ThemeToggle from '../components/ThemeToggle';
 
 const LINKS = {
@@ -12,204 +12,226 @@ const LINKS = {
   jobspyRepo: 'https://github.com/Bunsly/JobSpy',
 };
 
-interface LandingProps {
-  onEnter: () => void;
-}
+interface LandingProps { onEnter: () => void; }
 
-const VIEWPORT = { once: true, amount: 0.22, margin: '0px 0px -10% 0px' };
-
+const VIEWPORT = { once: true, amount: 0.15, margin: '0px 0px -6% 0px' };
 const EASE_OUT: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
 const fadeUp: Variants = {
-  hidden: { opacity: 0, y: 36 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.55, ease: EASE_OUT },
-  },
+  hidden: { opacity: 0, y: 40 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE_OUT } },
 };
 
 const staggerParent: Variants = {
   hidden: {},
-  visible: {
-    transition: { staggerChildren: 0.08, delayChildren: 0.06 },
-  },
+  visible: { transition: { staggerChildren: 0.09, delayChildren: 0.05 } },
 };
 
 const staggerItem: Variants = {
-  hidden: { opacity: 0, y: 28 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.45, ease: EASE_OUT },
-  },
+  hidden: { opacity: 0, y: 24 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.45, ease: EASE_OUT } },
 };
+
+const PIPELINE_STEPS = [
+  {
+    num: '01',
+    Icon: FileText,
+    title: 'Parse your résumé',
+    desc: 'Drop a PDF or DOCX. An LLM extracts your skills, seniority, domains, and generates bilingual search keywords automatically.',
+  },
+  {
+    num: '02',
+    Icon: Search,
+    title: 'Search 9+ job boards',
+    desc: 'LinkedIn, Indeed, Glassdoor, RemoteOK, Gupy, Programathor, Trampos and more, aggregated into one unified, deduplicated feed.',
+  },
+  {
+    num: '03',
+    Icon: Brain,
+    title: 'AI scores every listing',
+    desc: 'Each job gets a calibrated 0-100 match score, gap analysis, salary estimate, company intel, and stack tags, in parallel.',
+  },
+  {
+    num: '04',
+    Icon: Zap,
+    title: 'Tailored résumé export',
+    desc: 'Generate a tailored résumé PDF per job, rewritten by the LLM to highlight what matters for that role, exported as a ready-to-send document.',
+  },
+];
 
 const FEATURES = [
   {
     Icon: Brain,
-    name: 'LLM-Powered Matching',
-    desc: 'Local or cloud models score every job against your actual profile — not just keywords. Powered by Ollama, Groq, OpenAI, or Anthropic.',
+    name: 'LLM-Powered Scoring',
+    desc: 'Local (Ollama/LM Studio) or cloud (Groq, OpenAI, Anthropic, Gemini). Scores are calibrated, not keyword-stuffed; 90+ means near-perfect fit.',
   },
   {
     Icon: FileText,
-    name: 'Smart Resume Parsing',
-    desc: 'Upload PDF or DOCX. The AI extracts your skills, seniority, and domain focus to auto-populate search filters and rank results.',
-  },
-  {
-    Icon: Search,
-    name: 'Multi-Source Search',
-    desc: 'Aggregates LinkedIn, Indeed, Glassdoor, ZipRecruiter, RemoteOK, and Arbeitnow into one clean, unified interface.',
+    name: 'Résumé-Native Search',
+    desc: 'Upload once. Profile is cached locally, bilingual keywords auto-populate filters, and every search session starts pre-configured.',
   },
   {
     Icon: BarChart3,
     name: 'Deep Gap Analysis',
-    desc: 'For every job: a calibrated match score, specific strong points, honest gaps, and career suggestions tailored to your profile.',
-  },
-  {
-    Icon: Bot,
-    name: 'Auto-Apply Agents',
-    desc: 'Autonomous Playwright agents fill and submit applications on Greenhouse, Lever, LinkedIn, and more — running locally, in parallel, based on your profile.',
+    desc: 'Match score + specific strong points, honest gaps, salary estimate with disclosed/estimated label, and actionable career suggestions.',
   },
   {
     Icon: Globe,
     name: 'Company Intelligence',
-    desc: 'Each assessment is enriched with live web data: culture reviews, typical salaries, Glassdoor sentiment, and company reputation.',
+    desc: 'Live web enrichment: culture, Glassdoor sentiment, growth stage, and engineering reputation, surfaced alongside the match score.',
   },
   {
     Icon: Bookmark,
-    name: 'Application Tracker',
-    desc: 'Kanban-style board tracks every application from Saved → Applied → Interview → Offer. Export to CSV anytime.',
+    name: 'Kanban Tracker',
+    desc: 'Drag cards from Saved → Applied → Interview → Offer. IMAP inbox polling auto-classifies recruiter emails into the right column.',
   },
   {
     Icon: Lock,
-    name: '100% Private',
-    desc: 'Your resume stays on your machine. Inference runs locally via Ollama by default. Cloud APIs are opt-in and key-controlled.',
+    name: 'Privacy by Default',
+    desc: 'Your résumé never leaves your machine unless you choose cloud APIs. All inference runs locally via Ollama. Keys are yours, stored locally.',
+  },
+  {
+    Icon: Layers,
+    name: 'Parallel Assessment',
+    desc: 'Cloud providers run all assessments concurrently. Local providers queue safely with a semaphore, so no GPU contention with résumé generation.',
   },
 ];
 
-const WHY_JUMPSHIP_BOXES = [
+const ROADMAP = [
   {
-    title: 'Résumé-native ranking',
-    desc: 'Scores reflect your real experience — not keyword stuffing or generic filters.',
+    Icon: Map,
+    title: 'Brazilian Job Aggregator',
+    desc: 'A standalone scraper layer, independent of JobSpy, targeting Catho, InfoJobs, Vagas.com, 99jobs, Empregos.com.br, and Trampos directly via headless browsing. No third-party API dependency, no rate limits.',
   },
   {
-    title: 'Privacy by default',
-    desc: 'Keep data on your machine; use Ollama locally or opt into cloud APIs with your keys.',
+    Icon: Cpu,
+    title: 'Browser-Native Scraper Engine',
+    desc: 'Replace JobSpy as the core data layer with a headless browser engine that handles login-walled boards, dynamic pagination, and anti-bot measures natively.',
   },
   {
-    title: 'Yours to extend',
-    desc: 'Open source: swap scrapers, models, and agent strategies without vendor lock-in.',
+    Icon: GitBranch,
+    title: 'Multi-Profile Support',
+    desc: 'Switch between multiple résumé profiles (e.g. backend engineer vs. data engineer) without re-uploading. Each profile gets its own keyword set and saved searches.',
+  },
+  {
+    Icon: Mail,
+    title: 'Inbox Intelligence',
+    desc: 'Beyond email classification: parse recruiter messages to extract compensation ranges, interview slots, and follow-up deadlines, synced to the tracker.',
+  },
+  {
+    Icon: Rocket,
+    title: 'Cover Letter Generator',
+    desc: 'LLM-drafted cover letters tailored per job, using your profile, the company context, and your gap analysis, exported as PDF alongside the résumé.',
   },
 ];
 
-const HOW_STEPS = [
-  {
-    num: '01',
-    title: 'Upload your résumé',
-    desc: 'Drop your PDF or DOCX. The LLM parses your profile, extracts skills and domains, and auto-fills search keywords.',
-  },
-  {
-    num: '02',
-    title: 'Get scored results',
-    desc: 'Every job gets an AI match score (0–100), gap analysis, and company intelligence — automatically, in parallel.',
-  },
-  {
-    num: '03',
-    title: 'Apply autonomously',
-    desc: 'Queue jobs for auto-apply. Agents fill forms on Greenhouse, Lever, LinkedIn and more — review in dry-run before going live.',
-  },
+// ── Floating icons (landing only) ────────────────────────────────────────────
+
+const FLOAT_ICONS = [
+  { Icon: Brain,    x: '8%',  y: '18%', delay: 0,    size: 20, opacity: 0.1  },
+  { Icon: Search,   x: '88%', y: '12%', delay: 1.2,  size: 16, opacity: 0.08 },
+  { Icon: FileText, x: '4%',  y: '60%', delay: 2.1,  size: 18, opacity: 0.08 },
+  { Icon: Cpu,      x: '92%', y: '55%', delay: 0.7,  size: 22, opacity: 0.09 },
+  { Icon: Zap,      x: '50%', y: '8%',  delay: 1.8,  size: 14, opacity: 0.07 },
+  { Icon: Globe,    x: '78%', y: '82%', delay: 0.4,  size: 18, opacity: 0.08 },
+  { Icon: Database, x: '15%', y: '88%', delay: 1.5,  size: 16, opacity: 0.07 },
+  { Icon: BarChart3,x: '65%', y: '92%', delay: 2.6,  size: 14, opacity: 0.06 },
 ];
 
 export default function Landing({ onEnter }: LandingProps) {
   return (
     <div className="landing">
-      <ParticleCanvas />
 
+      {/* Floating decorative icons (landing only) */}
+      <div className="floating-icons" aria-hidden>
+        {FLOAT_ICONS.map(({ Icon, x, y, delay, size, opacity }, i) => (
+          <div key={i} className="floating-icon" style={{ left: x, top: y, animationDelay: `${delay}s`, opacity }}>
+            <Icon size={size} strokeWidth={1.5} color="var(--gold)" />
+          </div>
+        ))}
+      </div>
+
+      {/* ── NAV ── */}
       <nav className="nav">
         <div className="nav-logo">
           <img src="/jumpship-logo.png" alt="JumpShip" className="nav-logo-mark" />
         </div>
         <ul className="nav-links">
-          <li><a href="#how">How it works</a></li>
-          <li><a href="#why-jumpship">Why JumpShip</a></li>
-          <li><a href="#inside-app">Inside the app</a></li>
+          <li><a href="#pipeline">Pipeline</a></li>
+          <li><a href="#features">Features</a></li>
           <li><a href="#architecture">Architecture</a></li>
-          <li><a href="#why-exists">Open source</a></li>
-          <li><a href={LINKS.jobspyRepo} target="_blank" rel="noopener noreferrer">JobSpy</a></li>
-          <li><a href={LINKS.portfolio} target="_blank" rel="noopener noreferrer">Portfolio</a></li>
+          <li><a href="#roadmap">Roadmap</a></li>
+          <li><a href={LINKS.portfolio} target="_blank" rel="noopener noreferrer">Author</a></li>
         </ul>
         <div className="nav-actions">
           <ThemeToggle compact />
-          <a
-            href={LINKS.jumpshipRepo}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-secondary nav-github"
-          >
-            <Star size={13} strokeWidth={2} /> GitHub
+          <a href={LINKS.jumpshipRepo} target="_blank" rel="noopener noreferrer" className="btn btn-secondary nav-github">
+            GitHub
           </a>
-          <button type="button" className="nav-cta" onClick={onEnter}>Launch App →</button>
+          <button type="button" className="btn btn-primary nav-cta-btn" onClick={onEnter}>
+            Launch App →
+          </button>
         </div>
       </nav>
 
+      {/* ── HERO: full viewport, logo only ── */}
       <section className="hero">
-        <div className="hero-logo-full">
+        <motion.div
+          className="hero-logo-full"
+          initial={{ opacity: 0, y: 24, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.75, ease: EASE_OUT }}
+        >
           <img src="/jumpship-logo.png" alt="JumpShip" />
-        </div>
-        <div className="hero-badge">Open Source · AI-Powered · Privacy-First</div>
-        <h1 className="hero-title">
-          Find jobs that
-          <br />
-          <span className="accent">actually fit you.</span>
-          <span className="line2">Not the other way around.</span>
-        </h1>
-        <p className="hero-sub">
-          Upload your résumé. JumpShip parses your profile, auto-fills search filters,
-          and uses LLMs to score, explain, and rank every listing — with live company intelligence.
-        </p>
-        <div className="hero-actions">
-          <button type="button" className="btn-primary" onClick={onEnter}>Start searching ↗</button>
-          <a
-            href={LINKS.jumpshipRepo}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-secondary"
-            style={{ textDecoration: 'none' }}
-          >
-            <Star size={13} strokeWidth={2} /> Star on GitHub
+        </motion.div>
+
+        <motion.p
+          className="hero-tagline"
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.18, ease: EASE_OUT }}
+        >
+          AI-powered job search, built around your résumé.
+        </motion.p>
+
+        <motion.div
+          className="hero-actions"
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, delay: 0.3, ease: EASE_OUT }}
+        >
+          <button type="button" className="btn btn-primary btn-lg" onClick={onEnter}>
+            Start searching ↗
+          </button>
+          <a href={LINKS.jumpshipRepo} target="_blank" rel="noopener noreferrer"
+            className="btn btn-secondary btn-lg" style={{ textDecoration: 'none' }}>
+            View on GitHub
           </a>
-        </div>
+        </motion.div>
       </section>
 
-      {/* How it works — first narrative beat */}
+      {/* ── PIPELINE: titles RIGHT ── */}
       <motion.section
         className="landing-section landing-section--how"
-        id="how"
-        initial="hidden"
-        whileInView="visible"
-        viewport={VIEWPORT}
-        variants={fadeUp}
+        id="pipeline"
+        initial="hidden" whileInView="visible" viewport={VIEWPORT} variants={fadeUp}
       >
-        <div className="landing-section-inner landing-section-inner--how">
-          <div className="section-label landing-how-label">How it works</div>
-          <h2 className="section-title landing-how-title">
-            Three steps to your<br />
-            <span style={{ color: 'var(--gold)' }}>next opportunity.</span>
+        <div className="landing-section-inner section-align-right">
+          <div className="section-label">How it works</div>
+          <h2 className="section-title">
+            Four steps.<br />
+            <span style={{ color: 'var(--gold)' }}>Zero friction.</span>
           </h2>
-          <p className="section-sub landing-section-sub--how">
-            From a single résumé upload to ranked listings and optional autonomous applications — one linear path.
+          <p className="section-sub">
+            From résumé upload to ranked listings and tailored exports: one clean pipeline.
           </p>
-          <motion.div
-            className="how-grid"
-            variants={staggerParent}
-            initial="hidden"
-            whileInView="visible"
-            viewport={VIEWPORT}
-          >
-            {HOW_STEPS.map((step) => (
+          <motion.div className="how-grid" variants={staggerParent} initial="hidden" whileInView="visible" viewport={VIEWPORT}>
+            {PIPELINE_STEPS.map((step) => (
               <motion.div key={step.num} className="how-card" variants={staggerItem}>
-                <div className="how-num">{step.num}</div>
+                <div className="how-card-top">
+                  <div className="how-num">{step.num}</div>
+                  <div className="how-icon-wrap"><step.Icon size={18} strokeWidth={1.5} /></div>
+                </div>
                 <div className="how-title">{step.title}</div>
                 <div className="how-desc">{step.desc}</div>
               </motion.div>
@@ -218,69 +240,28 @@ export default function Landing({ onEnter }: LandingProps) {
         </div>
       </motion.section>
 
-      {/* Why JumpShip — differentiators */}
+      {/* ── FEATURES: titles LEFT ── */}
       <motion.section
-        className="landing-section landing-section--why-jumpship landing-section--alt"
-        id="why-jumpship"
-        initial="hidden"
-        whileInView="visible"
-        viewport={VIEWPORT}
-        variants={fadeUp}
+        className="landing-section landing-section--alt"
+        id="features"
+        initial="hidden" whileInView="visible" viewport={VIEWPORT} variants={fadeUp}
       >
-        <div className="landing-section-inner landing-section-inner--why-jumpship">
-          <div className="section-label landing-why-jumpship-label">Why JumpShip</div>
-          <h2 className="section-title landing-why-jumpship-title">
-            Your résumé is the<br />
-            <span style={{ color: 'var(--gold)' }}>algorithm.</span>
-          </h2>
-          <p className="section-sub landing-why-jumpship-sub">
-            No more generic job boards. Let your actual experience drive the search.
-          </p>
-          <motion.div
-            className="why-jumpship-grid"
-            variants={staggerParent}
-            initial="hidden"
-            whileInView="visible"
-            viewport={VIEWPORT}
-          >
-            {WHY_JUMPSHIP_BOXES.map((box) => (
-              <motion.div key={box.title} className="why-jumpship-card" variants={staggerItem}>
-                <div className="why-jumpship-card-title">{box.title}</div>
-                <div className="why-jumpship-card-desc">{box.desc}</div>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </motion.section>
-
-      {/* Capabilities grid */}
-      <motion.section
-        className="landing-section landing-section--inside-app"
-        id="inside-app"
-        initial="hidden"
-        whileInView="visible"
-        viewport={VIEWPORT}
-        variants={fadeUp}
-      >
-        <div className="landing-section-inner landing-section-inner--inside-app">
-          <div className="section-label">Inside the app</div>
+        <div className="landing-section-inner section-align-left">
+          <div className="section-label">Capabilities</div>
           <h2 className="section-title">
-            Capabilities that ship<br />
-            <span style={{ color: 'var(--gold)' }}>with JumpShip.</span>
+            Everything ships<br />
+            <span style={{ color: 'var(--gold)' }}>ready to use.</span>
           </h2>
-          <p className="section-sub landing-section-sub--inside-app">
-            Parsing, search, scoring, company context, tracking, and optional agents — designed to work together or be swapped out.
+          <p className="section-sub">
+            Parsing, scoring, tracking, and company intel, designed to work together or be extended independently.
           </p>
           <motion.div
             className="features-grid features-grid--centered"
-            variants={staggerParent}
-            initial="hidden"
-            whileInView="visible"
-            viewport={VIEWPORT}
+            variants={staggerParent} initial="hidden" whileInView="visible" viewport={VIEWPORT}
           >
             {FEATURES.map((f) => (
               <motion.div key={f.name} className="feature-card" variants={staggerItem}>
-                <div className="feature-icon"><f.Icon size={22} strokeWidth={1.5} /></div>
+                <div className="feature-icon"><f.Icon size={20} strokeWidth={1.5} /></div>
                 <div className="feature-name">{f.name}</div>
                 <div className="feature-desc">{f.desc}</div>
               </motion.div>
@@ -289,152 +270,132 @@ export default function Landing({ onEnter }: LandingProps) {
         </div>
       </motion.section>
 
-      {/* Architecture */}
+      {/* ── ARCHITECTURE: centered ── */}
       <motion.section
-        className="landing-section landing-section--arch landing-section--alt"
+        className="landing-section landing-section--arch"
         id="architecture"
-        initial="hidden"
-        whileInView="visible"
-        viewport={VIEWPORT}
-        variants={fadeUp}
+        initial="hidden" whileInView="visible" viewport={VIEWPORT} variants={fadeUp}
       >
-        <div className="landing-section-inner landing-section-inner--arch">
-          <div className="section-label landing-arch-label">System architecture</div>
-          <h2 className="section-title landing-arch-title">
+        <div className="landing-section-inner section-align-center">
+          <div className="section-label">System architecture</div>
+          <h2 className="section-title">
             The full stack,<br />
             <span style={{ color: 'var(--gold)' }}>end to end.</span>
           </h2>
-          <p className="section-sub landing-arch-sub">
-            Résumé becomes a local profile; JobSpy plus extra adapters aggregate listings; the LLM scores each role against you; optional agents apply in the browser.
+          <p className="section-sub">
+            Résumé becomes a local profile. Job boards feed a unified pipeline. The LLM scores each role against you, then helps you export materials tuned to that listing.
           </p>
           <motion.div
             className="arch-diagram arch-diagram--grid"
-            variants={fadeUp}
-            initial="hidden"
-            whileInView="visible"
-            viewport={VIEWPORT}
+            variants={fadeUp} initial="hidden" whileInView="visible" viewport={VIEWPORT}
           >
-            {/* Row 1 — candidate data (parallel path; joins assessment below) */}
             <div className="arch-node arch-diagram-grid__node" style={{ gridColumn: 1, gridRow: 1 }}>
-              <div className="arch-node-icon"><FileText size={24} strokeWidth={1.5} /></div>
+              <div className="arch-node-icon"><FileText size={22} strokeWidth={1.5} /></div>
               <div className="arch-node-label">Résumé</div>
               <div className="arch-node-sub">PDF / DOCX</div>
             </div>
-            <div className="arch-arrow arch-diagram-grid__arrow" style={{ gridColumn: 2, gridRow: 1 }} aria-hidden><ChevronRight size={24} strokeWidth={2} /></div>
+            <div className="arch-arrow arch-diagram-grid__arrow" style={{ gridColumn: 2, gridRow: 1 }} aria-hidden><ChevronRight size={22} strokeWidth={2} /></div>
             <div className="arch-node arch-node--gold arch-diagram-grid__node" style={{ gridColumn: 3, gridRow: 1 }}>
-              <div className="arch-node-icon"><Brain size={24} strokeWidth={1.5} /></div>
+              <div className="arch-node-icon"><Brain size={22} strokeWidth={1.5} /></div>
               <div className="arch-node-label">LLM parser</div>
-              <div className="arch-node-sub">Ollama · OpenAI · Groq · …</div>
+              <div className="arch-node-sub">Ollama · Groq · OpenAI</div>
             </div>
-            <div className="arch-arrow arch-diagram-grid__arrow" style={{ gridColumn: 4, gridRow: 1 }} aria-hidden><ChevronRight size={24} strokeWidth={2} /></div>
+            <div className="arch-arrow arch-diagram-grid__arrow" style={{ gridColumn: 4, gridRow: 1 }} aria-hidden><ChevronRight size={22} strokeWidth={2} /></div>
             <div className="arch-node arch-diagram-grid__node" style={{ gridColumn: 5, gridRow: 1 }}>
-              <div className="arch-node-icon"><Database size={24} strokeWidth={1.5} /></div>
+              <div className="arch-node-icon"><Database size={22} strokeWidth={1.5} /></div>
               <div className="arch-node-label">Profile</div>
               <div className="arch-node-sub">SQLite · local</div>
             </div>
-            <div className="arch-diagram-grid__empty" style={{ gridColumn: 6, gridRow: 1 }} aria-hidden />
-            <div className="arch-diagram-grid__empty" style={{ gridColumn: 7, gridRow: 1 }} aria-hidden />
-
-            {/* Profile → LLM assessment (not parser → scraper) */}
             <div className="arch-diagram-grid__bridge" style={{ gridColumn: 5, gridRow: 2 }}>
               <div className="arch-connector-down" />
             </div>
-
-            {/* Row 3 — listings → score → optional apply */}
             <div className="arch-node arch-diagram-grid__node" style={{ gridColumn: 1, gridRow: 3 }}>
-              <div className="arch-node-icon"><Search size={24} strokeWidth={1.5} /></div>
-              <div className="arch-node-label">Job sources</div>
-              <div className="arch-node-sub">LinkedIn · Indeed · RemoteOK · +</div>
+              <div className="arch-node-icon"><Search size={22} strokeWidth={1.5} /></div>
+              <div className="arch-node-label">9+ Job boards</div>
+              <div className="arch-node-sub">LinkedIn · Gupy · Indeed · +</div>
             </div>
-            <div className="arch-arrow arch-diagram-grid__arrow" style={{ gridColumn: 2, gridRow: 3 }} aria-hidden><ChevronRight size={24} strokeWidth={2} /></div>
+            <div className="arch-arrow arch-diagram-grid__arrow" style={{ gridColumn: 2, gridRow: 3 }} aria-hidden><ChevronRight size={22} strokeWidth={2} /></div>
             <div className="arch-node arch-node--gold arch-diagram-grid__node" style={{ gridColumn: 3, gridRow: 3 }}>
-              <div className="arch-node-icon"><Globe size={24} strokeWidth={1.5} /></div>
-              <div className="arch-node-label">JobSpy + adapters</div>
+              <div className="arch-node-icon"><Globe size={22} strokeWidth={1.5} /></div>
+              <div className="arch-node-label">Aggregator</div>
               <div className="arch-node-sub">unified job feed</div>
             </div>
-            <div className="arch-arrow arch-diagram-grid__arrow" style={{ gridColumn: 4, gridRow: 3 }} aria-hidden><ChevronRight size={24} strokeWidth={2} /></div>
+            <div className="arch-arrow arch-diagram-grid__arrow" style={{ gridColumn: 4, gridRow: 3 }} aria-hidden><ChevronRight size={22} strokeWidth={2} /></div>
             <div className="arch-node arch-node--gold arch-diagram-grid__node" style={{ gridColumn: 5, gridRow: 3 }}>
-              <div className="arch-node-icon"><BarChart3 size={24} strokeWidth={1.5} /></div>
+              <div className="arch-node-icon"><BarChart3 size={22} strokeWidth={1.5} /></div>
               <div className="arch-node-label">LLM assessment</div>
-              <div className="arch-node-sub">match · gaps · company intel</div>
-            </div>
-            <div className="arch-arrow arch-diagram-grid__arrow" style={{ gridColumn: 6, gridRow: 3 }} aria-hidden><ChevronRight size={24} strokeWidth={2} /></div>
-            <div className="arch-node arch-node--blue arch-diagram-grid__node" style={{ gridColumn: 7, gridRow: 3 }}>
-              <div className="arch-node-icon"><Zap size={24} strokeWidth={1.5} /></div>
-              <div className="arch-node-label">Playwright agent</div>
-              <div className="arch-node-sub">optional auto-apply</div>
+              <div className="arch-node-sub">score · gaps · intel</div>
             </div>
           </motion.div>
         </div>
       </motion.section>
 
-      {/* Open source / why exists */}
+      {/* ── ROADMAP: titles RIGHT ── */}
       <motion.section
-        className="landing-section landing-section--why-exists landing-section--border"
-        id="why-exists"
-        initial="hidden"
-        whileInView="visible"
-        viewport={VIEWPORT}
-        variants={fadeUp}
+        className="landing-section landing-section--alt"
+        id="roadmap"
+        initial="hidden" whileInView="visible" viewport={VIEWPORT} variants={fadeUp}
       >
-        <div className="landing-section-inner landing-section-inner--why-exists">
-          <div className="section-label">Why this exists</div>
-          <h2 className="section-title landing-why-exists-title">
-            Built to be forked,<br />extended, and owned.
+        <div className="landing-section-inner section-align-right">
+          <div className="section-label">What's coming</div>
+          <h2 className="section-title">
+            Built to grow<br />
+            <span style={{ color: 'var(--gold)' }}>beyond JobSpy.</span>
           </h2>
-          <p className="section-sub landing-why-exists-sub">
-            JumpShip is infrastructure for your job search. Fork it, plug in your scraper,
-            swap the LLM, or integrate your ATS. All in one clean codebase.
+          <p className="section-sub">
+            The goal: a browser-native aggregator targeting Brazilian platforms directly, with no third-party APIs, no rate limits, no restrictions.
           </p>
-          <div className="landing-why-exists-cta">
-            <a href={LINKS.jumpshipRepo} target="_blank" rel="noopener noreferrer" className="btn-primary" style={{ textDecoration: 'none' }}>
-              View JumpShip on GitHub →
-            </a>
-            <a href={LINKS.jobspyRepo} target="_blank" rel="noopener noreferrer" className="btn-secondary" style={{ textDecoration: 'none' }}>
-              Original JobSpy →
-            </a>
-            <a href={LINKS.portfolio} target="_blank" rel="noopener noreferrer" className="btn-secondary" style={{ textDecoration: 'none' }}>
-              Author's Portfolio →
-            </a>
-          </div>
+          <motion.div
+            className="roadmap-grid"
+            variants={staggerParent} initial="hidden" whileInView="visible" viewport={VIEWPORT}
+          >
+            {ROADMAP.map((item) => (
+              <motion.div key={item.title} className="roadmap-card" variants={staggerItem}>
+                <div className="roadmap-card-header">
+                  <div className="roadmap-icon"><item.Icon size={18} strokeWidth={1.5} /></div>
+                  <span className="roadmap-badge">Planned</span>
+                </div>
+                <div className="roadmap-title">{item.title}</div>
+                <div className="roadmap-desc">{item.desc}</div>
+              </motion.div>
+            ))}
+          </motion.div>
         </div>
       </motion.section>
 
+      {/* ── CTA: centered ── */}
       <motion.section
-        className="landing-section landing-section--cta landing-section--alt"
-        initial="hidden"
-        whileInView="visible"
-        viewport={VIEWPORT}
-        variants={fadeUp}
+        className="landing-section landing-section--cta"
+        initial="hidden" whileInView="visible" viewport={VIEWPORT} variants={fadeUp}
       >
         <div className="landing-cta-box">
-          <div className="section-label" style={{ margin: '0 0 12px' }}>Ready?</div>
-          <h2 className="section-title" style={{ fontSize: 'clamp(28px, 4vw, 48px)', margin: '0 0 16px' }}>
+          <div className="section-label" style={{ margin: '0 0 16px' }}>Ready?</div>
+          <h2 className="section-title" style={{ fontSize: 'clamp(28px, 4vw, 52px)', margin: '0 0 16px' }}>
             Start your search now.
           </h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: 15, marginBottom: 28 }}>
-            No account needed. Works locally. Takes 30 seconds.
+          <p style={{ color: 'var(--text-muted)', fontSize: 15, marginBottom: 36, lineHeight: 1.6 }}>
+            No account. No cloud required. Works locally in 30 seconds.
           </p>
-          <button type="button" className="btn-primary" onClick={onEnter} style={{ fontSize: 16, padding: '14px 40px', margin: '0 auto' }}>
-            Launch JumpShip ↗
-          </button>
+          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button type="button" className="btn btn-primary btn-lg" onClick={onEnter}>
+              Launch JumpShip ↗
+            </button>
+            <a href={LINKS.jumpshipRepo} target="_blank" rel="noopener noreferrer"
+              className="btn btn-secondary btn-lg" style={{ textDecoration: 'none' }}>
+              View on GitHub
+            </a>
+          </div>
         </div>
       </motion.section>
 
       <footer className="landing-footer">
         <div className="landing-footer-inner">
           Built by{' '}
-          <a href={LINKS.portfolio} target="_blank" rel="noopener noreferrer" className="landing-footer-link">
-            Adrian Widmer
-          </a>
-          {' '}· Fork of{' '}
-          <a href={LINKS.jobspyRepo} target="_blank" rel="noopener noreferrer" className="landing-footer-link">
-            JobSpy
-          </a>
+          <a href={LINKS.portfolio} target="_blank" rel="noopener noreferrer" className="landing-footer-link">Adrian Widmer</a>
           {' '}·{' '}
-          <a href={LINKS.jumpshipRepo} target="_blank" rel="noopener noreferrer" className="landing-footer-link">
-            GitHub
-          </a>
+          <a href={LINKS.jumpshipRepo} target="_blank" rel="noopener noreferrer" className="landing-footer-link">GitHub</a>
+          {' '}·{' '}
+          <a href={LINKS.jobspyRepo} target="_blank" rel="noopener noreferrer" className="landing-footer-link">JobSpy</a>
         </div>
       </footer>
     </div>

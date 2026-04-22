@@ -9,24 +9,39 @@ export interface Settings {
   openaiKey: string;
   anthropicKey: string;
   groqKey: string;
+  geminiKey: string;
+  mistralKey: string;
+  deepseekKey: string;
+  huggingfaceKey: string;
+  openrouterKey: string;
+  cohereKey: string;
   // Search defaults
   resultsWanted: number;
   defaultSites: string[];
   defaultLocation: string;
   assessmentSpeed: 'careful' | 'balanced' | 'turbo';
+  // Resume generation
+  resumeGenThreshold: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   llmProvider: 'ollama',
-  llmModel: '',        // empty → SettingsModal auto-fills from live Ollama model list
-  ollamaUrl: '',       // empty → backend uses its own OLLAMA_BASE_URL env var
+  llmModel: '',
+  ollamaUrl: '',
   openaiKey: '',
   anthropicKey: '',
   groqKey: '',
+  geminiKey: '',
+  mistralKey: '',
+  deepseekKey: '',
+  huggingfaceKey: '',
+  openrouterKey: '',
+  cohereKey: '',
   resultsWanted: 20,
   defaultSites: ['linkedin', 'indeed', 'glassdoor'],
   defaultLocation: '',
   assessmentSpeed: 'balanced',
+  resumeGenThreshold: 70,
 };
 
 const STORAGE_KEY = 'jumpship_settings';

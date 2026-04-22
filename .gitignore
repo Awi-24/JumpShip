@@ -12,6 +12,8 @@ dist/
 build/
 *.egg-info/
 .eggs/
+.ruff_cache/
+.mypy_cache/
 
 # Env / secrets
 .env
@@ -24,9 +26,10 @@ build/
 *.sqlite
 *.sqlite3
 
-# IDE
+# IDE / local tooling
 /.idea/
 /.vscode/
+.cursor/projects/
 *.swp
 *.swo
 
@@ -47,12 +50,23 @@ uploads/
 Thumbs.db
 
 # Claude/Cursor tooling artifacts
-.claude/worktrees/
+/.claude/
 .cursor/context/
 
 # Frontend build output
 frontend/dist/
+frontend/.vite/
+# Accidental empty files from mis-parsed install lines (e.g. `>=` as a path)
+frontend/=*
 
 # Logs
 *.log
 logs/
+/.jumpship/
+
+# Agent checkpoints / generated artifacts
+jumpship_agents.db
+generated_resumes/
+
+# Test coverage
+frontend/coverage/

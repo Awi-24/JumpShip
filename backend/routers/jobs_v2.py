@@ -19,10 +19,13 @@ from backend.models.schemas import (
     JobSearchRequest,
     JobResult,
     AssessmentRequest,
+    BatchAssessmentRequest,
+    BatchAssessmentItem,
     JobAssessment,
 )
 from backend.services.job_scraper_v2 import search_jobs
-from backend.services.llm_service import get_llm_service, LLMService
+from backend.services.llm_service import get_llm_service
+from backend.services.llm_client import LLMClient, get_local_sem, is_local_provider
 from backend.services.web_search import search_company_info
 
 logger = logging.getLogger(__name__)
@@ -33,18 +36,31 @@ router = APIRouter(tags=["jobs-v2"])
 
 @router.get("/api/ollama/models", response_model=list[str])
 async def ollama_models(
-    base_url: str = Query(default=None, description="Override the Ollama base URL"),
+    base_url: str = Query(default=None, description="Override base URL"),
+    provider: str = Query(default="ollama", description="ollama | lmstudio"),
 ):
-    """Return the list of models installed in the running Ollama instance."""
+    """Return available models for Ollama or LM Studio."""
     from backend.config import settings
     url = (base_url or settings.ollama_base_url).rstrip("/")
     try:
         async with httpx.AsyncClient(timeout=4) as client:
-            r = await client.get(f"{url}/api/tags")
-            r.raise_for_status()
-            return [m["name"] for m in r.json().get("models", [])]
+            if provider == "lmstudio":
+                # LM Studio exposes OpenAI-compatible /v1/models
+                # Strip /v1 suffix if user already included it, then add it once
+                clean = url.rstrip("/")
+                if clean.endswith("/v1"):
+                    clean = clean[:-3]
+                r = await client.get(f"{clean}/v1/models")
+                r.raise_for_status()
+                data = r.json().get("data", [])
+                return [m["id"] for m in data if m.get("id")]
+            else:
+                # Ollama native API
+                r = await client.get(f"{url}/api/tags")
+                r.raise_for_status()
+                return [m["name"] for m in r.json().get("models", [])]
     except Exception as exc:
-        logger.warning("Could not fetch Ollama models from %s: %s", url, exc)
+        logger.warning("Could not fetch models (%s) from %s: %s", provider, url, exc)
         return []
 
 
@@ -123,15 +139,30 @@ async def test_llm_connection(req: TestLLMRequest):
         async with httpx.AsyncClient(timeout=4) as client:
             for url in candidates:
                 try:
-                    r = await client.get(f"{url}/api/tags")
-                    if r.status_code == 200:
-                        models = [m["name"] for m in r.json().get("models", [])]
-                        model_hint = f" ({len(models)} model{'s' if len(models) != 1 else ''} installed)" if models else " (no models installed yet)"
-                        return TestLLMResponse(
-                            ok=True,
-                            message=f"Connected to {req.provider}{model_hint}",
-                            resolved_url=url,
-                        )
+                    clean = url.rstrip("/")
+                    if req.provider == "lmstudio":
+                        # Strip /v1 suffix if present — probe at base
+                        base = clean[:-3] if clean.endswith("/v1") else clean
+                        r = await client.get(f"{base}/v1/models")
+                        if r.status_code == 200:
+                            data = r.json().get("data", r.json().get("models", []))
+                            models = [m.get("id", "") for m in data if m.get("id")]
+                            model_hint = f" ({len(models)} model{'s' if len(models) != 1 else ''} loaded)" if models else " (no models loaded)"
+                            return TestLLMResponse(
+                                ok=True,
+                                message=f"Connected to LM Studio{model_hint}",
+                                resolved_url=url,
+                            )
+                    else:
+                        r = await client.get(f"{clean}/api/tags")
+                        if r.status_code == 200:
+                            models = [m["name"] for m in r.json().get("models", [])]
+                            model_hint = f" ({len(models)} model{'s' if len(models) != 1 else ''} installed)" if models else " (no models installed yet)"
+                            return TestLLMResponse(
+                                ok=True,
+                                message=f"Connected to {req.provider}{model_hint}",
+                                resolved_url=url,
+                            )
                     last_error = f"HTTP {r.status_code}"
                 except httpx.ConnectError:
                     last_error = "Connection refused"
@@ -220,31 +251,9 @@ _GROQ_FALLBACK_MODELS = [
 _jobs_router = APIRouter(prefix="/api/jobs")
 
 
-def _llm_from_request(req) -> LLMService:
-    """Build an LLMService from per-request overrides, falling back to .env defaults."""
-    from backend.config import settings
-
-    provider = req.llm_provider or settings.llm_provider
-    model    = req.llm_model    or settings.llm_model
-    base_url = req.llm_base_url or settings.ollama_base_url
-
-    if req.llm_api_key:
-        openai_key    = req.llm_api_key if provider == "openai"    else settings.openai_api_key
-        anthropic_key = req.llm_api_key if provider == "anthropic" else settings.anthropic_api_key
-        groq_key      = req.llm_api_key if provider == "groq"      else settings.groq_api_key
-    else:
-        openai_key    = settings.openai_api_key
-        anthropic_key = settings.anthropic_api_key
-        groq_key      = settings.groq_api_key
-
-    return LLMService(
-        provider=provider,
-        model=model,
-        ollama_base_url=base_url,
-        openai_api_key=openai_key,
-        anthropic_api_key=anthropic_key,
-        groq_api_key=groq_key,
-    )
+def _llm_from_request(req) -> LLMClient:
+    """Build an LLMClient from per-request overrides, falling back to .env defaults."""
+    return LLMClient.from_override(req)
 
 
 @_jobs_router.post("/search", response_model=list[JobResult])
@@ -266,31 +275,7 @@ async def search_jobs_endpoint(req: JobSearchRequest):
         raise HTTPException(status_code=500, detail=f"Search failed: {exc}")
 
 
-@_jobs_router.post("/assess", response_model=JobAssessment)
-async def assess_job_endpoint(req: AssessmentRequest):
-    """
-    Use the LLM to assess candidate fit for a job.
-    Optionally enriches the prompt with live company data from the web.
-    """
-    llm = _llm_from_request(req)
-    profile = req.resume_profile
-    job = req.job
-
-    # ── Optional: fetch company info from the web ───────────────────────────
-    company_info = ""
-    if req.include_company_research and job.company:
-        try:
-            company_info = await search_company_info(job.company, job.title)
-        except Exception as exc:
-            logger.debug("Company web search failed (non-fatal): %s", exc)
-
-    # ── Build prompt ─────────────────────────────────────────────────────────
-    company_context = f"""
-COMPANY INTELLIGENCE (sourced from the web — use this to enrich your assessment):
-{company_info if company_info else "No external data found. Use your training knowledge about this company if available."}
-""" if req.include_company_research else ""
-
-    system = """\
+_ASSESS_SYSTEM = """\
 You are a senior technical recruiter and career coach with 20+ years of experience \
 placing engineers and technical professionals.
 
@@ -331,7 +316,9 @@ ASSESSMENT GUIDELINES:
 
 CRITICAL: Return ONLY valid JSON — no markdown, no explanation, no trailing text."""
 
-    user = f"""\
+
+def _build_assess_user(profile, job, company_context: str) -> str:
+    return f"""\
 CANDIDATE PROFILE:
 Name: {profile.name or "Unknown"}
 Current Title: {profile.title}
@@ -359,29 +346,90 @@ Assess the candidate's fit and return JSON matching this schema exactly:
   "career_suggestions": ["<actionable suggestion 1>", ...],
   "company_insights": "<paragraph about the company: culture, reputation, growth stage>",
   "income_range": "<salary — use job's disclosed value with '(disclosed)' or estimate with '(estimated)'>",
-  "job_tags": ["<3-8 short tags describing the job: tech stack items, domain, seniority, work mode. e.g. python, react, fintech, senior, remote, b2b-saas>"]
+  "job_tags": ["<3-8 short tags describing the job: tech stack items, domain, seniority, work mode>"],
+  "keywords_matched": ["<skill or keyword present in both resume and job description>"],
+  "keywords_missing": ["<skill or keyword required by job but absent from resume>"]
 }}"""
+
+
+async def _run_assessment(llm: LLMClient, profile, job, include_company_research: bool) -> JobAssessment:
+    """Core assessment logic — acquires local semaphore if needed."""
+    import asyncio
+    from backend.config import settings as app_settings
+
+    company_info = ""
+    if include_company_research and job.company:
+        try:
+            company_info = await search_company_info(job.company, job.title)
+        except Exception as exc:
+            logger.debug("Company web search failed (non-fatal): %s", exc)
+
+    company_context = (
+        f"\nCOMPANY INTELLIGENCE (sourced from the web — use this to enrich your assessment):\n"
+        f"{company_info or 'No external data found. Use your training knowledge about this company if available.'}\n"
+        if include_company_research else ""
+    )
+
+    user = _build_assess_user(profile, job, company_context)
 
     raw_response = ""
     try:
-        raw_response = await llm.complete(system, user)
+        if is_local_provider(llm.provider):
+            async with get_local_sem():
+                raw_response = await asyncio.to_thread(llm.complete, _ASSESS_SYSTEM, user)
+        else:
+            raw_response = await asyncio.to_thread(llm.complete, _ASSESS_SYSTEM, user)
+
         cleaned = _clean_json(raw_response)
         data = json.loads(cleaned)
-        return JobAssessment(**data)
+        assessment = JobAssessment(**data)
+        assessment.resume_generation_triggered = (
+            assessment.match_score >= app_settings.resume_gen_threshold
+            and assessment.is_relevant
+        )
+        return assessment
 
     except json.JSONDecodeError:
         logger.error("LLM returned invalid JSON for assess: %s", raw_response[:400])
         return JobAssessment(
             match_score=50,
             summary="Could not parse the assessment. Please try Re-assess.",
-            strong_points=[],
-            gaps=[],
-            career_suggestions=[],
-            company_insights="",
+            strong_points=[], gaps=[], career_suggestions=[], company_insights="",
         )
+
+
+@_jobs_router.post("/assess", response_model=JobAssessment)
+async def assess_job_endpoint(req: AssessmentRequest):
+    """Assess candidate fit for a single job. Local LLM calls are serialized via semaphore."""
+    llm = _llm_from_request(req)
+    try:
+        return await _run_assessment(llm, req.resume_profile, req.job, req.include_company_research)
     except Exception as exc:
         logger.error("Assessment endpoint error: %s", exc)
         raise HTTPException(status_code=500, detail=f"Assessment failed: {exc}")
+
+
+@_jobs_router.post("/assess-batch", response_model=list[BatchAssessmentItem])
+async def assess_batch_endpoint(req: BatchAssessmentRequest):
+    """
+    Assess multiple jobs concurrently.
+    Cloud providers: all run in parallel.
+    Local providers: serialized via semaphore (no GPU contention).
+    """
+    import asyncio
+
+    llm = _llm_from_request(req)
+
+    async def _assess_one(job: JobResult) -> BatchAssessmentItem:
+        try:
+            result = await _run_assessment(llm, req.resume_profile, job, req.include_company_research)
+            return BatchAssessmentItem(job_id=job.id, assessment=result)
+        except Exception as exc:
+            logger.warning("Batch assess failed for job %s: %s", job.id, exc)
+            return BatchAssessmentItem(job_id=job.id, error=str(exc))
+
+    results = await asyncio.gather(*[_assess_one(job) for job in req.jobs])
+    return list(results)
 
 
 class SynonymRequest(BaseModel):
@@ -408,11 +456,11 @@ Only include genuinely useful terms — no duplicates of the input.
 Return ONLY valid JSON array, no explanation. Example: ["keyword1", "keyword2"]"""
 
     try:
-        raw = await llm.complete(system, user)
+        import asyncio
+        raw = await asyncio.to_thread(llm.complete, system, user)
         cleaned = _clean_json(raw)
         suggestions = json.loads(cleaned)
         if isinstance(suggestions, list):
-            # Filter out any that are already in the input
             input_lower = {k.lower() for k in req.keywords}
             suggestions = [s for s in suggestions if isinstance(s, str) and s.lower() not in input_lower]
             return {"suggestions": suggestions[:10]}
@@ -448,7 +496,8 @@ Return a JSON array of translated keywords, preserving technical terms that don'
 Return ONLY valid JSON array. Example: ["palavra1", "palavra2"]"""
 
     try:
-        raw = await llm.complete(system, user)
+        import asyncio
+        raw = await asyncio.to_thread(llm.complete, system, user)
         cleaned = _clean_json(raw)
         translations = json.loads(cleaned)
         if isinstance(translations, list):

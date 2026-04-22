@@ -14,7 +14,7 @@ import os
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -79,7 +79,10 @@ async def _probe_ollama(base_url: str, provider_id: str, provider_name: str) -> 
 async def _probe_lmstudio(base_url: str) -> DiscoveredProvider:
     try:
         async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT) as client:
-            r = await client.get(f"{base_url.rstrip('/')}/api/v1/models")
+            clean = base_url.rstrip("/")
+            if clean.endswith("/v1"):
+                clean = clean[:-3]
+            r = await client.get(f"{clean}/v1/models")
             r.raise_for_status()
             data = r.json().get("data", r.json().get("models", []))
             models = []
@@ -105,7 +108,7 @@ async def _probe_lmstudio(base_url: str) -> DiscoveredProvider:
         )
 
 
-# ── Public helpers (used by orchestrator) ─────────────────────────────────────
+# ── Public helpers (used by /api/models/discover and the UI) ──────────────────
 
 async def discover_providers() -> list[DiscoveredProvider]:
     """Probe all local providers and return what is reachable."""
@@ -131,72 +134,15 @@ async def discover_providers() -> list[DiscoveredProvider]:
 
 # ── Endpoint ──────────────────────────────────────────────────────────────────
 
-class ReadinessResponse(BaseModel):
-    ready: bool
-    error: Optional[str] = None
-    warning: Optional[str] = None
-    latency_ms: int = 0
-    provider: Optional[str] = None
-    model: Optional[str] = None
-
-
 @router.get("/api/models/discover", response_model=DiscoverResponse)
-async def discover_models(request: Request):
+async def discover_models():
     """Probe local LLM providers and return all discovered models."""
+    from backend.config import settings
     providers = await discover_providers()
-
-    active_provider = None
-    active_model = None
-    orc = getattr(request.app.state, "orchestrator", None)
-    if orc and orc.llm_config:
-        active_provider = orc.llm_config.get("provider")
-        active_model = orc.llm_config.get("model")
-
     return DiscoverResponse(
         providers=providers,
-        active_provider=active_provider,
-        active_model=active_model,
+        active_provider=settings.llm_provider,
+        active_model=settings.llm_model,
     )
 
 
-@router.get("/api/models/check-ready", response_model=ReadinessResponse)
-async def check_model_ready(request: Request):
-    """
-    Test whether the currently selected model can handle tool-calling.
-    Sends a tiny test prompt and verifies the model responds with a tool call.
-    """
-    from backend.services.llm_service import LLMService
-    from backend.config import settings
-
-    orc = getattr(request.app.state, "orchestrator", None)
-    cfg = orc.llm_config if orc else {}
-
-    provider = cfg.get("provider") or settings.llm_provider
-    model = cfg.get("model") or settings.llm_model
-
-    if not provider or not model:
-        return ReadinessResponse(
-            ready=False,
-            error="No model configured. Select a model first.",
-            provider=provider,
-            model=model,
-        )
-
-    llm = LLMService(
-        provider=provider,
-        model=model,
-        ollama_base_url=cfg.get("base_url") or settings.ollama_base_url,
-        openai_api_key=cfg.get("api_key") if provider == "openai" else settings.openai_api_key,
-        anthropic_api_key=cfg.get("api_key") if provider == "anthropic" else settings.anthropic_api_key,
-        groq_api_key=cfg.get("api_key") if provider == "groq" else settings.groq_api_key,
-    )
-
-    result = await llm.check_agent_ready()
-    return ReadinessResponse(
-        ready=result.get("ready", False),
-        error=result.get("error"),
-        warning=result.get("warning"),
-        latency_ms=result.get("latency_ms", 0),
-        provider=provider,
-        model=model,
-    )

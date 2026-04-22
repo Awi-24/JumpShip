@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
-  User, Settings2, Search as SearchIcon, Bookmark, Bot, Rocket,
-  Eye, X, AlertTriangle, Globe, FileDown, FileText, Zap, PenLine,
+  User, Settings2, Search as SearchIcon, Bookmark, Rocket,
+  Eye, X, AlertTriangle, Globe, FileDown, FileText,
   Banknote, Star,
 } from 'lucide-react';
 import ResumeUpload from '../components/ResumeUpload';
@@ -9,18 +9,18 @@ import JobCard from '../components/JobCard';
 import SettingsModal from '../components/SettingsModal';
 import ThemeToggle from '../components/ThemeToggle';
 import Profile from './Profile';
-import AgentQueue from './AgentQueue';
 import CustomSelect from '../components/CustomSelect';
 import AssessmentLoader from '../components/AssessmentLoader';
 import LocationSelect from '../components/LocationSelect';
 import { useResumeParse } from '../hooks/useResume';
 import { useJobSearch } from '../hooks/useJobs';
 import { useSettings } from '../hooks/useSettings';
+import { useResumeCache } from '../hooks/useResumeCache';
 import type { ResumeProfile, JobResult, JobAssessment, SortOption, BookmarkStatus } from '../types';
 
 interface SearchProps {
   onBack: () => void;
-  onNavigate: (page: 'tracker' | 'agents') => void;
+  onNavigate: (page: 'tracker') => void;
 }
 
 const ALL_SITES = ['linkedin', 'indeed', 'glassdoor', 'zip_recruiter', 'remoteok', 'arbeitnow', 'gupy', 'programathor', 'trampos'];
@@ -135,18 +135,17 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [autoApplyJob, setAutoApplyJob] = useState<JobResult | null>(null);
-  const [autoApplyRunning, setAutoApplyRunning] = useState(false);
-  const [autoApplyMsg, setAutoApplyMsg] = useState('');
+  const [generatingResumeJobId, setGeneratingResumeJobId] = useState<string | null>(null);
   const [llmStatus, setLlmStatus] = useState<'green' | 'yellow' | 'red'>('yellow');
 
-  // Resume
+  // Resume — with localStorage persistence
   const resumeMutation = useResumeParse();
-  const [resumeProfile, setResumeProfile] = useState<ResumeProfile | null>(null);
-  const [scoutRunning, setScoutRunning] = useState(false);
+  const { cache: resumeCache, saveResume, clearResume } = useResumeCache();
+  const [resumeProfile, setResumeProfile] = useState<ResumeProfile | null>(resumeCache?.profile ?? null);
+  const [resumeFileName, setResumeFileName] = useState(resumeCache?.fileName ?? '');
 
-  // Search filters
-  const [keywords, setKeywords] = useState<string[]>([]);
+  // Search filters — pre-fill from cached resume if available
+  const [keywords, setKeywords] = useState<string[]>(resumeCache?.keywords ?? []);
   const [location, setLocation] = useState(settings.defaultLocation);
   const [jobType, setJobType] = useState('all');
   const [sortBy, setSortBy] = useState<SortOption>('match');
@@ -163,8 +162,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const [searchHistory, setSearchHistory] = useState<SearchHistoryEntry[]>(loadHistory);
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<'search' | 'saved' | 'agents'>('search');
-  const [agentActiveCount, setAgentActiveCount] = useState(0);
+  const [activeTab, setActiveTab] = useState<'search' | 'saved'>('search');
 
   // Bookmarks
   const [bookmarks, setBookmarks] = useState<Record<string, BookmarkEntry>>(loadBookmarks);
@@ -221,45 +219,54 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
       llmApiKey:   apiKey        || undefined,
     });
     setResumeProfile(profile);
+    setResumeFileName(file.name);
     setAssessments({});
     setAssessingIds(new Set());
+    const kws: string[] = [];
     if (profile.suggested_keywords?.length) {
-      // Normalize incoming keywords from LLM: lowercase + deduplicate
       const seen = new Set<string>();
-      const normalized = profile.suggested_keywords
+      profile.suggested_keywords
         .map(k => k.trim().toLowerCase())
-        .filter(k => k.length > 0 && !seen.has(k) && seen.add(k));
-      setKeywords(normalized);
+        .filter(k => k.length > 0 && !seen.has(k) && seen.add(k))
+        .forEach(k => kws.push(k));
+      setKeywords(kws);
     }
+    // Persist so next session auto-restores without re-upload
+    saveResume(profile, kws, file.name);
     if (!location && s.defaultLocation) setLocation(s.defaultLocation);
     else if (!location) setLocation('Remote');
-  }, [resumeMutation, location]);
+  }, [resumeMutation, location, saveResume]);
 
   const handleResetResume = () => {
     setResumeProfile(null);
+    setResumeFileName('');
     setKeywords([]);
     setAssessments({});
     setAssessingIds(new Set());
+    clearResume();
   };
 
-  // ── Auto-assess all jobs ──────────────────────────────────────────────────
-  const assessSingle = useCallback(async (job: JobResult, profile: ResumeProfile) => {
+  const LOCAL_PROVIDERS = new Set(['ollama', 'lmstudio', 'openclaw']);
+
+  // ── Build LLM body fields ──────────────────────────────────────────────────
+  const getLlmFields = useCallback(() => {
     const s = settingsRef.current;
     const apiKey =
       s.llmProvider === 'openai'    ? s.openaiKey :
       s.llmProvider === 'anthropic' ? s.anthropicKey :
       s.llmProvider === 'groq'      ? s.groqKey : '';
-
-    const body = {
-      job,
-      resume_profile: profile,
+    return {
       llm_provider: s.llmProvider,
-      llm_model:    s.llmModel || undefined,
-      llm_api_key:  apiKey     || undefined,
-      llm_base_url: s.ollamaUrl || undefined,
+      llm_model:    s.llmModel    || undefined,
+      llm_api_key:  apiKey        || undefined,
+      llm_base_url: s.ollamaUrl   || undefined,
     };
+  }, []);
 
-    setAssessingIds(prev => new Set([...prev, job.id]));
+  // ── Auto-assess all jobs ──────────────────────────────────────────────────
+  const assessSingle = useCallback(async (job: JobResult, profile: ResumeProfile) => {
+    const body = { job, resume_profile: profile, ...getLlmFields() };
+    setAssessingIds(prev => new Set(prev).add(job.id));
 
     const MAX_RETRIES = 2;
     let lastData: JobAssessment | null = null;
@@ -284,21 +291,99 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
       }
     }
 
-    if (lastData) setAssessments(prev => ({ ...prev, [job.id]: lastData! }));
+    const fallback: JobAssessment = {
+      match_score: 0,
+      summary: 'Assessment could not be completed for this listing.',
+      strong_points: [],
+      gaps: [],
+      career_suggestions: [],
+      is_relevant: true,
+    };
+    setAssessments(prev => ({ ...prev, [job.id]: lastData ?? fallback }));
     setAssessingIds(prev => { const s = new Set(prev); s.delete(job.id); return s; });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [getLlmFields]);
+
+  // ── Batch assess (cloud providers — parallel, one round-trip) ─────────────
+  const assessBatch = useCallback(async (jobList: JobResult[], profile: ResumeProfile) => {
+    if (!jobList.length) {
+      setAssessingIds(new Set());
+      return;
+    }
+    setAssessingIds(new Set(jobList.map(j => j.id)));
+    const batchFallback: JobAssessment = {
+      match_score: 0,
+      summary: 'Assessment could not be completed for this listing.',
+      strong_points: [],
+      gaps: [],
+      career_suggestions: [],
+      is_relevant: true,
+    };
+    try {
+      const body = {
+        jobs: jobList,
+        resume_profile: profile,
+        include_company_research: false,
+        ...getLlmFields(),
+      };
+      const res = await fetch('/api/jobs/assess-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        setAssessments(prev => {
+          const next = { ...prev };
+          for (const j of jobList) next[j.id] = batchFallback;
+          return next;
+        });
+        return;
+      }
+      const items: { job_id: string; assessment: JobAssessment | null; error?: string }[] = await res.json();
+      setAssessments(prev => {
+        const next = { ...prev };
+        for (const item of items) {
+          if (item.assessment) next[item.job_id] = item.assessment;
+          else if (item.job_id) next[item.job_id] = batchFallback;
+        }
+        for (const j of jobList) {
+          if (!next[j.id]) next[j.id] = batchFallback;
+        }
+        return next;
+      });
+    } catch {
+      setAssessments(prev => {
+        const next = { ...prev };
+        for (const j of jobList) next[j.id] = batchFallback;
+        return next;
+      });
+    }
+    finally {
+      setAssessingIds(new Set());
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [getLlmFields]);
 
   // Trigger auto-assessment whenever jobs load and a resume exists
   const jobIds = jobs.map(j => j.id).join(',');
   useEffect(() => {
     if (!resumeProfile || !jobs.length) return;
     setAssessments({});
-    setAssessingIds(new Set());
-
-    let cancelled = false;
     const pending = [...jobs];
+    // Mark every job as in-flight immediately so the search loader stays up without a gap
+    setAssessingIds(new Set(pending.map(j => j.id)));
 
+    const s = settingsRef.current;
+    const isCloud = !LOCAL_PROVIDERS.has(s.llmProvider || 'ollama');
+
+    if (isCloud) {
+      // Cloud: fire all in parallel via batch endpoint
+      assessBatch(jobs, resumeProfile);
+      return;
+    }
+
+    // Local: sequential batches with backend semaphore preventing GPU contention
+    let cancelled = false;
     (async () => {
       for (let i = 0; i < pending.length; i += ASSESS_CONCURRENCY) {
         if (cancelled) break;
@@ -306,7 +391,6 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
         await Promise.allSettled(batch.map(job => assessSingle(job, resumeProfile)));
       }
     })();
-
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobIds, resumeProfile]);
@@ -352,34 +436,6 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     setTranslations([]);
   };
 
-  // ── Scout ──────────────────────────────────────────────────────────────────
-  const handleScout = async () => {
-    if (!resumeProfile) return;
-    setScoutRunning(true);
-    try {
-      const res = await fetch('/api/agents/scout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          resume_text: resumeMutation.data?.raw_text || '', // Assuming hook returns raw_text
-          preferences: {
-            location,
-            keywords,
-            results_per_query: resultsWanted,
-            sites: activeSites,
-          },
-        }),
-      });
-      await res.json();
-      if (res.ok) {
-        setActiveTab('agents'); // Switch to agents tab to see progress
-      }
-    } catch (err) {
-      console.error('Scout failed:', err);
-    } finally {
-      setScoutRunning(false);
-    }
-  };
 
   // ── Keywords ───────────────────────────────────────────────────────────────
   const removeKeyword = (kw: string) => setKeywords(k => k.filter(x => x !== kw));
@@ -475,33 +531,53 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     setActiveSites(entry.sites);
   };
 
-  // ── Auto Apply — enqueue to orchestrator ────────────────────────────────────
-  const handleAutoApply = async (job: JobResult, dryRun = false) => {
-    setAutoApplyRunning(true);
-    setAutoApplyMsg('Adding to agent queue…');
+  // ── Generate tailored resume PDF ─────────────────────────────────────────────
+  const handleGenerateResume = async (job: JobResult) => {
+    if (!resumeProfile) return;
+    setGeneratingResumeJobId(job.id);
     try {
-      const res = await fetch('/api/auto-apply/queue', {
+      const llmOverride = settings.llmProvider !== 'ollama' ? {
+        llm_provider: settings.llmProvider,
+        llm_model: settings.llmModel || undefined,
+        llm_api_key: (() => {
+          const keyMap: Record<string, string> = {
+            openai: settings.openaiKey, anthropic: settings.anthropicKey,
+            groq: settings.groqKey, gemini: settings.geminiKey,
+            mistral: settings.mistralKey, deepseek: settings.deepseekKey,
+            huggingface: settings.huggingfaceKey, openrouter: settings.openrouterKey,
+            cohere: settings.cohereKey,
+          };
+          return keyMap[settings.llmProvider] || undefined;
+        })(),
+        llm_base_url: settings.ollamaUrl || undefined,
+      } : {};
+      const res = await fetch('/api/resume/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          job_url:   job.url,
-          job_title: job.title,
-          company:   job.company,
-          dry_run:   dryRun,
-          headless:  true,
+          job,
+          resume_profile: resumeProfile,
+          assessment: assessments[job.id] ? { ...assessments[job.id] } : undefined,
+          ...llmOverride,
         }),
       });
-      const data = await res.json();
-      if (res.ok) {
-        setAutoApplyMsg('Queued! Switch to the Agents tab to track progress.');
-        setAgentActiveCount(c => c + 1);
-      } else {
-        setAutoApplyMsg(data.detail || 'Failed to queue job.');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
+        alert(`Resume generation failed: ${err.detail || res.statusText}`);
+        return;
       }
-    } catch {
-      setAutoApplyMsg('Error communicating with backend.');
+      // Trigger browser download
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `resume_${job.company}_${job.title}.pdf`.replace(/[^\w.-]/g, '_');
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(`Resume generation error: ${e}`);
     } finally {
-      setAutoApplyRunning(false);
+      setGeneratingResumeJobId(null);
     }
   };
 
@@ -554,32 +630,38 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     baseUrl: settings.ollamaUrl,
   };
 
-  const statusLabel =
-    llmStatus === 'green'  ? `${settings.llmProvider} · ${settings.llmModel}` :
-    llmStatus === 'yellow' ? 'Connecting…' : 'LLM offline';
-
   const assessedCount = Object.keys(assessments).length;
   const assessingCount = assessingIds.size;
+
+  const totalJobCount = jobs.length;
+  const awaitingAllAssessments =
+    Boolean(resumeProfile) &&
+    totalJobCount > 0 &&
+    (assessingCount > 0 || assessedCount < totalJobCount);
+  const searchPipelineBusy = jobSearch.isPending || awaitingAllAssessments;
 
   return (
     <div className="search-page">
       {/* ── HEADER ── */}
       <header className="search-header">
-        <div className="search-logo" onClick={onBack}>
-          <img src="/jumpship-logo.png" alt="JumpShip" className="nav-logo-mark" />
+        <div
+          className="search-logo"
+          onClick={onBack}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onBack(); } }}
+          aria-label="Back to home"
+        >
+          <span className="search-page-title">
+            <span className="logo-accent">Job</span>
+            <span> Hunting</span>
+          </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <button className="settings-trigger" onClick={() => onNavigate('tracker')} title="Job Tracker">
-            <Zap size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Tracker
-          </button>
-          <button className="settings-trigger" onClick={() => onNavigate('agents')} title="Agent Monitor">
-            <Bot size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Monitor
+            <Bookmark size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Tracker
           </button>
           <ThemeToggle compact />
-          <div className="llm-status">
-            <span className={`status-dot ${llmStatus}`} />
-            {statusLabel}
-          </div>
           <button className="settings-trigger" onClick={() => setProfileOpen(true)} title="Profile">
             <User size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Profile
           </button>
@@ -592,55 +674,6 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
       <SettingsModal open={settingsOpen} initial={settings} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />
       {profileOpen && <Profile onClose={() => setProfileOpen(false)} />}
 
-      {/* ── Auto Apply dialog ── */}
-      {autoApplyJob && (
-        <div className="modal-backdrop" onClick={() => { setAutoApplyJob(null); setAutoApplyMsg(''); }}>
-          <div className="modal-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
-            <div className="modal-header">
-              <div className="modal-title"><Zap size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} />Auto Apply</div>
-              <button className="modal-close" onClick={() => { setAutoApplyJob(null); setAutoApplyMsg(''); }}><X size={16} /></button>
-            </div>
-            <div className="modal-body" style={{ padding: '20px 24px' }}>
-              <div style={{ marginBottom: 16, fontSize: 13 }}>
-                <strong>{autoApplyJob.title}</strong> at <strong>{autoApplyJob.company}</strong>
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
-                The agent will open a browser, log into the job platform, and fill the application form using your saved profile data.
-                Make sure your profile is complete before running.
-              </div>
-              {autoApplyMsg && (
-                <div
-                  className={
-                    autoApplyMsg.toLowerCase().includes('error') || autoApplyMsg.toLowerCase().includes('fail')
-                      ? 'flash-message flash-message--error'
-                      : 'flash-message flash-message--success'
-                  }
-                >
-                  {autoApplyMsg}
-                </div>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button className="btn-secondary" style={{ padding: '9px 20px', fontSize: 13 }}
-                onClick={() => setProfileOpen(true)}>
-                <PenLine size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Edit Profile
-              </button>
-              <button className="btn-secondary" style={{ padding: '9px 20px', fontSize: 13 }}
-                onClick={() => handleAutoApply(autoApplyJob, true)}
-                disabled={autoApplyRunning}>
-                Queue (Dry Run)
-              </button>
-              <button className="btn-primary" style={{ padding: '9px 20px', fontSize: 13 }}
-                onClick={() => handleAutoApply(autoApplyJob, false)}
-                disabled={autoApplyRunning}>
-                {autoApplyRunning
-                  ? <><span className="spinner" style={{ width: 10, height: 10, display: 'inline-block', marginRight: 6 }} />Queuing…</>
-                  : <><Zap size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Queue &amp; Apply</>}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="search-body">
         {/* ── SIDEBAR ── */}
@@ -651,10 +684,10 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
             <div className="sidebar-section-title">Résumé</div>
             <ResumeUpload
               profile={resumeProfile}
+              fileName={resumeFileName}
               isLoading={resumeMutation.isPending}
-              isScouting={scoutRunning}
               onUpload={handleResumeUpload}
-              onScout={handleScout}
+              cached={!!resumeCache && !resumeMutation.isPending}
             />
             {resumeProfile && (
               <button
@@ -685,7 +718,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
             </div>
             <div className="llm-status-model">{settings.llmModel}</div>
             {llmStatus === 'red' && (
-              <div className="llm-warning"><AlertTriangle size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />{settings.llmProvider} not reachable — check Settings</div>
+              <div className="llm-warning"><AlertTriangle size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />{settings.llmProvider} not reachable. Check Settings</div>
             )}
             {assessingCount > 0 && (
               <div style={{ marginTop: 8, fontSize: 11, color: 'var(--gold)' }}>
@@ -781,7 +814,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
               )}
 
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
-                Tip: atomic keywords work best — e.g. <em>python</em>, <em>sql</em>, <em>figma</em>
+                Tip: atomic keywords work best, e.g. <em>python</em>, <em>sql</em>, <em>figma</em>
               </div>
             </div>
 
@@ -914,17 +947,6 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                 <span className="tab-badge">{Object.keys(bookmarks).length}</span>
               )}
             </button>
-            <button
-              className={`main-tab${activeTab === 'agents' ? ' active' : ''}`}
-              onClick={() => { setActiveTab('agents'); setAgentActiveCount(0); }}
-            >
-              <Bot size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Agents
-              {agentActiveCount > 0 && (
-                <span className="tab-badge" style={{ background: 'var(--gold)', color: '#000' }}>
-                  {agentActiveCount}
-                </span>
-              )}
-            </button>
           </div>
 
           {/* ── Saved Jobs tracking panel ── */}
@@ -999,7 +1021,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                         </div>
                         <div className="tracking-col-body">
                           {colJobs.length === 0 && (
-                            <div className="tracking-empty-col">—</div>
+                            <div className="tracking-empty-col">-</div>
                           )}
                           {colJobs.map(b => (
                             <div key={b.job.id} className="tracking-card">
@@ -1064,13 +1086,22 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
             );
           })()}
 
-          {/* ── Agent Queue tab ── */}
-          {activeTab === 'agents' && (
-            <AgentQueue onOpenProfile={() => setProfileOpen(true)} />
-          )}
 
           {activeTab === 'search' && (<>
-          {!jobSearch.data && !jobSearch.isPending ? (
+          {searchPipelineBusy ? (
+            <>
+              <div className="results-header">
+                <div className="results-title">
+                  {jobSearch.isPending ? 'Searching job boards…' : 'Evaluating your fit…'}
+                </div>
+              </div>
+              <AssessmentLoader
+                fetching={jobSearch.isPending}
+                total={jobSearch.isPending ? Math.max(resultsWanted, 1) : totalJobCount}
+                assessed={assessedCount}
+              />
+            </>
+          ) : !jobSearch.data ? (
             <div className="empty-state">
               <div className="empty-icon"><Rocket size={36} strokeWidth={1.2} /></div>
               <div className="empty-title">Ready to launch your search</div>
@@ -1080,17 +1111,6 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                   : 'Upload your résumé to let the AI find the best matches.'}
               </div>
             </div>
-          ) : jobSearch.isPending ? (
-            <>
-              <div className="results-header">
-                <div className="results-title">Searching…</div>
-              </div>
-              <div className="loading-jobs">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="skeleton" style={{ height: 100 - i * 8 }} />
-                ))}
-              </div>
-            </>
           ) : (
             <>
               <div className="results-header">
@@ -1104,12 +1124,6 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                     >
                       {showHidden ? <><X size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />Hide</> : <Eye size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />} {filteredCount} unrelated
                     </button>
-                  )}
-                  {assessingCount > 0 && (
-                    <div style={{ fontSize: 11, color: 'var(--gold)' }}>
-                      <div className="spinner" style={{ width: 8, height: 8, display: 'inline-block', verticalAlign: 'middle', marginRight: 4 }} />
-                      {assessedCount}/{jobs.length} assessed
-                    </div>
                   )}
                   {/* Bookmark filter */}
                   {bookmarkCount > 0 && (
@@ -1147,11 +1161,6 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                 </div>
               </div>
 
-              {/* Funny loader while AI reads all jobs for the first time */}
-              {resumeProfile && assessedCount === 0 && assessingCount > 0 ? (
-                <AssessmentLoader total={jobs.length} assessed={assessedCount} />
-              ) : (
-              <>
               <div className="jobs-list">
                 {paginatedJobs.map(job => (
                   <JobCard
@@ -1165,7 +1174,8 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                     onReassess={() => handleReassess(job)}
                     bookmarkStatus={bookmarks[job.id]?.status}
                     onBookmark={(status) => handleBookmark(job.id, job, status)}
-                    onAutoApply={job.url ? () => { setAutoApplyJob(job); setAutoApplyMsg(''); } : undefined}
+                    onGenerateResume={resumeProfile ? () => handleGenerateResume(job) : undefined}
+                    generatingResume={generatingResumeJobId === job.id}
                   />
                 ))}
               </div>
@@ -1204,13 +1214,12 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                         onReassess={() => handleReassess(job)}
                         bookmarkStatus={bookmarks[job.id]?.status}
                         onBookmark={(status) => handleBookmark(job.id, job, status)}
-                        onAutoApply={job.url ? () => { setAutoApplyJob(job); setAutoApplyMsg(''); } : undefined}
+                        onGenerateResume={resumeProfile ? () => handleGenerateResume(job) : undefined}
+                    generatingResume={generatingResumeJobId === job.id}
                       />
                     ))}
                   </div>
                 </div>
-              )}
-              </>
               )}
 
               {!resumeProfile && jobs.length === 0 && (

@@ -105,6 +105,71 @@ def _dedup_jobs(jobs: list[dict]) -> list[dict]:
     return unique
 
 
+_BR_LOCATION_TERMS = {
+    "brasil", "brazil", "são paulo", "sao paulo", "rio de janeiro", "belo horizonte",
+    "curitiba", "porto alegre", "brasília", "brasilia", "fortaleza", "manaus",
+    "recife", "salvador", "campinas", "florianópolis", "florianopolis",
+    "goiânia", "goiania", "belém", "belem", "natal", "maceió", "maceio",
+    "joão pessoa", "joao pessoa", "teresina", "campo grande", "aracaju",
+    "macapá", "macapa", "boa vista", "palmas", "porto velho", "rio branco",
+    # abbreviation used in job boards
+    " br", ", br",
+}
+
+_BR_COUNTRY_EXCLUSIONS = {
+    "mexico", "méxico", "argentina", "colombia", "chile", "peru", "venezuela",
+    "spain", "españa", "portugal", "united states", "usa", "canada", "uk",
+    "germany", "france", "italy", "netherlands", "india", "china", "australia",
+}
+
+def _is_brazil_location(loc: str) -> bool:
+    """True if the location string matches a Brazilian city/country."""
+    l = loc.lower()
+    for term in _BR_LOCATION_TERMS:
+        if term in l:
+            return True
+    return False
+
+def _is_excluded_location(loc: str, target: str) -> bool:
+    """True if the job location clearly belongs to a country different from target."""
+    if not loc or loc.lower() in ("nan", "", "none", "remote", "remoto", "anywhere"):
+        return False  # remote jobs — keep
+    l = loc.lower()
+    for term in _BR_COUNTRY_EXCLUSIONS:
+        if term in l:
+            return True
+    return False
+
+def _location_matches(job_loc: str, search_loc: str) -> bool:
+    """
+    Post-filter: check if a scraped job location is compatible with what the user searched.
+    Returns True if the job should be kept.
+    """
+    if not search_loc:
+        return True
+    sl = search_loc.lower().strip()
+    jl = job_loc.lower().strip() if job_loc else ""
+
+    # Remote searches — keep all remote/hybrid jobs anywhere
+    if sl in ("remote", "remoto", "anywhere", "worldwide"):
+        return jl == "" or any(w in jl for w in ("remote", "remoto", "anywhere", "home office", "teletrabalho"))
+
+    # Brazil search — keep BR locations + remote jobs, exclude clear non-BR countries
+    br_search = any(t in sl for t in ("brasil", "brazil", "br"))
+    if br_search:
+        if not jl or jl in ("nan", "", "none"):
+            return True  # unknown location — keep
+        if any(w in jl for w in ("remote", "remoto", "anywhere", "home office", "worldwide", "teletrabalho")):
+            return True  # remote jobs are fine for any country search
+        if _is_brazil_location(jl):
+            return True
+        if _is_excluded_location(jl, sl):
+            return False
+        return True  # uncertain — keep rather than miss
+
+    return True  # no strict filtering for other locations
+
+
 def _extract_domain(url: str) -> str:
     try:
         from urllib.parse import urlparse
@@ -182,6 +247,12 @@ async def search_jobs(
 
     all_results = _dedup_jobs(all_results)
 
+    # Post-filter by location (JobSpy doesn't guarantee country-level filtering)
+    before = len(all_results)
+    all_results = [j for j in all_results if _location_matches(j.get("location", ""), location)]
+    if before != len(all_results):
+        logger.info("Location filter '%s': kept %d/%d jobs", location, len(all_results), before)
+
     # Store in cache
     _search_cache[cache_key] = (time.time(), all_results)
     # Evict old entries
@@ -243,15 +314,25 @@ async def _search_jobspy(
         if description == "nan":
             description = ""
 
-        # Derive is_remote from jobspy's is_remote field or location string
+        # Derive is_remote from jobspy field + location string + description keywords
         raw_is_remote = row.get("is_remote")
         location_str = str(row.get("location", "")).lower()
+        desc_lower = description[:500].lower()
+
+        _remote_words = ("remote", "remoto", "home office", "anywhere", "distributed",
+                         "teletrabalho", "trabalho remoto", "wfh", "100% remoto", "fully remote")
+        _hybrid_words = ("híbrido", "hibrido", "hybrid", "modelo híbrido", "home office/escritório")
+
         if raw_is_remote is True or str(raw_is_remote).lower() == "true":
             is_remote = True
-        elif any(w in location_str for w in ("remote", "remoto", "home office", "anywhere", "distributed")):
+        elif any(w in location_str for w in _remote_words):
             is_remote = True
-        elif any(w in location_str for w in ("híbrido", "hibrido", "hybrid")):
-            is_remote = None  # hybrid — not fully remote, not fully onsite
+        elif any(w in location_str for w in _hybrid_words):
+            is_remote = None  # hybrid
+        elif any(w in desc_lower for w in _remote_words):
+            is_remote = True
+        elif any(w in desc_lower for w in _hybrid_words):
+            is_remote = None
         else:
             is_remote = False if location_str and location_str not in ("nan", "") else None
 

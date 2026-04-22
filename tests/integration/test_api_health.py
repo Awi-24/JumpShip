@@ -18,7 +18,7 @@ class TestHealthEndpoint:
         assert "llm_provider" in data
         assert "llm_model" in data
         assert "llm_available" in data
-        assert data["version"] == "2.0.0"
+        assert data["version"] == "3.0.0"
 
     def test_health_llm_unavailable(self, client):
         with patch("backend.main.get_llm_service") as mock_factory:

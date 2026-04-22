@@ -57,16 +57,31 @@ class AssessmentRequest(LLMOverride):
     include_company_research: bool = True  # set False to skip web search
 
 
+class BatchAssessmentRequest(LLMOverride):
+    jobs: list[JobResult]
+    resume_profile: ResumeProfile
+    include_company_research: bool = False  # default False for batch speed
+
+
+class BatchAssessmentItem(BaseModel):
+    job_id: str
+    assessment: JobAssessment | None = None
+    error: str | None = None
+
+
 class JobAssessment(BaseModel):
     match_score: int = 0
     summary: str = ""
     strong_points: list[str] = []
     gaps: list[str] = []
     career_suggestions: list[str] = []
-    company_insights: str = ""   # web-researched company info summary
-    income_range: str = ""       # estimated market salary range for this role/location
-    is_relevant: bool = True     # False when job is completely unrelated to candidate's field
-    job_tags: list[str] = []     # LLM-extracted tags: stack, seniority, work-mode, domain
+    company_insights: str = ""
+    income_range: str = ""
+    is_relevant: bool = True
+    job_tags: list[str] = []
+    keywords_matched: list[str] = []
+    keywords_missing: list[str] = []
+    resume_generation_triggered: bool = False  # True when score >= RESUME_GEN_THRESHOLD
 
 
 class HealthResponse(BaseModel):
@@ -74,4 +89,4 @@ class HealthResponse(BaseModel):
     llm_provider: str = ""
     llm_model: str = ""
     llm_available: bool = False
-    version: str = "2.0.0"
+    version: str = "3.0.0"

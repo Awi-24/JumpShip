@@ -1,8 +1,7 @@
 """
 JumpShip — Ollama LLM service.
 
-Used by the health endpoint and legacy analysis routes.
-The agent itself now uses langchain_ollama.ChatOllama directly.
+Used by the health endpoint only. All LLM calls now go through LLMClient.
 """
 from __future__ import annotations
 

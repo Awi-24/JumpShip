@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import SettingsModal from '../../components/SettingsModal';
 import { DEFAULT_SETTINGS } from '../../hooks/useSettings';
 
@@ -20,10 +20,12 @@ describe('SettingsModal', () => {
     expect(screen.queryByText('Settings')).toBeNull();
   });
 
-  it('renders both tabs', () => {
+  it('renders core LLM fields when open', () => {
     render(<SettingsModal {...defaultProps} />);
     expect(screen.getByText(/LLM Provider/i)).toBeInTheDocument();
-    expect(screen.getByText(/Search Defaults/i)).toBeInTheDocument();
+    expect(screen.getByText(/Assessment Speed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Resume Gen Threshold/i)).toBeInTheDocument();
+    expect(screen.getByText('Test Connection')).toBeInTheDocument();
   });
 
   it('calls onClose when Cancel is clicked', () => {
@@ -33,8 +35,10 @@ describe('SettingsModal', () => {
   });
 
   it('calls onClose when X button is clicked', () => {
-    render(<SettingsModal {...defaultProps} />);
-    fireEvent.click(screen.getByText('✕'));
+    const { container } = render(<SettingsModal {...defaultProps} />);
+    const closeBtn = container.querySelector('.modal-close');
+    expect(closeBtn).toBeTruthy();
+    fireEvent.click(closeBtn!);
     expect(defaultProps.onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -47,26 +51,12 @@ describe('SettingsModal', () => {
 
   it('shows API key input for cloud providers', () => {
     render(<SettingsModal {...defaultProps} initial={{ ...DEFAULT_SETTINGS, llmProvider: 'openai', llmModel: 'gpt-4o' }} />);
-    expect(screen.getByPlaceholderText(/sk-\.\.\./)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/sk-/)).toBeInTheDocument();
   });
 
   it('shows Base URL input for local providers', () => {
     render(<SettingsModal {...defaultProps} initial={{ ...DEFAULT_SETTINGS, llmProvider: 'ollama' }} />);
     expect(screen.getByPlaceholderText(/localhost:11434/)).toBeInTheDocument();
-  });
-
-  it('switches to Search Defaults tab', () => {
-    render(<SettingsModal {...defaultProps} />);
-    fireEvent.click(screen.getByText(/Search Defaults/i));
-    expect(screen.getByText(/Default location/i)).toBeInTheDocument();
-    expect(screen.getByText(/Results per search/i)).toBeInTheDocument();
-  });
-
-  it('shows site checkboxes in Search Defaults tab', () => {
-    render(<SettingsModal {...defaultProps} />);
-    fireEvent.click(screen.getByText(/Search Defaults/i));
-    expect(screen.getByText('linkedin')).toBeInTheDocument();
-    expect(screen.getByText('indeed')).toBeInTheDocument();
   });
 
   it('closes on backdrop click', () => {

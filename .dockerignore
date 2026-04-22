@@ -1,7 +1,5 @@
-# Don't copy the frontend into the backend image build context
-frontend/node_modules
-frontend/dist
-frontend/.next
+# Frontend is a separate image; keep it out of the backend build context
+frontend/
 
 # Python caches
 **/__pycache__
@@ -17,5 +15,11 @@ uploads/
 
 # Dev files
 .env
+.env.*
 *.md
 .git
+.jumpship/
+tests/
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts

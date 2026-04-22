@@ -3,7 +3,11 @@ JumpShip — Configuration via pydantic-settings + .env
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class Settings(BaseSettings):
@@ -21,11 +25,13 @@ class Settings(BaseSettings):
     secret_key: str = "dev-secret-change-me-in-production"
     # Optional API key for basic authentication
     api_key: str = ""
-    # LangGraph checkpoint DB path (defaults to same dir as main SQLite DB)
-    langgraph_db_path: str = "./jumpship_agents.db"
+    # Score threshold (0-100) above which a tailored resume is auto-generated
+    resume_gen_threshold: int = 70
+    # Directory for storing generated PDF resumes
+    resume_output_dir: str = "./generated_resumes"
 
     class Config:
-        env_file = ".env"
+        env_file = str(_REPO_ROOT / ".env")
         env_file_encoding = "utf-8"
 
     @property

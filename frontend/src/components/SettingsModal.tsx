@@ -1,30 +1,62 @@
 import { useState, useEffect } from 'react';
-import { Settings2, X, Check, Microscope, Zap, Rocket } from 'lucide-react';
+import { Settings2, X, Check, Microscope, Zap, Rocket, FileText } from 'lucide-react';
 import CustomSelect from './CustomSelect';
 import type { Settings } from '../hooks/useSettings';
 import type { LLMProvider } from '../types';
 
-// Curated fallback model lists (used when live fetch fails)
 const PROVIDER_MODELS: Record<LLMProvider, string[]> = {
-  ollama:    [],
-  openclaw:  ['openclaw-default'],
-  lmstudio:  ['lmstudio-default'],
-  openai:    ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-  anthropic: ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
-  groq: [
-    'llama-3.3-70b-versatile',
-    'llama-3.1-70b-versatile',
-    'llama-3.1-8b-instant',
-    'llama-3.2-90b-vision-preview',
-    'llama-3.2-11b-vision-preview',
-    'llama3-70b-8192',
-    'llama3-8b-8192',
-    'mixtral-8x7b-32768',
-    'gemma2-9b-it',
-  ],
+  ollama:      [],
+  lmstudio:    [],
+  openai:      ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+  anthropic:   ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
+  groq:        ['llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it', 'mixtral-8x7b-32768'],
+  gemini:      ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'],
+  mistral:     ['mistral-small-latest', 'mistral-medium-latest', 'mistral-large-latest'],
+  deepseek:    ['deepseek-chat', 'deepseek-reasoner'],
+  huggingface: ['Qwen/Qwen2.5-72B-Instruct', 'meta-llama/Llama-3.3-70B-Instruct'],
+  openrouter:  ['meta-llama/llama-3.2-3b-instruct:free', 'google/gemma-3-27b-it:free', 'mistralai/mistral-7b-instruct:free'],
+  cohere:      ['command-r', 'command-r-plus'],
 };
 
-const LOCAL_PROVIDERS: LLMProvider[] = ['ollama', 'openclaw', 'lmstudio'];
+const LOCAL_PROVIDERS: LLMProvider[] = ['ollama', 'lmstudio'];
+
+const PROVIDER_OPTIONS = [
+  { value: 'ollama',      label: 'Ollama (local)',          group: 'Local' },
+  { value: 'lmstudio',   label: 'LM Studio (local)',       group: 'Local' },
+  { value: 'openai',     label: 'OpenAI',                  group: 'Cloud API' },
+  { value: 'anthropic',  label: 'Anthropic (Claude)',      group: 'Cloud API' },
+  { value: 'groq',       label: 'Groq (fast free tier)',   group: 'Cloud API' },
+  { value: 'gemini',     label: 'Google Gemini',           group: 'Cloud API' },
+  { value: 'mistral',    label: 'Mistral AI',              group: 'Cloud API' },
+  { value: 'deepseek',   label: 'DeepSeek',                group: 'Cloud API' },
+  { value: 'huggingface',label: 'Hugging Face',            group: 'Cloud API' },
+  { value: 'openrouter', label: 'OpenRouter (free models)',group: 'Cloud API' },
+  { value: 'cohere',     label: 'Cohere',                  group: 'Cloud API' },
+];
+
+const API_KEY_FIELD: Partial<Record<LLMProvider, keyof Settings>> = {
+  openai:      'openaiKey',
+  anthropic:   'anthropicKey',
+  groq:        'groqKey',
+  gemini:      'geminiKey',
+  mistral:     'mistralKey',
+  deepseek:    'deepseekKey',
+  huggingface: 'huggingfaceKey',
+  openrouter:  'openrouterKey',
+  cohere:      'cohereKey',
+};
+
+const API_KEY_PLACEHOLDER: Partial<Record<LLMProvider, string>> = {
+  openai:      'sk-…',
+  anthropic:   'sk-ant-…',
+  groq:        'gsk_…',
+  gemini:      'AIza…',
+  mistral:     'mi-…',
+  deepseek:    'sk-…',
+  huggingface: 'hf_…',
+  openrouter:  'sk-or-…',
+  cohere:      'co-…',
+};
 
 interface Props {
   open: boolean;
@@ -42,16 +74,15 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
 
   useEffect(() => { setDraft(initial); }, [initial]);
 
-  // Fetch models whenever provider/URL/key changes
   useEffect(() => {
     if (!open) return;
     setLiveModels([]);
 
-    if (draft.llmProvider === 'ollama' || draft.llmProvider === 'openclaw' || draft.llmProvider === 'lmstudio') {
-      // Fetch from local Ollama-compatible server via backend proxy
+    if (LOCAL_PROVIDERS.includes(draft.llmProvider)) {
       setLoadingModels(true);
-      const params = draft.ollamaUrl ? `?base_url=${encodeURIComponent(draft.ollamaUrl)}` : '';
-      fetch(`/api/ollama/models${params}`)
+      const params = new URLSearchParams({ provider: draft.llmProvider });
+      if (draft.ollamaUrl) params.set('base_url', draft.ollamaUrl);
+      fetch(`/api/ollama/models?${params}`)
         .then(r => r.json())
         .then((models: string[]) => {
           setLiveModels(models);
@@ -63,7 +94,6 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
         .finally(() => setLoadingModels(false));
 
     } else if (draft.llmProvider === 'groq' && draft.groqKey) {
-      // Fetch available Groq models via backend proxy (avoids CORS issues)
       setLoadingModels(true);
       fetch(`/api/groq/models?api_key=${encodeURIComponent(draft.groqKey)}`)
         .then(r => r.json())
@@ -77,7 +107,6 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
         .finally(() => setLoadingModels(false));
 
     } else {
-      // Cloud providers without key — use curated fallback list
       setLiveModels(PROVIDER_MODELS[draft.llmProvider] ?? []);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -93,6 +122,14 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
     setDraft(d => ({ ...d, llmProvider: p, llmModel: defaultModel }));
     setStatus('idle');
     setTestMessage('');
+  };
+
+  const isLocal = LOCAL_PROVIDERS.includes(draft.llmProvider);
+  const isCloud = !isLocal;
+  const apiKeyField = API_KEY_FIELD[draft.llmProvider];
+  const apiKey = apiKeyField ? (draft[apiKeyField] as string) : '';
+  const setApiKey = (val: string) => {
+    if (apiKeyField) set(apiKeyField, val as never);
   };
 
   const testConnection = async () => {
@@ -112,7 +149,6 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
       const data = await res.json();
       setStatus(data.ok ? 'ok' : 'error');
       setTestMessage(data.message || '');
-      // If a different URL worked (e.g. 127.0.0.1 instead of localhost), auto-update
       if (data.ok && data.resolved_url && data.resolved_url !== draft.ollamaUrl) {
         setDraft(d => ({ ...d, ollamaUrl: data.resolved_url }));
       }
@@ -122,71 +158,48 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
     }
   };
 
-  const isCloud = !LOCAL_PROVIDERS.includes(draft.llmProvider);
-
-  const apiKey =
-    draft.llmProvider === 'openai'    ? draft.openaiKey :
-    draft.llmProvider === 'anthropic' ? draft.anthropicKey :
-    draft.llmProvider === 'groq'      ? draft.groqKey : '';
-
-  const setApiKey = (val: string) => {
-    if (draft.llmProvider === 'openai')    set('openaiKey', val);
-    if (draft.llmProvider === 'anthropic') set('anthropicKey', val);
-    if (draft.llmProvider === 'groq')      set('groqKey', val);
-  };
-
-  // Use live models when available, else fallback
   const modelOptions = liveModels.length > 0 ? liveModels : PROVIDER_MODELS[draft.llmProvider];
   const hasModelList = modelOptions.length > 0;
-  const isOllamaUnreachable =
-    draft.llmProvider === 'ollama' && !loadingModels && liveModels.length === 0;
+  const isLocalUnreachable = isLocal && !loadingModels && liveModels.length === 0;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-panel" onClick={e => e.stopPropagation()}>
 
-        {/* Header */}
         <div className="modal-header">
-          <div className="modal-title"><Settings2 size={16} style={{ verticalAlign: 'middle', marginRight: 6 }} />Settings</div>
+          <div className="modal-title">
+            <Settings2 size={16} style={{ verticalAlign: 'middle', marginRight: 6 }} />Settings
+          </div>
           <button className="modal-close" onClick={onClose}><X size={16} /></button>
         </div>
 
-        {/* Body */}
         <div className="modal-body" style={{ padding: '24px 28px' }}>
           <div className="settings-section">
 
             {/* Provider */}
             <div className="settings-row">
-              <label className="settings-label">Provider</label>
+              <label className="settings-label">LLM Provider</label>
               <CustomSelect
                 value={draft.llmProvider}
                 onChange={v => handleProviderChange(v as LLMProvider)}
-                options={[
-                  { value: 'ollama',    label: 'Ollama',               group: 'Local' },
-                  { value: 'lmstudio', label: 'LM Studio',             group: 'Local' },
-                  { value: 'openclaw', label: 'OpenClaw',              group: 'Local' },
-                  { value: 'openai',   label: 'OpenAI',                group: 'Cloud API' },
-                  { value: 'anthropic',label: 'Anthropic',             group: 'Cloud API' },
-                  { value: 'groq',     label: 'Groq (fast & free tier)', group: 'Cloud API' },
-                ]}
+                options={PROVIDER_OPTIONS}
               />
             </div>
 
-            {/* Local URL */}
-            {!isCloud && (
+            {/* Local base URL */}
+            {isLocal && (
               <div className="settings-row">
                 <label className="settings-label">Base URL</label>
                 <input
                   className="config-input"
                   value={draft.ollamaUrl}
                   onChange={e => set('ollamaUrl', e.target.value)}
-                  placeholder="default (host.docker.internal:11434)"
+                  placeholder={draft.llmProvider === 'lmstudio' ? 'http://localhost:1234/v1/' : 'http://localhost:11434'}
                 />
                 <div className="settings-hint">
-                  Leave blank — the server uses its own configured URL (auto-set to{' '}
-                  <code>host.docker.internal:11434</code> in Docker).
-                  Linux (if unreachable): try <code>http://127.0.0.1:11434</code> or set{' '}
-                  <code>OLLAMA_HOST=0.0.0.0 ollama serve</code> on the host.
+                  {draft.llmProvider === 'lmstudio'
+                    ? 'LM Studio default: http://localhost:1234/v1/. Start "Local Server" in LM Studio first.'
+                    : 'Leave blank to use backend default. Linux: try http://127.0.0.1:11434 if localhost fails.'}
                 </div>
               </div>
             )}
@@ -202,68 +215,49 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
                 )}
                 {!loadingModels && liveModels.length > 0 && (
                   <span style={{ marginLeft: 8, fontSize: 11, color: '#4ade80' }}>
-                    {liveModels.length} model{liveModels.length > 1 ? 's' : ''} available
+                    {liveModels.length} available
                   </span>
                 )}
-                {isOllamaUnreachable && (
+                {isLocalUnreachable && (
                   <span style={{ marginLeft: 8, fontSize: 11, color: '#f87171' }}>
-                    Ollama unreachable — type manually
+                    unreachable; type manually
                   </span>
                 )}
               </label>
-
               {hasModelList ? (
-                // Proper dropdown when models are known
                 <CustomSelect
                   value={draft.llmModel}
                   onChange={v => set('llmModel', v)}
                   options={modelOptions.map(m => ({ value: m, label: m }))}
                 />
               ) : (
-                // Free-text when Ollama is unreachable or provider has no list
                 <input
                   className="config-input"
                   value={draft.llmModel}
                   onChange={e => set('llmModel', e.target.value)}
-                  placeholder="e.g. qwen2.5:7b-instruct"
+                  placeholder={draft.llmProvider === 'lmstudio' ? 'loaded model name' : 'e.g. qwen2.5:7b-instruct'}
                   autoComplete="off"
                 />
               )}
             </div>
 
-            {/* API Key */}
-            {isCloud && (
+            {/* API Key — cloud providers */}
+            {isCloud && apiKeyField && (
               <div className="settings-row">
                 <label className="settings-label">
-                  API Key
-                  <span className="settings-required">required</span>
+                  API Key <span className="settings-required">required</span>
                 </label>
                 <input
                   className="config-input"
                   type="password"
                   value={apiKey}
                   onChange={e => setApiKey(e.target.value)}
-                  placeholder={
-                    draft.llmProvider === 'openai'    ? 'sk-…' :
-                    draft.llmProvider === 'anthropic' ? 'sk-ant-…' : 'gsk_…'
-                  }
+                  placeholder={API_KEY_PLACEHOLDER[draft.llmProvider] ?? 'API key…'}
                   autoComplete="off"
                 />
                 <div className="settings-hint">
-                  Stored only in your browser — never sent anywhere except the provider's API.
+                  Stored only in your browser, and sent only to the provider's API via the backend.
                 </div>
-              </div>
-            )}
-
-            {/* Groq helper */}
-            {draft.llmProvider === 'groq' && (
-              <div className="settings-hint" style={{ marginTop: 2 }}>
-                Get a free key at{' '}
-                <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer"
-                   style={{ color: 'var(--gold)' }}>
-                  console.groq.com/keys
-                </a>{' '}
-                — recommended: <code>llama-3.3-70b-versatile</code> or <code>llama-3.1-8b-instant</code> (fastest).
               </div>
             )}
 
@@ -288,8 +282,27 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Resume Generation Threshold */}
+            <div className="settings-row" style={{ marginTop: 8 }}>
+              <label className="settings-label">
+                <FileText size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />
+                Resume Gen Threshold
+                <span style={{ marginLeft: 8, fontWeight: 700, color: 'var(--gold)' }}>{draft.resumeGenThreshold}%</span>
+              </label>
+              <input
+                type="range"
+                min={50}
+                max={95}
+                step={5}
+                value={draft.resumeGenThreshold}
+                onChange={e => set('resumeGenThreshold', Number(e.target.value))}
+                style={{ width: '100%', accentColor: 'var(--gold)' }}
+              />
               <div className="settings-hint">
-                Controls how many jobs are analyzed simultaneously. Turbo is faster but uses more resources.
+                Jobs scoring ≥ {draft.resumeGenThreshold}% will show a highlighted "Download Resume" button.
+                Set higher to be more selective.
               </div>
             </div>
 
@@ -323,7 +336,6 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
           </div>
         </div>
 
-        {/* Footer */}
         <div className="modal-footer">
           <button className="btn-secondary" style={{ padding: '10px 24px', fontSize: 14 }} onClick={onClose}>
             Cancel
