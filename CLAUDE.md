@@ -58,6 +58,7 @@ bash ./start.sh          # backend + frontend in parallel
 ```bash
 source .venv/bin/activate                              # Windows: .venv\Scripts\activate
 pip install -r backend/requirements.txt
+pip install -r requirements-dev.txt                    # pytest, pytest-asyncio, httpx
 export PYTHONPATH=$(pwd)                               # Windows: $env:PYTHONPATH = (Get-Location).Path
 uvicorn backend.main:app --reload --port 8000
 ```
@@ -80,6 +81,15 @@ docker compose build && docker compose up -d
 # UI: http://localhost  |  API: http://localhost:8000
 ```
 
+### Python Tests
+```bash
+pytest                                        # all unit tests
+pytest tests/unit/                            # unit only
+pytest tests/integration/                     # integration (requires running backend)
+pytest -k test_resume_parser                  # single test file/function match
+pytest -m llm_integration                     # opt-in: calls a real LLM (skipped by default)
+```
+
 ### Health
 ```bash
 curl http://localhost:8000/api/health
@@ -96,13 +106,15 @@ FastAPI app (`main.py`). Config: pydantic-settings (`config.py`), reading **repo
 
 **Key services:**
 - `services/job_scraper_v2.py` — JobSpy + extra regional sources
-- `services/llm_client.py` — unified LLM calls (local semaphore for Ollama/LM Studio)
+- `services/llm_client.py` — unified LLM calls (local semaphore for Ollama/LM Studio); supports 11 providers via `LLMClient(provider, model).complete()` / `.complete_json()`
 - `services/resume_parser_v2.py` — PDF/DOCX → `ResumeProfile`
 - `services/ai_evaluator.py` — helpers still used by legacy analysis routes and résumé Markdown generation
 - `services/resume_generator.py` — tailored résumé HTML (LLM template) → xhtml2pdf PDF
 - `services/llm_service.py` — lightweight Ollama probe for `/api/health`
 
-**Database:** SQLite (`jobspy_ui.db` by default). Notable tables include `SavedJob`, `Application`, `UserProfile`, `GeneratedResume`.
+**Schemas:** `backend/models/schemas.py` defines all Pydantic v2 request/response types. `LLMOverride` fields (`llm_provider`, `llm_model`, `llm_api_key`, `llm_base_url`) can be embedded in any request to override `.env` config per-call.
+
+**Database:** SQLite (`jobspy_ui.db` by default). ORM models in `backend/models/db_models.py`; SQLAlchemy session via `backend/database.py:get_db()`. Notable tables: `SavedJob`, `Application`, `UserProfile`, `GeneratedResume`.
 
 ### Frontend (`frontend/src/`)
 
@@ -110,9 +122,10 @@ SPA: `App.tsx` → Landing, Search, JobTracker.
 
 - `pages/Search.tsx` — search, batch assess, settings, profile modal, résumé generation triggers
 - `pages/JobTracker.tsx` — Kanban (`@dnd-kit`)
-- `components/SettingsModal.tsx`, `ResumeUpload.tsx`, `JobCard.tsx`, `AssessmentLoader.tsx`
+- `components/` — `SettingsModal`, `ResumeUpload`, `JobCard`, `AssessmentLoader`, `ScoreRing`, `CustomSelect`, `LocationSelect`, `ThemeToggle`
+- `hooks/` — TanStack Query v5 hooks: `useJobs`, `useResume`, `useResumeCache`, `useSettings`, `useTheme`
 
-TanStack Query v5. Vite dev server proxies `/api` to the backend.
+Vite dev server proxies `/api` to the backend (configured in `vite.config.ts`).
 
 ### Data Flow
 
@@ -125,11 +138,16 @@ TanStack Query v5. Vite dev server proxies `/api` to the backend.
 
 | Variable | Default | Notes |
 |---|---|---|
-| `LLM_PROVIDER` | `ollama` | See `LLMClient` for full provider list |
+| `LLM_PROVIDER` | `ollama` | `ollama` · `lmstudio` · `openai` · `anthropic` · `groq` · `gemini` · `deepseek` · `mistral` · `openrouter` · `cohere` · `huggingface` |
 | `LLM_MODEL` | `gemma3:27b` | Must be installed / available for that provider |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Docker: `http://host.docker.internal:11434` |
 | `DATABASE_URL` | `sqlite:///./jobspy_ui.db` | |
 | `RESUME_OUTPUT_DIR` | `./generated_resumes` | Tailored PDF output directory |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GROQ_API_KEY` | `""` | Required when using cloud providers |
+| `SECRET_KEY` | `dev-secret-change-me-in-production` | Fernet encryption key — change in production |
+| `API_KEY` | `""` | Optional HTTP basic auth gate for the API |
+| `RESUME_GEN_THRESHOLD` | `70` | Score (0-100) above which a tailored résumé auto-generates |
+| `CORS_ORIGINS` | `http://localhost:5173,...` | Comma-separated; `*` to allow all |
 
 ## Important Notes
 

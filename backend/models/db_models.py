@@ -75,12 +75,16 @@ class Application(Base):
     company_name = Column(String)
     job_url = Column(String)
     site = Column(String)
-    status = Column(String, default="saved")  # saved | applied | interviewing | offered | rejected
+    status = Column(String, default="saved")  # saved | applying | applied | interviewing | offered | rejected
+    is_easy_apply = Column(Boolean, default=False)
     applied_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     notes = Column(Text)
     analysis_id = Column(String, nullable=True)
+    assessment_data = Column(JSON, nullable=True)   # full JobAssessment dict
+    match_score = Column(Integer, nullable=True)    # quick-access score from assessment
+    job_description = Column(Text, nullable=True)   # stored for interview chatbot
 
 
 class UserProfile(Base):

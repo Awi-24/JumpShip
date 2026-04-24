@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import {
-  Banknote, AlertTriangle, Bookmark, Send, Target, Trophy, X,
-  FileText, Bot, Check, Sparkles, Tag, Globe, ChevronDown, FileDown,
+  Banknote, AlertTriangle, Bookmark, X,
+  FileText, Bot, Check, Sparkles, Tag, Globe, ChevronDown,
 } from 'lucide-react';
 import ScoreRing from './ScoreRing';
-import type { JobResult, JobAssessment, ResumeProfile, BookmarkStatus } from '../types';
+import type { JobResult, JobAssessment, ResumeProfile } from '../types';
 
 interface LLMConfig {
   provider: string;
@@ -21,10 +21,8 @@ interface JobCardProps {
   assessment?: JobAssessment;
   assessing?: boolean;
   onReassess?: () => void;
-  bookmarkStatus?: BookmarkStatus;
-  onBookmark?: (status: BookmarkStatus | null) => void;
-  onGenerateResume?: () => void;
-  generatingResume?: boolean;
+  isSaved?: boolean;
+  onSave?: () => void;
 }
 
 /** Lightweight markdown → HTML (no external dep needed). */
@@ -66,10 +64,8 @@ export default function JobCard({
   assessment,
   assessing,
   onReassess,
-  bookmarkStatus,
-  onBookmark,
-  onGenerateResume,
-  generatingResume,
+  isSaved,
+  onSave,
 }: JobCardProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -169,9 +165,9 @@ export default function JobCard({
               <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>analyzing</span>
             </div>
           )}
-          {bookmarkStatus && (
-            <span className="bookmark-badge" title={bookmarkStatus}>
-              {bookmarkStatus === 'saved' ? <Bookmark size={12} /> : bookmarkStatus === 'applied' ? <Send size={12} /> : bookmarkStatus === 'interview' ? <Target size={12} /> : bookmarkStatus === 'rejected' ? <X size={12} /> : <Trophy size={12} />}
+          {isSaved && (
+            <span className="bookmark-badge" title="Saved to Tracker">
+              <Bookmark size={12} />
             </span>
           )}
           {score != null && !parseFailed && <ScoreRing score={score} />}
@@ -386,32 +382,6 @@ export default function JobCard({
               Apply Now →
             </a>
 
-            {/* Generate tailored resume — shown when score meets threshold or manually triggered */}
-            {resumeProfile && onGenerateResume && (
-              <button
-                className="apply-btn"
-                style={{
-                  background: assessment?.resume_generation_triggered
-                    ? 'rgba(74,222,128,0.12)'
-                    : 'rgba(245,166,35,0.08)',
-                  border: `1px solid ${assessment?.resume_generation_triggered ? 'rgba(74,222,128,0.35)' : 'var(--border-bright)'}`,
-                  color: assessment?.resume_generation_triggered ? '#4ade80' : 'var(--gold)',
-                }}
-                onClick={onGenerateResume}
-                disabled={generatingResume}
-                title={assessment?.resume_generation_triggered
-                  ? `Score ${assessment.match_score}%: auto-triggered resume generation`
-                  : 'Generate a tailored resume for this job'}
-              >
-                {generatingResume
-                  ? <><div className="spinner" style={{ width: 10, height: 10 }} /> Generating…</>
-                  : <><FileDown size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-                    {assessment?.resume_generation_triggered ? 'Download Resume ↓' : 'Generate Resume'}
-                  </>
-                }
-              </button>
-            )}
-
             {resumeProfile && onReassess && (
               <button
                 className="apply-btn"
@@ -423,39 +393,20 @@ export default function JobCard({
               </button>
             )}
 
-            {onBookmark && (
-              <div className="bookmark-actions">
-                {!bookmarkStatus ? (
-                  <button
-                    className="apply-btn"
-                    style={{ background: 'transparent', border: '1px solid var(--border-bright)', color: 'var(--text-muted)' }}
-                    onClick={() => onBookmark('saved')}
-                  >
-                    <Bookmark size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Save
-                  </button>
-                ) : (
-                  <>
-                    <select
-                      className="bookmark-status-select"
-                      value={bookmarkStatus}
-                      onChange={e => onBookmark(e.target.value as BookmarkStatus)}
-                    >
-                      <option value="saved">☆ Saved</option>
-                      <option value="applied">Applied</option>
-                      <option value="interview">Interview</option>
-                      <option value="rejected">Rejected</option>
-                      <option value="offer">Offer</option>
-                    </select>
-                    <button
-                      className="apply-btn"
-                      style={{ background: 'transparent', border: '1px solid rgba(248,113,113,0.3)', color: '#f87171', padding: '6px 12px', fontSize: 11 }}
-                      onClick={() => onBookmark(null)}
-                    >
-                      Remove
-                    </button>
-                  </>
-                )}
-              </div>
+            {onSave && (
+              <button
+                className="apply-btn"
+                style={{
+                  background: isSaved ? 'rgba(74,222,128,0.08)' : 'transparent',
+                  border: `1px solid ${isSaved ? 'rgba(74,222,128,0.35)' : 'var(--border-bright)'}`,
+                  color: isSaved ? '#4ade80' : 'var(--text-muted)',
+                }}
+                onClick={onSave}
+                disabled={isSaved}
+              >
+                <Bookmark size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                {isSaved ? 'Saved to Tracker' : 'Save to Tracker'}
+              </button>
             )}
           </div>
         </div>

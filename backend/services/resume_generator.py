@@ -41,6 +41,8 @@ def generate_pdf(
     output_dir: Optional[Path] = None,
     client: Optional[LLMClient] = None,
     user_profile: Optional[dict] = None,
+    custom_instructions: Optional[str] = None,
+    extra_context: Optional[str] = None,
 ) -> tuple[Path, str]:
     """
     Generate a tailored resume PDF for a specific job.
@@ -60,6 +62,8 @@ def generate_pdf(
         assessment=assessment,
         client=llm,
         user_profile=user_profile,
+        custom_instructions=custom_instructions,
+        extra_context=extra_context,
     )
     html_body = _sanitize_resume_html(html_body)
 
@@ -158,43 +162,64 @@ def _wrap_resume_html_document(fragment: str, font_scale: float) -> str:
     if "id=\"resume-root\"" not in inner and "id='resume-root'" not in inner:
         inner = f'<div class="resume" id="resume-root">{inner}</div>'
 
-    base = 9.0 * font_scale
-    h1 = 15.0 * font_scale
-    h2 = 9.5 * font_scale
-    h3 = 8.9 * font_scale
-    small = 8.15 * font_scale
-    li_h = 1.22
+    base  = 8.8 * font_scale   # body text
+    h1    = 17.0 * font_scale  # candidate name
+    h2    = 8.4 * font_scale   # section headers (uppercase)
+    h3    = 9.0 * font_scale   # job titles
+    small = 7.8 * font_scale   # contact line, job-meta, skills
+    li_h  = 1.22
 
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"/>
 <style>
-@page {{ size: A4; margin: 8mm 9mm; }}
+@page {{ size: A4; margin: 8mm 10mm; }}
 * {{ box-sizing: border-box; }}
 html {{ font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: {base:.2f}pt; color: #1a1a1a; }}
 body {{ margin: 0; padding: 0; }}
-#resume-root {{ }}
-.hdr {{ margin-bottom: 3pt; }}
-.legal-name {{ font-size: {h1:.2f}pt; font-weight: 700; margin: 0 0 2pt 0; }}
-.contact-line {{ font-size: {small:.2f}pt; margin: 0; color: #333; line-height: 1.25; }}
+
+/* ── Header ── */
+.hdr {{ padding-bottom: 4pt; border-bottom: 1.5pt solid #1a3a6b; margin-bottom: 3pt; }}
+.legal-name {{ font-size: {h1:.2f}pt; font-weight: 700; margin: 0 0 1.5pt 0; color: #1a3a6b; }}
+.contact-line {{ font-size: {small:.2f}pt; margin: 0; color: #444; line-height: 1.4; }}
+
+/* ── Sections ── */
 section {{ margin-top: 5pt; }}
-section:first-of-type {{ margin-top: 3pt; }}
+section:first-of-type {{ margin-top: 2pt; }}
 h2 {{
   font-size: {h2:.2f}pt;
   font-weight: 700;
   text-transform: uppercase;
-  margin: 0 0 3pt 0;
-  padding-bottom: 1.5pt;
-  border-bottom: 1px solid #444;
-  color: #222;
+  letter-spacing: 0.4pt;
+  margin: 0 0 2pt 0;
+  padding-bottom: 1pt;
+  border-bottom: 0.75pt solid #c5d3ea;
+  color: #1a3a6b;
 }}
-h3 {{ font-size: {h3:.2f}pt; font-weight: 700; margin: 4pt 0 1pt 0; }}
-.job-meta {{ font-size: {small:.2f}pt; margin: 0 0 2pt 0; color: #444; }}
-ul {{ margin: 1pt 0 3pt 11pt; padding: 0; }}
+
+/* ── Job entries ── */
+.job {{ margin-bottom: 4pt; }}
+h3 {{ font-size: {h3:.2f}pt; font-weight: 700; margin: 2pt 0 0 0; color: #111; }}
+.job-meta {{ font-size: {small:.2f}pt; margin: 0.5pt 0 1.5pt 0; color: #555; }}
+.role {{ font-weight: 700; }}
+.company {{ font-style: italic; }}
+.dash {{ color: #888; }}
+
+/* ── Lists ── */
+ul {{ margin: 1pt 0 0 10pt; padding: 0; }}
 li {{ margin-bottom: 1.5pt; line-height: {li_h}; }}
-p {{ margin: 1.5pt 0; line-height: 1.24; }}
-.skills-block {{ line-height: 1.26; font-size: {small:.2f}pt; }}
+
+/* ── Skills ── */
+.skills-block {{ font-size: {small:.2f}pt; line-height: 1.45; }}
+
+/* ── Two-column table layout (education + certs side-by-side) ── */
+table.layout-cols {{ border-collapse: collapse; width: 100%; }}
+table.layout-cols td {{ vertical-align: top; padding: 0; }}
+
+/* ── Typography ── */
+p {{ margin: 1pt 0; line-height: 1.24; }}
 strong {{ font-weight: 700; }}
 em {{ font-style: italic; }}
+a {{ color: #1a3a6b; text-decoration: none; }}
 </style></head><body>{inner}</body></html>"""
 
 

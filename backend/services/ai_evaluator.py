@@ -30,13 +30,19 @@ ASSESSMENT_SCHEMA = {
 # ── Prompts ────────────────────────────────────────────────────────────────────
 
 _ASSESSMENT_SYSTEM = (
-    "You are an expert HR consultant and career coach specialising in resume "
-    "optimisation and job matching. Analyse the candidate's resume against the "
-    "job description and provide structured, actionable feedback. "
-    "Respond ONLY with valid JSON — no markdown fences, no prose outside the JSON."
+    "You are Marcus Webb, a Principal Technical Recruiter with 20+ years placing engineers at "
+    "FAANG, high-growth startups, and Fortune 500 companies. You assess candidate-job fit with "
+    "calibrated honesty — your reputation depends on accurate scores, not flattery. "
+    "Respond ONLY with valid JSON — no markdown fences, no prose outside the JSON.\n\n"
+    "SCORING INTEGRITY:\n"
+    "• Never inflate scores. Calibrated accuracy matters more than candidate comfort.\n"
+    "• 90+ = this candidate would likely pass every round as-is.\n"
+    "• 70-89 = strong fit, minor gaps. 50-69 = moderate, notable gaps. <50 = significant mismatch.\n"
+    "• Do not claim the candidate has skills not evidenced in their resume.\n"
+    "• If you lack company data, say so rather than fabricating insights."
 )
 
-_ASSESSMENT_USER = """Analyse this resume against the job description below.
+_ASSESSMENT_USER = """Assess this resume against the job description below.
 
 ## RESUME
 {resume}
@@ -48,110 +54,144 @@ Job Title: {job_title} at {company_name}
 Return EXACTLY this JSON structure (no extra keys, no markdown):
 {{
   "score": <integer 0-100>,
-  "summary": "<2-3 sentence fit summary>",
-  "strengths": ["<strength with evidence>"],
-  "gaps": ["<gap or missing requirement>"],
-  "suggestions": ["<actionable improvement>"],
-  "keywords_matched": ["<keyword found in resume>"],
-  "keywords_missing": ["<keyword absent from resume>"]
+  "summary": "<2-3 sentence fit summary — specific, not generic>",
+  "strengths": ["<strength backed by evidence from resume>"],
+  "gaps": ["<specific gap or missing requirement>"],
+  "suggestions": ["<actionable step to bridge the gap>"],
+  "keywords_matched": ["<keyword found in both resume and job>"],
+  "keywords_missing": ["<keyword required by job but absent from resume>"]
 }}"""
 
-# HTML fragment the LLM must follow (ATS-friendly, parsed by our PDF pipeline).
+# HTML fragment the LLM must follow (ATS-friendly, two-column bottom for space efficiency).
 _RESUME_HTML_SKELETON = """
 <div class="resume" id="resume-root">
   <header class="hdr">
     <h1 class="legal-name">Full Legal Name</h1>
-    <p class="contact-line">City, ST | email@ | phone | linkedin.com/in/… | github.com/…</p>
+    <p class="contact-line">City, Country · email@example.com · +1 (555) 000-0000 · linkedin.com/in/handle · github.com/handle</p>
   </header>
+
   <section id="summary">
     <h2>Professional Summary</h2>
-    <p>2–4 sentences from the source only; weave relevant job-posting keywords naturally for ATS.</p>
+    <p>2–3 sentences from source only; weave ATS keywords from the job posting where they honestly match the source.</p>
   </section>
+
   <section id="experience">
     <h2>Professional Experience</h2>
     <div class="job">
-      <h3><span class="role">Job Title</span><span class="dash"> — </span><span class="company">Company</span></h3>
-      <p class="job-meta"><em>Jan 2020 – Present · City, ST (Remote)</em></p>
+      <h3><span class="role">Job Title</span><span class="dash"> — </span><span class="company">Company Name</span></h3>
+      <p class="job-meta"><em>Mon YYYY – Mon YYYY · City, ST (Remote/Hybrid/On-site)</em></p>
       <ul>
-        <li>Use <strong>tools/platforms</strong> from the source; outcome + metric when present in source.</li>
+        <li>Impact-focused bullet with <strong>specific tool/platform names</strong> from source; quantify when metric appears in source.</li>
+        <li>Second achievement from source content.</li>
       </ul>
     </div>
   </section>
-  <section id="education">
-    <h2>Education</h2>
-    <ul>
-      <li><strong>Degree / program</strong>, School — Year <em>(honors only if in source)</em></li>
-    </ul>
-  </section>
-  <section id="certifications">
-    <h2>Certifications &amp; Licenses</h2>
-    <ul>
-      <li>Credential, Issuer, Year (from source only)</li>
-    </ul>
-  </section>
+
   <section id="skills">
-    <h2>Technical Skills &amp; Keywords</h2>
-    <p class="skills-block">Languages: … | Cloud / Data: … | Tools: … (list every technology from the source; shorten words, do not drop items)</p>
+    <h2>Technical Skills</h2>
+    <p class="skills-block"><strong>Languages:</strong> … · <strong>Frameworks:</strong> … · <strong>Cloud &amp; Data:</strong> … · <strong>Tools:</strong> … (include every technology from source; use · separator; never truncate)</p>
   </section>
+
+  <table class="layout-cols" width="100%"><tr>
+    <td width="48%" style="vertical-align:top;padding:0;">
+      <section id="education">
+        <h2>Education</h2>
+        <ul>
+          <li><strong>Degree, Field</strong> — Institution <em>(Year)</em></li>
+        </ul>
+      </section>
+    </td>
+    <td width="4%" style="padding:0;"></td>
+    <td width="48%" style="vertical-align:top;padding:0;">
+      <section id="certifications">
+        <h2>Certifications &amp; Licenses</h2>
+        <ul>
+          <li>Credential — Issuer <em>(Year)</em></li>
+        </ul>
+      </section>
+    </td>
+  </tr></table>
 </div>
 """.strip()
 
-_TAILORED_RESUME_SYSTEM_HTML = (
-    "You are a professional resume editor. Output ONE resume as an HTML fragment only — "
-    "no Markdown, no backticks, no commentary, no preamble or closing remarks. "
-    "The outer element MUST be exactly: <div class=\"resume\" id=\"resume-root\"> … </div>. "
-    "Use only these tags: div, header, section, h1, h2, h3, p, ul, li, span, em, strong. "
-    "For dates and locations use <em>…</em> (never raw asterisks). For emphasis use <strong>…</strong>. "
-    "Preserve ALL factual content from the original resume: every employer, title, date range, "
-    "location, degree, school, certification, license, project, and substantive bullet. "
-    "Never drop Education or Certifications when those facts exist in the source — merge wording "
-    "instead. Target one printed page by tightening language, not by deleting sections. "
-    "Mirror ATS-relevant keywords from the job description only where they honestly match the source."
-)
+_TAILORED_RESUME_SYSTEM_HTML = """\
+You are Victoria Chen, CPRW (Certified Professional Résumé Writer), with 15 years crafting \
+résumés for Fortune 500 candidates, Silicon Valley engineers, and C-suite executives. \
+Your résumés pass ATS systems and impress hiring managers because they are factually precise, \
+keyword-optimized, and visually tight on the page.
 
-_TAILORED_RESUME_USER_HTML_HEAD = """Compare the ORIGINAL RESUME to the TARGET JOB. Return ONLY the HTML fragment (start with <div class="resume" id="resume-root">, end with </div>).
+OUTPUT FORMAT: One HTML fragment only — no Markdown, no backticks, no preamble, no commentary. \
+Start with <div class="resume" id="resume-root"> and end with </div>. Nothing before or after. \
+Allowed tags: div, header, section, table, tr, td, h1, h2, h3, p, ul, li, span, em, strong.
 
-## ORIGINAL RESUME (source of truth — do not invent employers, dates, degrees, tools, or metrics)
+═══ HARD GUARDRAILS — violating any rule invalidates the output ═══
+
+SOURCE-ONLY: Every employer name, job title, date range, degree, institution, certification, \
+project, technology, and metric MUST come verbatim from the ORIGINAL RESUME TEXT. \
+Never infer, embellish, add, or synthesize facts not explicitly stated in the source.
+
+COMPLETENESS: All roles in the source must appear in the output. All degrees and certifications \
+must appear. No employer may be omitted, renamed, or merged with another.
+
+NO FABRICATION: Do not add skills, tools, or accomplishments not stated in the source. \
+Do not estimate or round dates. Do not upgrade job titles.
+
+CONTACT INTEGRITY: Use contact details exactly as provided in CANDIDATE CONTEXT. \
+Do not construct email addresses or LinkedIn URLs from a name.
+
+SPACE DISCIPLINE: Target one printed A4 page by tightening language — not by dropping sections. \
+Compress bullet text; do not delete bullets. Shorten summaries; do not omit roles.
+
+ATS SAFE: No images, no icons, no special separators. Plain Unicode text only inside all tags.\
+"""
+
+_TAILORED_RESUME_USER_HTML_HEAD = """Your task: produce a tailored résumé HTML fragment for the TARGET JOB.
+Return ONLY the HTML fragment (start with <div class="resume" id="resume-root">, end with </div>).
+
+## ORIGINAL RESUME (source of truth — never invent beyond this)
 """
 
 _TAILORED_RESUME_USER_HTML_TAIL = """
-## TARGET JOB (alignment only)
+## TARGET JOB (for keyword alignment and summary framing only)
 Title: __JOB_TITLE__ at __COMPANY__
 
 __JOB_DESCRIPTION__
 
-## CANDIDATE CONTEXT (use for contact line when missing from resume text)
+## CANDIDATE CONTEXT (populate contact line from here when missing from resume text)
 __CANDIDATE_CONTEXT__
 
-## PRIOR FIT SIGNALS (do not paste as a narrative)
-Match score (0-100): __SCORE__
-Gaps vs posting: __GAPS__
-Posting keywords still weak in resume: __MISSING_KW__
+## FIT SIGNALS (context only — do not paste into the résumé as-is)
+Match score: __SCORE__ / 100
+Gap areas: __GAPS__
+Keywords to weave in (only where source content supports them): __MISSING_KW__
 
-RULES
-1. Copy the skeleton structure below exactly (same section ids and classes). Replace placeholder text with real content from the resume only.
-2. Include <section id="education"> with every school/degree/program found in the source. If the source truly has none, omit that entire section.
-3. Include <section id="certifications"> with every certificate/license in the source. If none, omit that entire section (no "N/A" paragraphs).
-4. Repeat <div class="job">…</div> once per role in the source (most recent first).
-5. skills-block must stay one or two dense lines of ATS keywords — include every skill/tool from the source; compress wording, never truncate mid-list with a dangling comma.
-6. No <style>, <script>, <html>, or <body> tags.
+## INSTRUCTIONS
+1. Follow the SKELETON structure exactly — same HTML section IDs and CSS classes.
+2. Replace every placeholder with real content from the ORIGINAL RESUME only.
+3. Repeat <div class="job">…</div> for each role (most recent first).
+4. Omit <section id="education"> entirely if source has no degree/school facts.
+5. Omit <section id="certifications"> entirely if source has no certifications.
+   Never output these sections with "N/A" or empty lists.
+6. skills-block: include every technology from source, use · separator, never truncate.
+7. Use the <table class="layout-cols"> for education + certifications as shown in SKELETON.
+8. No <style>, <script>, <html>, <head>, or <body> tags.
 
-## SKELETON (structure to follow)
+## SKELETON (follow this structure exactly)
 """ + _RESUME_HTML_SKELETON + """
 
 ## OUTPUT
-Return the filled HTML fragment only.
+Return the filled HTML fragment only. Start immediately with <div class="resume" id="resume-root">.
 """
 
-_COMPACT_RESUME_SYSTEM_HTML = (
-    "You compress resume HTML so it fits one printed A4 page. Preserve EVERY fact and every "
-    "<section id=\"education\"> and <section id=\"certifications\"> entry when present. "
-    "Shorten <p> and <li> text only; keep the same outer <div class=\"resume\" id=\"resume-root\">. "
-    "Same allowed tags only. No commentary outside the fragment."
-)
+_COMPACT_RESUME_SYSTEM_HTML = """\
+You are Victoria Chen, CPRW. The résumé HTML below is slightly too tall for one A4 page. \
+Rewrite it with tighter wording only — shorten sentences and bullets; do not delete any employer, \
+role, degree, certification, or skill. Keep every section. Keep the same HTML structure. \
+No commentary — output the fragment only.\
+"""
 
 _COMPACT_RESUME_USER_HTML = (
-    "The HTML resume below is too tall for one PDF page. Rewrite with tighter wording only.\n\n"
+    "The résumé HTML below overflows one printed A4 page. Tighten wording only; preserve all facts.\n\n"
 )
 
 
@@ -164,6 +204,8 @@ def _build_tailored_resume_user_html(
     score: object,
     gaps: str,
     missing_keywords: str,
+    custom_instructions: Optional[str] = None,
+    extra_context: Optional[str] = None,
 ) -> str:
     # Placeholder replace (not str.format) so job descriptions can contain "{" or "}".
     tail = (
@@ -175,7 +217,12 @@ def _build_tailored_resume_user_html(
         .replace("__GAPS__", gaps or "N/A")
         .replace("__MISSING_KW__", missing_keywords or "N/A")
     )
-    return _TAILORED_RESUME_USER_HTML_HEAD + resume + tail
+    body = _TAILORED_RESUME_USER_HTML_HEAD + resume + tail
+    if extra_context and extra_context.strip():
+        body += f"\n\n## ADDITIONAL CANDIDATE INFORMATION (incorporate where relevant and supported by the above resume)\n{extra_context.strip()}"
+    if custom_instructions and custom_instructions.strip():
+        body += f"\n\n## USER CUSTOMIZATION INSTRUCTIONS (highest priority — follow exactly)\n{custom_instructions.strip()}"
+    return body
 
 
 def generate_tailored_resume_html(
@@ -186,6 +233,8 @@ def generate_tailored_resume_html(
     assessment: Optional[dict] = None,
     client: Optional[LLMClient] = None,
     user_profile: Optional[dict] = None,
+    custom_instructions: Optional[str] = None,
+    extra_context: Optional[str] = None,
 ) -> str:
     """
     Generate tailored resume HTML for a specific job (fragment inside #resume-root).
@@ -210,6 +259,8 @@ def generate_tailored_resume_html(
         score=score,
         gaps=gaps,
         missing_keywords=missing_kw,
+        custom_instructions=custom_instructions,
+        extra_context=extra_context,
     )
 
     return llm.complete(_TAILORED_RESUME_SYSTEM_HTML, user_prompt)

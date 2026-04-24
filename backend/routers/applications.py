@@ -16,7 +16,7 @@ from backend.models.db_models import Application, SavedJob
 
 router = APIRouter(prefix="/api/applications", tags=["applications"])
 
-VALID_STATUSES = ["saved", "applied", "interviewing", "offered", "rejected"]
+VALID_STATUSES = ["saved", "applying", "applied", "interviewing", "offered", "rejected"]
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
@@ -30,6 +30,11 @@ class CreateApplicationRequest(BaseModel):
     site: Optional[str] = None
     notes: Optional[str] = None
     analysis_id: Optional[str] = None
+    status: Optional[str] = "saved"
+    is_easy_apply: Optional[bool] = False
+    assessment_data: Optional[dict] = None
+    match_score: Optional[int] = None
+    job_description: Optional[str] = None
 
 
 class UpdateStatusRequest(BaseModel):
@@ -81,6 +86,7 @@ def create_application(req: CreateApplicationRequest, db: Session = Depends(get_
     if existing:
         return {"message": "Application already exists", "id": existing.id, "already_existed": True}
 
+    initial_status = req.status if req.status in VALID_STATUSES else "saved"
     app = Application(
         id=str(uuid.uuid4()),
         job_id=req.job_id,
@@ -90,7 +96,11 @@ def create_application(req: CreateApplicationRequest, db: Session = Depends(get_
         site=site,
         notes=req.notes,
         analysis_id=req.analysis_id,
-        status="saved",
+        status=initial_status,
+        is_easy_apply=req.is_easy_apply or False,
+        assessment_data=req.assessment_data,
+        match_score=req.match_score,
+        job_description=req.job_description,
     )
     db.add(app)
     db.commit()
@@ -160,8 +170,12 @@ def _app_to_dict(a: Application) -> dict:
         "job_url": a.job_url,
         "site": a.site,
         "status": a.status,
+        "is_easy_apply": bool(a.is_easy_apply),
         "notes": a.notes,
         "analysis_id": a.analysis_id,
+        "assessment_data": a.assessment_data,
+        "match_score": a.match_score,
+        "job_description": a.job_description,
         "applied_at": a.applied_at.isoformat() if a.applied_at else None,
         "created_at": a.created_at.isoformat() if a.created_at else None,
         "updated_at": a.updated_at.isoformat() if a.updated_at else None,

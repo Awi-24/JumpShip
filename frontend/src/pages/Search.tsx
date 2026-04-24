@@ -2,7 +2,6 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import {
   User, Settings2, Search as SearchIcon, Bookmark, Rocket,
   Eye, X, AlertTriangle, Globe, FileDown, FileText,
-  Banknote, Star,
 } from 'lucide-react';
 import ResumeUpload from '../components/ResumeUpload';
 import JobCard from '../components/JobCard';
@@ -16,7 +15,7 @@ import { useResumeParse } from '../hooks/useResume';
 import { useJobSearch } from '../hooks/useJobs';
 import { useSettings } from '../hooks/useSettings';
 import { useResumeCache } from '../hooks/useResumeCache';
-import type { ResumeProfile, JobResult, JobAssessment, SortOption, BookmarkStatus } from '../types';
+import type { ResumeProfile, JobResult, JobAssessment, SortOption } from '../types';
 
 interface SearchProps {
   onBack: () => void;
@@ -63,28 +62,6 @@ function saveHistory(entry: SearchHistoryEntry) {
     );
     history.unshift(entry);
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)));
-  } catch { /* ignore */ }
-}
-
-// ── Bookmarks (localStorage) ─────────────────────────────────────────────────
-const BOOKMARKS_KEY = 'jumpship_bookmarks';
-
-interface BookmarkEntry {
-  job: JobResult;
-  status: BookmarkStatus;
-  savedAt: string;
-  assessment?: JobAssessment;
-}
-
-function loadBookmarks(): Record<string, BookmarkEntry> {
-  try {
-    return JSON.parse(localStorage.getItem(BOOKMARKS_KEY) || '{}');
-  } catch { return {}; }
-}
-
-function saveBookmarks(bookmarks: Record<string, BookmarkEntry>) {
-  try {
-    localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
   } catch { /* ignore */ }
 }
 
@@ -135,7 +112,6 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [generatingResumeJobId, setGeneratingResumeJobId] = useState<string | null>(null);
   const [llmStatus, setLlmStatus] = useState<'green' | 'yellow' | 'red'>('yellow');
 
   // Resume — with localStorage persistence
@@ -161,12 +137,9 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   // Search history
   const [searchHistory, setSearchHistory] = useState<SearchHistoryEntry[]>(loadHistory);
 
-  // Active tab
-  const [activeTab, setActiveTab] = useState<'search' | 'saved'>('search');
+  // Saved-to-tracker tracking (optimistic UI, keyed by job URL)
+  const [savedUrls, setSavedUrls] = useState<Set<string>>(new Set());
 
-  // Bookmarks
-  const [bookmarks, setBookmarks] = useState<Record<string, BookmarkEntry>>(loadBookmarks);
-  const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
 
   // Keyword suggestions & translations
@@ -505,24 +478,29 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     setLoadingTranslations(false);
   };
 
-  // ── Bookmarks ──────────────────────────────────────────────────────────────
-  const handleBookmark = useCallback((jobId: string, job: JobResult, status: BookmarkStatus | null) => {
-    setBookmarks(prev => {
-      const next = { ...prev };
-      if (status === null) {
-        delete next[jobId];
-      } else {
-        next[jobId] = {
-          job,
-          status,
-          savedAt: prev[jobId]?.savedAt || new Date().toISOString(),
-          assessment: assessments[jobId] || prev[jobId]?.assessment,
-        };
-      }
-      saveBookmarks(next);
-      return next;
-    });
-  }, [assessments]);
+  // ── Save to Tracker ────────────────────────────────────────────────────────
+  const handleSaveToTracker = useCallback(async (job: JobResult) => {
+    const key = job.url || job.id;
+    if (savedUrls.has(key)) return;
+    const assessment = assessments[job.id];
+    try {
+      await fetch('/api/applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_title: job.title,
+          company_name: job.company,
+          job_url: job.url,
+          site: job.site,
+          status: 'saved',
+          assessment_data: assessment ?? null,
+          match_score: assessment?.match_score ?? null,
+          job_description: job.description ?? null,
+        }),
+      });
+      setSavedUrls(prev => new Set(prev).add(key));
+    } catch { /* silent — tracker page will show nothing changed */ }
+  }, [assessments, savedUrls]);
 
   // ── Restore search from history ────────────────────────────────────────────
   const restoreSearch = (entry: SearchHistoryEntry) => {
@@ -531,66 +509,12 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     setActiveSites(entry.sites);
   };
 
-  // ── Generate tailored resume PDF ─────────────────────────────────────────────
-  const handleGenerateResume = async (job: JobResult) => {
-    if (!resumeProfile) return;
-    setGeneratingResumeJobId(job.id);
-    try {
-      const llmOverride = settings.llmProvider !== 'ollama' ? {
-        llm_provider: settings.llmProvider,
-        llm_model: settings.llmModel || undefined,
-        llm_api_key: (() => {
-          const keyMap: Record<string, string> = {
-            openai: settings.openaiKey, anthropic: settings.anthropicKey,
-            groq: settings.groqKey, gemini: settings.geminiKey,
-            mistral: settings.mistralKey, deepseek: settings.deepseekKey,
-            huggingface: settings.huggingfaceKey, openrouter: settings.openrouterKey,
-            cohere: settings.cohereKey,
-          };
-          return keyMap[settings.llmProvider] || undefined;
-        })(),
-        llm_base_url: settings.ollamaUrl || undefined,
-      } : {};
-      const res = await fetch('/api/resume/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          job,
-          resume_profile: resumeProfile,
-          assessment: assessments[job.id] ? { ...assessments[job.id] } : undefined,
-          ...llmOverride,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
-        alert(`Resume generation failed: ${err.detail || res.statusText}`);
-        return;
-      }
-      // Trigger browser download
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `resume_${job.company}_${job.title}.pdf`.replace(/[^\w.-]/g, '_');
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      alert(`Resume generation error: ${e}`);
-    } finally {
-      setGeneratingResumeJobId(null);
-    }
-  };
-
   // ── Sorting + relevance filter ──────────────────────────────────────────────
   const sortedJobs = useMemo(() => {
-    let visible = jobs.filter(j => {
+    const visible = jobs.filter(j => {
       const a = assessments[j.id];
       return !a || a.is_relevant !== false;
     });
-
-    if (showBookmarksOnly) {
-      visible = visible.filter(j => bookmarks[j.id]);
-    }
 
     return [...visible].sort((a, b) => {
       if (sortBy === 'match') {
@@ -602,7 +526,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
       if (sortBy === 'salary') return parseSalary(b.salary_range) - parseSalary(a.salary_range);
       return 0;
     });
-  }, [jobs, sortBy, assessments, showBookmarksOnly, bookmarks]);
+  }, [jobs, sortBy, assessments]);
 
   // Paginated view
   const paginatedJobs = sortedJobs.slice(0, visibleCount);
@@ -615,10 +539,6 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const hiddenJobs = useMemo(() =>
     jobs.filter(j => assessments[j.id]?.is_relevant === false),
   [jobs, assessments]);
-
-  const bookmarkCount = useMemo(() =>
-    jobs.filter(j => bookmarks[j.id]).length,
-  [jobs, bookmarks]);
 
   const llmConfig = {
     provider: settings.llmProvider,
@@ -929,165 +849,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
         {/* ── MAIN CONTENT ── */}
         <main className="main-content">
 
-          {/* ── Tab switcher ── */}
-          <div className="main-tabs">
-            <button
-              className={`main-tab${activeTab === 'search' ? ' active' : ''}`}
-              onClick={() => setActiveTab('search')}
-            >
-              <SearchIcon size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Search Results
-              {jobs.length > 0 && <span className="tab-badge">{sortedJobs.length}</span>}
-            </button>
-            <button
-              className={`main-tab${activeTab === 'saved' ? ' active' : ''}`}
-              onClick={() => setActiveTab('saved')}
-            >
-              <Bookmark size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Saved Jobs
-              {Object.keys(bookmarks).length > 0 && (
-                <span className="tab-badge">{Object.keys(bookmarks).length}</span>
-              )}
-            </button>
-          </div>
-
-          {/* ── Saved Jobs tracking panel ── */}
-          {activeTab === 'saved' && (() => {
-            const allSaved = Object.values(bookmarks);
-            const STATUS_COLS: { key: BookmarkStatus; label: string; icon: React.ReactNode; color: string }[] = [
-              { key: 'saved',     label: 'Saved',     icon: <Bookmark size={12} />,  color: '#a78bfa' },
-              { key: 'applied',   label: 'Applied',   icon: <FileDown size={12} />,  color: '#60a5fa' },
-              { key: 'interview', label: 'Interview', icon: <Star size={12} />,      color: '#fbbf24' },
-              { key: 'offer',     label: 'Offer',     icon: <Rocket size={12} />,    color: '#4ade80' },
-              { key: 'rejected',  label: 'Rejected',  icon: <X size={12} />,         color: '#f87171' },
-            ];
-            if (allSaved.length === 0) {
-              return (
-                <div className="empty-state" style={{ marginTop: 60 }}>
-                  <div className="empty-icon"><Bookmark size={36} strokeWidth={1.2} /></div>
-                  <div className="empty-title">No saved jobs yet</div>
-                  <div className="empty-sub">Save jobs from search results to track your applications here.</div>
-                </div>
-              );
-            }
-            return (
-              <div className="tracking-board">
-                {/* Summary bar */}
-                <div className="tracking-summary">
-                  {STATUS_COLS.map(col => {
-                    const count = allSaved.filter(b => b.status === col.key).length;
-                    return count > 0 ? (
-                      <div key={col.key} className="tracking-summary-pill" style={{ borderColor: col.color }}>
-                        <span style={{ color: col.color }}>{col.icon}</span>
-                        <span>{col.label}</span>
-                        <span className="tracking-summary-count" style={{ background: col.color }}>{count}</span>
-                      </div>
-                    ) : null;
-                  })}
-                  <button
-                    className="export-btn"
-                    style={{ marginLeft: 'auto' }}
-                    onClick={() => {
-                      const rows = allSaved.map(b => [
-                        `"${(b.job.title || '').replace(/"/g, '""')}"`,
-                        `"${(b.job.company || '').replace(/"/g, '""')}"`,
-                        b.status,
-                        b.job.site,
-                        `"${(b.job.salary_range || '').replace(/"/g, '""')}"`,
-                        b.assessment?.match_score ?? '',
-                        b.savedAt.slice(0, 10),
-                        b.job.url,
-                      ].join(','));
-                      const csv = 'Title,Company,Status,Site,Salary,Score,Saved,URL\n' + rows.join('\n');
-                      const blob = new Blob([csv], { type: 'text/csv' });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url; a.download = 'jumpship-saved.csv'; a.click();
-                      URL.revokeObjectURL(url);
-                    }}
-                  >
-                    <FileText size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Export CSV
-                  </button>
-                </div>
-
-                {/* Columns */}
-                <div className="tracking-columns">
-                  {STATUS_COLS.map(col => {
-                    const colJobs = allSaved.filter(b => b.status === col.key);
-                    return (
-                      <div key={col.key} className="tracking-col">
-                        <div className="tracking-col-header" style={{ borderTopColor: col.color }}>
-                          <span style={{ color: col.color }}>{col.icon}</span>
-                          <span>{col.label}</span>
-                          <span className="tracking-col-count">{colJobs.length}</span>
-                        </div>
-                        <div className="tracking-col-body">
-                          {colJobs.length === 0 && (
-                            <div className="tracking-empty-col">-</div>
-                          )}
-                          {colJobs.map(b => (
-                            <div key={b.job.id} className="tracking-card">
-                              <div className="tracking-card-title">{b.job.title}</div>
-                              <div className="tracking-card-company">{b.job.company}</div>
-                              {b.job.location && (
-                                <div className="tracking-card-location">{b.job.location}</div>
-                              )}
-                              <div className="tracking-card-meta">
-                                {b.job.site && <span className="tag">{b.job.site}</span>}
-                                {b.job.salary_range && <span className="tag salary"><Banknote size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />{b.job.salary_range}</span>}
-                                {b.assessment?.match_score != null && (
-                                  <span className="tag" style={{ color: 'var(--gold)' }}>
-                                    <Star size={10} style={{ verticalAlign: 'middle', marginRight: 2 }} />{b.assessment.match_score}%
-                                  </span>
-                                )}
-                              </div>
-                              <div className="tracking-card-saved">
-                                Saved {new Date(b.savedAt).toLocaleDateString()}
-                              </div>
-                              <div className="tracking-card-actions">
-                                <select
-                                  className="bookmark-status-select"
-                                  value={b.status}
-                                  onChange={e => handleBookmark(b.job.id, b.job, e.target.value as BookmarkStatus)}
-                                >
-                                  <option value="saved">☆ Saved</option>
-                                  <option value="applied">📨 Applied</option>
-                                  <option value="interview">🎯 Interview</option>
-                                  <option value="offer">🎉 Offer</option>
-                                  <option value="rejected">✕ Rejected</option>
-                                </select>
-                                <div style={{ display: 'flex', gap: 4 }}>
-                                  {b.job.url && (
-                                    <a
-                                      href={b.job.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="apply-btn"
-                                      style={{ textDecoration: 'none', padding: '4px 10px', fontSize: 11 }}
-                                    >
-                                      View →
-                                    </a>
-                                  )}
-                                  <button
-                                    className="apply-btn"
-                                    style={{ background: 'transparent', border: '1px solid rgba(248,113,113,0.3)', color: '#f87171', padding: '4px 10px', fontSize: 11 }}
-                                    onClick={() => handleBookmark(b.job.id, b.job, null)}
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
-
-
-          {activeTab === 'search' && (<>
+          {(<>
           {searchPipelineBusy ? (
             <>
               <div className="results-header">
@@ -1123,15 +885,6 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                       onClick={() => setShowHidden(v => !v)}
                     >
                       {showHidden ? <><X size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />Hide</> : <Eye size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />} {filteredCount} unrelated
-                    </button>
-                  )}
-                  {/* Bookmark filter */}
-                  {bookmarkCount > 0 && (
-                    <button
-                      className={`filter-pill${showBookmarksOnly ? ' active' : ''}`}
-                      onClick={() => setShowBookmarksOnly(v => !v)}
-                    >
-                      <Bookmark size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />{bookmarkCount} saved
                     </button>
                   )}
                 </div>
@@ -1172,10 +925,8 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                     assessment={assessments[job.id]}
                     assessing={assessingIds.has(job.id)}
                     onReassess={() => handleReassess(job)}
-                    bookmarkStatus={bookmarks[job.id]?.status}
-                    onBookmark={(status) => handleBookmark(job.id, job, status)}
-                    onGenerateResume={resumeProfile ? () => handleGenerateResume(job) : undefined}
-                    generatingResume={generatingResumeJobId === job.id}
+                    isSaved={savedUrls.has(job.url || job.id)}
+                    onSave={() => handleSaveToTracker(job)}
                   />
                 ))}
               </div>
@@ -1212,10 +963,8 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                         assessment={assessments[job.id]}
                         assessing={assessingIds.has(job.id)}
                         onReassess={() => handleReassess(job)}
-                        bookmarkStatus={bookmarks[job.id]?.status}
-                        onBookmark={(status) => handleBookmark(job.id, job, status)}
-                        onGenerateResume={resumeProfile ? () => handleGenerateResume(job) : undefined}
-                    generatingResume={generatingResumeJobId === job.id}
+                        isSaved={savedUrls.has(job.url || job.id)}
+                        onSave={() => handleSaveToTracker(job)}
                       />
                     ))}
                   </div>

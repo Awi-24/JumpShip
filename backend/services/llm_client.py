@@ -38,6 +38,30 @@ def is_local_provider(provider: str) -> bool:
     return provider in LOCAL_PROVIDERS
 
 
+# ── Thinking-model helpers ─────────────────────────────────────────────────────
+# Qwen3, QwQ, DeepSeek-R1 and similar "reasoning" models run an internal chain-of-
+# thought pass before generating a response.  For structured JSON tasks this wastes
+# the token budget: the model can burn the entire max_tokens on <think> and return
+# empty content.  We suppress thinking for these models by prepending /no-think to
+# the system prompt, which is supported by Qwen3 and compatible runtimes.
+
+_THINKING_MODEL_RE = re.compile(
+    r"qwen3|qwq|deepseek-r\d|deepseek-reasoner|qwen-3",
+    re.IGNORECASE,
+)
+
+
+def _is_thinking_model(model: str) -> bool:
+    return bool(_THINKING_MODEL_RE.search(model or ""))
+
+
+def _suppress_thinking(system: str, model: str) -> str:
+    """Prepend /no-think to system prompt for thinking models (Qwen3, DeepSeek-R1, QwQ)."""
+    if _is_thinking_model(model) and not system.startswith("/no-think"):
+        return "/no-think\n" + system
+    return system
+
+
 # ── JSON helpers ───────────────────────────────────────────────────────────────
 
 def _strip_fences(text: str) -> str:
@@ -129,7 +153,21 @@ def _call_openai_compat(model: str, api_key: str, base_url: Optional[str],
     if json_schema:
         kwargs["response_format"] = {"type": "json_object"}
     resp = client.chat.completions.create(**kwargs)
-    return resp.choices[0].message.content.strip()
+    choice = resp.choices[0]
+    content = (choice.message.content or "").strip()
+
+    if not content:
+        # Thinking models (Qwen3, DeepSeek-R1, QwQ) expose their reasoning chain in
+        # reasoning_content and may return empty content when the token budget is
+        # exhausted during the <think> pass.  Try to rescue JSON from the reasoning.
+        reasoning = getattr(choice.message, "reasoning_content", None) or ""
+        if reasoning:
+            # Extract the last complete JSON object the model was constructing
+            match = re.search(r'(\{[\s\S]*\})\s*$', reasoning)
+            if match:
+                return match.group(1)
+
+    return content
 
 
 def _call_gemini(model: str, api_key: str, base_url: Optional[str],
@@ -207,7 +245,7 @@ class LLMClient:
     model: str = ""
     api_key: str = ""
     base_url: Optional[str] = None
-    max_tokens: int = 2048
+    max_tokens: int = 8192  # thinking models need head-room beyond their CoT pass
 
     def _resolve_base_url(self) -> Optional[str]:
         if self.base_url:
@@ -261,11 +299,15 @@ class LLMClient:
                 f"Unknown provider '{self.provider}'. Valid: {', '.join(VALID_PROVIDERS)}"
             )
         adapter_fn, _, _ = entry
+        resolved_model = self._resolve_model()
+        # Suppress chain-of-thought for thinking models on structured JSON tasks —
+        # they otherwise exhaust max_tokens on reasoning before producing any output.
+        effective_system = _suppress_thinking(system, resolved_model)
         return adapter_fn(
-            self._resolve_model(),
+            resolved_model,
             self._resolve_api_key(),
             self._resolve_base_url(),
-            system, user,
+            effective_system, user,
             self.max_tokens,
             json_schema,
         )

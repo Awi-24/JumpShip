@@ -26,7 +26,7 @@ from backend.routers import jobs, resume, analysis, applications, settings as se
 from backend.routers import brazilian_jobs, concursos
 
 # Primary routers
-from backend.routers import resume_v2, jobs_v2, profile, models, resume_gen
+from backend.routers import resume_v2, jobs_v2, profile, models, resume_gen, interview
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,10 @@ def _migrate_db():
     migrations = [
         "ALTER TABLE analyses ADD COLUMN keywords_matched JSON",
         "ALTER TABLE analyses ADD COLUMN keywords_missing JSON",
+        "ALTER TABLE applications ADD COLUMN is_easy_apply BOOLEAN DEFAULT 0",
+        "ALTER TABLE applications ADD COLUMN assessment_data JSON",
+        "ALTER TABLE applications ADD COLUMN match_score INTEGER",
+        "ALTER TABLE applications ADD COLUMN job_description TEXT",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
@@ -72,6 +76,7 @@ app.include_router(jobs_v2.router)
 app.include_router(jobs_v2._jobs_router)
 app.include_router(profile.router)
 app.include_router(models.router)
+app.include_router(interview.router)
 
 # Legacy routers (backward compat)
 app.include_router(jobs.router)

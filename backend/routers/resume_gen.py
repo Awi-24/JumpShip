@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.models.db_models import GeneratedResume, UserProfile
+from backend.models.db_models import Application, GeneratedResume, UserProfile
 from backend.models.schemas import JobResult, ResumeProfile, JobAssessment
 from backend.services.llm_client import LLMClient, get_local_sem, is_local_provider
 from backend.services.resume_generator import generate_pdf
@@ -31,7 +31,17 @@ class GenerateResumeRequest(BaseModel):
     job: JobResult
     resume_profile: ResumeProfile
     assessment: Optional[dict] = None
-    # Optional LLM override (provider / model / key / base_url)
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+    llm_api_key: Optional[str] = None
+    llm_base_url: Optional[str] = None
+
+
+class GenerateForApplicationRequest(BaseModel):
+    application_id: str
+    resume_text: str
+    custom_instructions: Optional[str] = None
+    extra_context: Optional[str] = None
     llm_provider: Optional[str] = None
     llm_model: Optional[str] = None
     llm_api_key: Optional[str] = None
@@ -127,6 +137,80 @@ async def generate_resume(
         path=str(pdf_path),
         media_type="application/pdf",
         filename=filename,
+        headers={"X-Generated-Resume-Id": record.id},
+    )
+
+
+@router.post("/generate-for-application")
+async def generate_resume_for_application(
+    req: GenerateForApplicationRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Generate a tailored resume for a tracked application.
+    Accepts resume text directly (from cache or user edit), plus optional customizations.
+    """
+    app = db.query(Application).filter(Application.id == req.application_id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found.")
+    if not req.resume_text or not req.resume_text.strip():
+        raise HTTPException(status_code=400, detail="Resume text is required.")
+    if not app.job_description:
+        raise HTTPException(status_code=400, detail="Application has no job description — cannot generate tailored resume.")
+
+    client = LLMClient.from_override(req)
+
+    user_profile_row = db.query(UserProfile).first()
+    user_profile = {}
+    if user_profile_row:
+        user_profile = {
+            c.name: getattr(user_profile_row, c.name)
+            for c in UserProfile.__table__.columns
+            if getattr(user_profile_row, c.name) is not None
+        }
+
+    async def _generate():
+        return await asyncio.to_thread(
+            generate_pdf,
+            resume_text=req.resume_text,
+            job_title=app.job_title or "",
+            company_name=app.company_name or "",
+            job_description=app.job_description or "",
+            assessment=app.assessment_data,
+            client=client,
+            user_profile=user_profile,
+            custom_instructions=req.custom_instructions,
+            extra_context=req.extra_context,
+        )
+
+    try:
+        if is_local_provider(client.provider):
+            async with get_local_sem():
+                pdf_path, md_text = await _generate()
+        else:
+            pdf_path, md_text = await _generate()
+    except Exception as exc:
+        logger.error("Resume generation failed: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Resume generation failed: {exc}")
+
+    score = int((app.assessment_data or {}).get("match_score", 0) or 0)
+    record = GeneratedResume(
+        job_id=app.job_id or app.id,
+        job_title=app.job_title,
+        company=app.company_name or "",
+        match_score=score,
+        markdown=md_text,
+        pdf_path=str(pdf_path),
+        provider=client.provider,
+        model=client._resolve_model(),
+    )
+    db.add(record)
+    db.commit()
+
+    return FileResponse(
+        path=str(pdf_path),
+        media_type="application/pdf",
+        filename=pdf_path.name,
         headers={"X-Generated-Resume-Id": record.id},
     )
 
