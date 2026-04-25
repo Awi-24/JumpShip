@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
+from sqlalchemy import text
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(_REPO_ROOT / ".env")
@@ -30,6 +31,13 @@ from backend.routers import resume_v2, jobs_v2, profile, models, resume_gen, int
 
 logger = logging.getLogger(__name__)
 
+# Validate SECRET_KEY at startup
+if settings.secret_key == "dev-secret-change-me-in-production":
+    logger.critical(
+        "❌ SECRET_KEY is still using default dev value. "
+        "Change it in .env or environment variables before deploying to production."
+    )
+
 Base.metadata.create_all(bind=engine)
 
 
@@ -45,7 +53,7 @@ def _migrate_db():
     with engine.connect() as conn:
         for stmt in migrations:
             try:
-                conn.execute(__import__("sqlalchemy").text(stmt))
+                conn.execute(text(stmt))
                 conn.commit()
             except Exception:
                 pass

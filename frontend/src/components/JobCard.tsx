@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import DOMPurify from 'dompurify';
 import {
   Banknote, AlertTriangle, Bookmark,
   FileText, Bot, Check, Sparkles, Tag, Globe, ChevronDown,
@@ -190,7 +191,7 @@ export default function JobCard({
               <div className="job-expanded-col">
                 <div
                   className="job-description markdown-body"
-                  dangerouslySetInnerHTML={{ __html: md(job.description || 'No description available.') }}
+                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(md(job.description || 'No description available.')) }}
                 />
               </div>
             </div>

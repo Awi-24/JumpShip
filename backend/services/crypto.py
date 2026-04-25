@@ -20,14 +20,15 @@ _SALT = b"jumpship-salt-2026"
 
 def _get_fernet() -> Fernet:
     """Derive a Fernet key from the SECRET_KEY in settings."""
-    secret = settings.secret_key or "dev-secret-change-me-in-production"
+    if not settings.secret_key:
+        raise ValueError("SECRET_KEY must be set in environment — refusing to use fallback.")
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
         salt=_SALT,
         iterations=100000,
     )
-    key = base64.urlsafe_b64encode(kdf.derive(secret.encode()))
+    key = base64.urlsafe_b64encode(kdf.derive(settings.secret_key.encode()))
     return Fernet(key)
 
 def encrypt(text: str | None) -> str | None:
