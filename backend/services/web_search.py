@@ -98,3 +98,26 @@ async def search_company_info(company: str, job_title: str = "") -> str:
             unique.append(s)
 
     return "\n".join(unique[:5]) if unique else ""
+
+
+async def search_interview_process(company: str, job_title: str = "") -> str:
+    """Search for interview process info for a company + role."""
+    queries = [
+        f"{company} {job_title} interview process questions glassdoor".strip(),
+        f"{company} technical interview coding assessment hiring",
+    ]
+    all_snippets: list[str] = []
+    for q in queries:
+        snippets = await _ddg_instant(q)
+        if not snippets:
+            snippets = await _ddg_lite(q)
+        all_snippets.extend(snippets)
+        if len(all_snippets) >= 4:
+            break
+    seen: set[str] = set()
+    unique: list[str] = []
+    for s in all_snippets:
+        if s not in seen:
+            seen.add(s)
+            unique.append(s)
+    return "\n".join(unique[:5]) if unique else ""

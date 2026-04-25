@@ -22,6 +22,10 @@ export interface Settings {
   assessmentSpeed: 'careful' | 'balanced' | 'turbo';
   // Resume generation
   resumeGenThreshold: number;
+  // Per-step model overrides (same provider, different model per pipeline step)
+  evaluatorLlmModel: string;
+  resumeGenLlmModel: string;
+  interviewLlmModel: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -42,6 +46,9 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultLocation: '',
   assessmentSpeed: 'balanced',
   resumeGenThreshold: 70,
+  evaluatorLlmModel: '',
+  resumeGenLlmModel: '',
+  interviewLlmModel: '',
 };
 
 const STORAGE_KEY = 'jumpship_settings';

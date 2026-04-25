@@ -63,6 +63,7 @@ export interface JobAssessment {
   keywords_matched?: string[];
   keywords_missing?: string[];
   resume_generation_triggered?: boolean;
+  hire_recommendation?: 'strong_yes' | 'yes' | 'borderline' | 'no' | 'strong_no';
 }
 
 export interface GenerateResumeRequest {

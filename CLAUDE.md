@@ -102,7 +102,9 @@ curl http://localhost:8000/api/health/llm    # full LLM diagnostic
 
 FastAPI app (`main.py`). Config: pydantic-settings (`config.py`), reading **repo-root** `.env` (see `load_dotenv` in `main.py`).
 
-**Primary routers:** `resume_v2`, `resume_gen`, `jobs_v2` (includes `/api/jobs/*` and model-discovery helpers), `profile`, `models`. **Legacy:** `jobs`, `resume`, `analysis`, `applications`, `settings`, `brazilian_jobs`, `concursos` for backward compatibility.
+**Primary routers:** `resume_v2`, `resume_gen`, `jobs_v2` (includes `/api/jobs/*` and model-discovery helpers), `profile`, `models`, `interview`. **Legacy:** `jobs`, `resume`, `analysis`, `applications`, `settings`, `brazilian_jobs`, `concursos` for backward compatibility.
+
+**Interview chatbot** (`/api/interview`): stateless two-endpoint design — `POST /init` builds an enriched system prompt (DuckDuckGo company/role research + persona generation) and returns `session_context`; `POST /chat` accepts that context + message history and runs one LLM turn. Frontend owns conversation state; no server-side session storage.
 
 **Key services:**
 - `services/job_scraper_v2.py` — JobSpy + extra regional sources
@@ -111,6 +113,7 @@ FastAPI app (`main.py`). Config: pydantic-settings (`config.py`), reading **repo
 - `services/ai_evaluator.py` — helpers still used by legacy analysis routes and résumé Markdown generation
 - `services/resume_generator.py` — tailored résumé HTML (LLM template) → xhtml2pdf PDF
 - `services/llm_service.py` — lightweight Ollama probe for `/api/health`
+- `services/web_search.py` — keyless DuckDuckGo scraper (DDG Instant API + DDG Lite HTML fallback); used by the interview router to enrich company/role context
 
 **Schemas:** `backend/models/schemas.py` defines all Pydantic v2 request/response types. `LLMOverride` fields (`llm_provider`, `llm_model`, `llm_api_key`, `llm_base_url`) can be embedded in any request to override `.env` config per-call.
 
@@ -133,6 +136,7 @@ Vite dev server proxies `/api` to the backend (configured in `vite.config.ts`).
 2. Resume: `POST /api/resume/parse` → `resume_parser_v2.py`
 3. Assess: `POST /api/jobs/assess` / `assess-batch` → `LLMClient` + prompts in `jobs_v2.py`
 4. Tailored PDF: `POST /api/resume/generate` → `resume_generator.py`
+5. Interview: `POST /api/interview/init` → `web_search.py` (DDG) + `LLMClient`; `POST /api/interview/chat` → `LLMClient` (stateless — context passed by client)
 
 ## Configuration
 

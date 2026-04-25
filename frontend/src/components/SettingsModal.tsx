@@ -261,6 +261,37 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
               </div>
             )}
 
+            {/* Per-step model overrides */}
+            {hasModelList && (
+              <div className="settings-row" style={{ marginTop: 4 }}>
+                <label className="settings-label" style={{ marginBottom: 8 }}>Per-step model overrides</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {(
+                    [
+                      { key: 'evaluatorLlmModel', label: 'Evaluator' },
+                      { key: 'resumeGenLlmModel', label: 'Resume Gen' },
+                      { key: 'interviewLlmModel', label: 'Interview' },
+                    ] as const
+                  ).map(({ key, label }) => (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)', width: 90, flexShrink: 0 }}>{label}</span>
+                      <div style={{ flex: 1 }}>
+                        <CustomSelect
+                          value={draft[key]}
+                          onChange={v => set(key, v)}
+                          options={[
+                            { value: '', label: 'Same as above' },
+                            ...modelOptions.map(m => ({ value: m, label: m })),
+                          ]}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="settings-hint">Leave blank to use the model selected above.</div>
+              </div>
+            )}
+
             {/* Assessment Speed */}
             <div className="settings-row" style={{ marginTop: 8 }}>
               <label className="settings-label">Assessment Speed</label>

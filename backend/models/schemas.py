@@ -82,6 +82,7 @@ class JobAssessment(BaseModel):
     keywords_matched: list[str] = []
     keywords_missing: list[str] = []
     resume_generation_triggered: bool = False  # True when score >= RESUME_GEN_THRESHOLD
+    hire_recommendation: str = "borderline"  # strong_yes | yes | borderline | no | strong_no
 
 
 class HealthResponse(BaseModel):

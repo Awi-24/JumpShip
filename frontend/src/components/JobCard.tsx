@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Banknote, AlertTriangle, Bookmark, X,
+  Banknote, AlertTriangle, Bookmark,
   FileText, Bot, Check, Sparkles, Tag, Globe, ChevronDown,
 } from 'lucide-react';
 import ScoreRing from './ScoreRing';
@@ -254,6 +254,21 @@ export default function JobCard({
                       <div className="assessment-score-row">
                         <ScoreRing score={assessment.match_score} />
                         <span className="assessment-score-label">match score</span>
+                        {assessment.hire_recommendation && (() => {
+                          const cfg: Record<string, { label: string; color: string; bg: string; border: string }> = {
+                            strong_yes: { label: 'Apply now',    color: '#4ade80', bg: 'rgba(74,222,128,0.10)', border: 'rgba(74,222,128,0.30)' },
+                            yes:        { label: 'Good shot',    color: '#86efac', bg: 'rgba(74,222,128,0.07)', border: 'rgba(74,222,128,0.20)' },
+                            borderline: { label: 'Borderline',   color: '#fbbf24', bg: 'rgba(251,191,36,0.08)', border: 'rgba(251,191,36,0.25)' },
+                            no:         { label: 'Weak match',   color: '#f87171', bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.25)' },
+                            strong_no:  { label: 'Skip',         color: '#ef4444', bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.30)' },
+                          };
+                          const c = cfg[assessment.hire_recommendation!];
+                          return c ? (
+                            <span style={{ marginLeft: 10, padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, color: c.color, background: c.bg, border: `1px solid ${c.border}`, letterSpacing: '0.02em' }}>
+                              {c.label}
+                            </span>
+                          ) : null;
+                        })()}
                       </div>
 
                       {assessment.summary && (

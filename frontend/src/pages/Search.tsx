@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   User, Settings2, Search as SearchIcon, Bookmark, Rocket,
   Eye, X, AlertTriangle, Globe, FileDown, FileText,
@@ -222,23 +222,24 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const LOCAL_PROVIDERS = new Set(['ollama', 'lmstudio', 'openclaw']);
 
   // ── Build LLM body fields ──────────────────────────────────────────────────
-  const getLlmFields = useCallback(() => {
+  const getLlmFields = useCallback((featureModel?: string) => {
     const s = settingsRef.current;
-    const apiKey =
-      s.llmProvider === 'openai'    ? s.openaiKey :
-      s.llmProvider === 'anthropic' ? s.anthropicKey :
-      s.llmProvider === 'groq'      ? s.groqKey : '';
+    const keyMap: Record<string, string> = {
+      openai: s.openaiKey, anthropic: s.anthropicKey, groq: s.groqKey,
+      gemini: s.geminiKey, mistral: s.mistralKey, deepseek: s.deepseekKey,
+      huggingface: s.huggingfaceKey, openrouter: s.openrouterKey, cohere: s.cohereKey,
+    };
     return {
       llm_provider: s.llmProvider,
-      llm_model:    s.llmModel    || undefined,
-      llm_api_key:  apiKey        || undefined,
-      llm_base_url: s.ollamaUrl   || undefined,
+      llm_model:    featureModel || s.llmModel || undefined,
+      llm_api_key:  keyMap[s.llmProvider] || undefined,
+      llm_base_url: s.ollamaUrl || undefined,
     };
   }, []);
 
   // ── Auto-assess all jobs ──────────────────────────────────────────────────
   const assessSingle = useCallback(async (job: JobResult, profile: ResumeProfile) => {
-    const body = { job, resume_profile: profile, ...getLlmFields() };
+    const body = { job, resume_profile: profile, ...getLlmFields(settingsRef.current.evaluatorLlmModel) };
     setAssessingIds(prev => new Set(prev).add(job.id));
 
     const MAX_RETRIES = 2;
@@ -297,7 +298,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
         jobs: jobList,
         resume_profile: profile,
         include_company_research: false,
-        ...getLlmFields(),
+        ...getLlmFields(settingsRef.current.evaluatorLlmModel),
       };
       const res = await fetch('/api/jobs/assess-batch', {
         method: 'POST',
@@ -426,22 +427,11 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     if (keywords.length === 0) return;
     setLoadingSuggestions(true);
     setSuggestions([]);
-    const s = settingsRef.current;
-    const apiKey =
-      s.llmProvider === 'openai'    ? s.openaiKey :
-      s.llmProvider === 'anthropic' ? s.anthropicKey :
-      s.llmProvider === 'groq'      ? s.groqKey : '';
     try {
       const res = await fetch('/api/jobs/suggest-keywords', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          keywords,
-          llm_provider: s.llmProvider,
-          llm_model: s.llmModel || undefined,
-          llm_api_key: apiKey || undefined,
-          llm_base_url: s.ollamaUrl || undefined,
-        }),
+        body: JSON.stringify({ keywords, ...getLlmFields() }),
       });
       const data = await res.json();
       setSuggestions(data.suggestions || []);
@@ -454,23 +444,11 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     if (keywords.length === 0) return;
     setLoadingTranslations(true);
     setTranslations([]);
-    const s = settingsRef.current;
-    const apiKey =
-      s.llmProvider === 'openai'    ? s.openaiKey :
-      s.llmProvider === 'anthropic' ? s.anthropicKey :
-      s.llmProvider === 'groq'      ? s.groqKey : '';
     try {
       const res = await fetch('/api/jobs/translate-keywords', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          keywords,
-          target_language: 'pt',
-          llm_provider: s.llmProvider,
-          llm_model: s.llmModel || undefined,
-          llm_api_key: apiKey || undefined,
-          llm_base_url: s.ollamaUrl || undefined,
-        }),
+        body: JSON.stringify({ keywords, target_language: 'pt', ...getLlmFields() }),
       });
       const data = await res.json();
       setTranslations(data.translations || []);
