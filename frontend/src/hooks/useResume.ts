@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, type UseMutationResult } from '@tanstack/react-query';
 import type { ResumeProfile } from '../types';
 
 interface ParseResumeArgs {
@@ -22,10 +22,18 @@ async function parseResume(args: ParseResumeArgs): Promise<ResumeProfile> {
     method: 'POST',
     body: formData,
   });
-  if (!res.ok) throw new Error('Failed to parse resume');
+  if (!res.ok) {
+    let detail = 'Failed to parse resume';
+    try {
+      const body = await res.json();
+      if (typeof body.detail === 'string') detail = body.detail;
+      else if (Array.isArray(body.detail)) detail = body.detail.map((d: { msg: string }) => d.msg).join('; ');
+    } catch { /* ignore */ }
+    throw new Error(detail);
+  }
   return res.json();
 }
 
-export function useResumeParse() {
+export function useResumeParse(): UseMutationResult<ResumeProfile, Error, ParseResumeArgs> {
   return useMutation({ mutationFn: parseResume });
 }

@@ -1,0 +1,1463 @@
+{
+  "version": "1.3",
+  "schema_version": "1.0",
+  "generated_at": "2026-04-24T12:00:00Z",
+  "description": "Catálogo de fontes públicas de listagem de vagas (Brasil + contratação no BR + hubs internacionais relevantes). URLs são ponto de entrada operacional; ATS e endpoints mudam com o tempo.",
+  "sources": [
+    {
+      "id": "nubank_jobs_br",
+      "name": "Nubank (listagens BR)",
+      "sectors": ["fintech", "technology"],
+      "listing_url": "https://international.nubank.com.br/pt-br/jobs/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Site próprio; filtrar localização Brasil. Respeitar ToS/robots ao automatizar."
+    },
+    {
+      "id": "ifood_greenhouse",
+      "name": "iFood (Greenhouse)",
+      "sectors": ["technology", "logistics", "marketplace"],
+      "listing_url": "https://job-boards.greenhouse.io/ifoodcarreiras",
+      "ats": "greenhouse",
+      "api": {
+        "provider": "greenhouse",
+        "board_token": "ifoodcarreiras",
+        "jobs_endpoint": "https://boards-api.greenhouse.io/v1/boards/ifoodcarreiras/jobs",
+        "docs_url": "https://developers.greenhouse.io/job-board.html"
+      },
+      "ingestion_notes": "GET público; use ?content=true para descrições completas."
+    },
+    {
+      "id": "hotmart_greenhouse_br",
+      "name": "Hotmart (Greenhouse BR)",
+      "sectors": ["technology", "creator_economy"],
+      "listing_url": "https://job-boards.eu.greenhouse.io/hotmartcareersbr",
+      "ats": "greenhouse",
+      "api": {
+        "provider": "greenhouse",
+        "board_token": "hotmartcareersbr",
+        "jobs_endpoint": "https://boards-api.greenhouse.io/v1/boards/hotmartcareersbr/jobs",
+        "docs_url": "https://developers.greenhouse.io/job-board.html"
+      },
+      "ingestion_notes": "Board hospedado em subdomínio EU; API de Job Board usa o mesmo board_token."
+    },
+    {
+      "id": "creditas_greenhouse",
+      "name": "Creditas (Greenhouse)",
+      "sectors": ["fintech", "credit"],
+      "listing_url": "https://job-boards.greenhouse.io/creditas",
+      "ats": "greenhouse",
+      "api": {
+        "provider": "greenhouse",
+        "board_token": "creditas",
+        "jobs_endpoint": "https://boards-api.greenhouse.io/v1/boards/creditas/jobs",
+        "docs_url": "https://developers.greenhouse.io/job-board.html"
+      },
+      "ingestion_notes": null
+    },
+    {
+      "id": "neon_lever",
+      "name": "Neon Pagamentos (Lever)",
+      "sectors": ["fintech", "banking"],
+      "listing_url": "https://jobs.lever.co/neon",
+      "ats": "lever",
+      "api": {
+        "provider": "lever",
+        "site": "neon",
+        "postings_endpoint": "https://api.lever.co/v0/postings/neon?mode=json",
+        "docs_url": "https://hire.lever.co/developer/documentation"
+      },
+      "ingestion_notes": "GET público em postings JSON; respeitar rate limits."
+    },
+    {
+      "id": "quintoandar_careers",
+      "name": "QuintoAndar",
+      "sectors": ["proptech", "technology"],
+      "listing_url": "https://carreiras.quintoandar.com.br/vagas-abertas/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal em carreiras.quintoandar.com.br; HTML/JSON embutido possível."
+    },
+    {
+      "id": "stone_jornada",
+      "name": "StoneCo (Jornada)",
+      "sectors": ["fintech", "payments"],
+      "listing_url": "https://jornada.stone.com.br/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal próprio; pode embutir ATS de terceiros por trás."
+    },
+    {
+      "id": "rappi_jobs",
+      "name": "Rappi",
+      "sectors": ["delivery", "technology"],
+      "listing_url": "https://jobs.dev.rappi.com/open-positions",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Domínio jobs.dev.rappi.com; validar se SPA expõe JSON público."
+    },
+    {
+      "id": "vale_eightfold",
+      "name": "Vale (Eightfold)",
+      "sectors": ["mining", "industry"],
+      "listing_url": "https://vale.eightfold.ai/careers",
+      "ats": "eightfold",
+      "api": {
+        "provider": "eightfold",
+        "careers_home_url": "https://vale.eightfold.ai/careers",
+        "docs_url": null
+      },
+      "ingestion_notes": "Eightfold não oferece contrato público único como Greenhouse; frequentemente há chamadas XHR internas."
+    },
+    {
+      "id": "mercadolibre_eightfold",
+      "name": "Mercado Livre (Eightfold)",
+      "sectors": ["ecommerce", "fintech", "technology"],
+      "listing_url": "https://mercadolibre.eightfold.ai/careers?location=Brasil",
+      "ats": "eightfold",
+      "api": {
+        "provider": "eightfold",
+        "careers_home_url": "https://mercadolibre.eightfold.ai/careers",
+        "docs_url": null
+      },
+      "ingestion_notes": "Filtrar Brasil na UI ou via parâmetros da própria aplicação."
+    },
+    {
+      "id": "mercadolibre_careers_portal",
+      "name": "Mercado Livre (portal careers-meli)",
+      "sectors": ["ecommerce", "technology"],
+      "listing_url": "https://careers-meli.mercadolibre.com/pt",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Canal alternativo ao Eightfold; pode coexistir com redirecionamentos."
+    },
+    {
+      "id": "magalu_carreiras",
+      "name": "Magazine Luiza (Magalu)",
+      "sectors": ["retail", "technology"],
+      "listing_url": "https://carreiras.magazineluiza.com.br/encontre-sua-vaga/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal carreiras.magazineluiza.com.br."
+    },
+    {
+      "id": "itau_carreiras",
+      "name": "Itaú Unibanco",
+      "sectors": ["banking", "financial_services"],
+      "listing_url": "https://carreiras.itau.com.br/busca-de-vagas",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal carreiras.itau.com.br; ATS pode mudar sem aviso."
+    },
+    {
+      "id": "bradesco_carreiras",
+      "name": "Bradesco",
+      "sectors": ["banking"],
+      "listing_url": "https://banco.bradesco/html/classic/canais-digitais/carreiras/index.shtm",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Site legado/SPA; seguir redirects para URL canônica."
+    },
+    {
+      "id": "bb_carreiras",
+      "name": "Banco do Brasil",
+      "sectors": ["banking", "public_sector_mixed"],
+      "listing_url": "https://www.bb.com.br/site/principal/carreiras/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Mistura de concurso, terceiros e vagas corporativas; ler seções no portal."
+    },
+    {
+      "id": "santander_workday",
+      "name": "Santander Brasil (Workday)",
+      "sectors": ["banking"],
+      "listing_url": "https://santander.wd3.myworkdayjobs.com/pt-BR/SantanderCareers",
+      "ats": "workday",
+      "api": {
+        "provider": "workday",
+        "careers_url": "https://santander.wd3.myworkdayjobs.com/pt-BR/SantanderCareers",
+        "docs_url": "https://community.workday.com/"
+      },
+      "ingestion_notes": "Workday exige host/site corretos; API corporativa normalmente autenticada. Ingestão comum via parsing da UI pública."
+    },
+    {
+      "id": "inter_carreiras",
+      "name": "Banco Inter",
+      "sectors": ["banking", "fintech"],
+      "listing_url": "https://carreiras.inter.co/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Domínio alternativo carreiras.bancointer.com.br pode coexistir."
+    },
+    {
+      "id": "c6bank_gupy",
+      "name": "C6 Bank (Gupy)",
+      "sectors": ["banking", "fintech"],
+      "listing_url": "https://c6bank.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "c6bank",
+        "public_listing_url": "https://c6bank.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "API REST Gupy normalmente exige Bearer da empresa; MVP costuma ser página pública ou parceria."
+    },
+    {
+      "id": "pagbank_gupy",
+      "name": "PagBank / PagSeguro (Gupy)",
+      "sectors": ["fintech", "payments"],
+      "listing_url": "https://pagseguro.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "pagseguro",
+        "public_listing_url": "https://pagseguro.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Canal Gupy; página institucional pagbank.com.br/carreiras pode duplicar conteúdo."
+    },
+    {
+      "id": "pagbank_institucional",
+      "name": "PagBank (site institucional)",
+      "sectors": ["fintech", "payments"],
+      "listing_url": "https://pagbank.com.br/carreiras",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Entrada de marca; vagas costumam residir no Gupy."
+    },
+    {
+      "id": "picpay_central_vagas",
+      "name": "PicPay",
+      "sectors": ["fintech", "payments"],
+      "listing_url": "https://picpay.com/jobs",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Central de vagas no domínio picpay.com; ATS pode variar."
+    },
+    {
+      "id": "loft_gupy",
+      "name": "Loft (Gupy)",
+      "sectors": ["proptech", "fintech"],
+      "listing_url": "https://loft.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "loft",
+        "public_listing_url": "https://loft.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": null
+    },
+    {
+      "id": "uber_careers_list",
+      "name": "Uber",
+      "sectors": ["mobility", "technology"],
+      "listing_url": "https://www.uber.com/global/en/careers/list",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Filtrar Brasil/LATAM na UI; HTML dinâmico."
+    },
+    {
+      "id": "google_careers_brazil",
+      "name": "Google (filtro Brasil)",
+      "sectors": ["technology", "cloud"],
+      "listing_url": "https://www.google.com/about/careers/applications/jobs/results/?location=Brazil",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Fortemente dinâmico; scraping pode violar ToS — preferir integrações oficiais quando existirem."
+    },
+    {
+      "id": "amazon_jobs_brazil_hub",
+      "name": "Amazon (hub Brasil)",
+      "sectors": ["ecommerce", "technology", "cloud"],
+      "listing_url": "https://amazon.jobs/content/en/teams/international-stores/brazil",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Busca global em amazon.jobs; filtrar por location=Brasil nas facetas."
+    },
+    {
+      "id": "microsoft_careers_sao_paulo",
+      "name": "Microsoft (hub São Paulo)",
+      "sectors": ["technology", "cloud"],
+      "listing_url": "https://careers.microsoft.com/v2/global/en/locations/sao-paulo.html",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Vagas BR podem aparecer como LATAM/remoto; complementar com busca global."
+    },
+    {
+      "id": "nvidia_careers",
+      "name": "NVIDIA",
+      "sectors": ["semiconductors", "ai", "technology"],
+      "listing_url": "https://jobs.nvidia.com/careers",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Grandes players usam ATS próprio/Workday interno; validar país na descrição."
+    },
+    {
+      "id": "boeing_jobs_search",
+      "name": "Boeing",
+      "sectors": ["aerospace", "defense"],
+      "listing_url": "https://jobs.boeing.com/search-jobs",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Filtrar localização Brasil quando existir; maioria fora do BR."
+    },
+    {
+      "id": "embraer_gupy",
+      "name": "Embraer (Gupy)",
+      "sectors": ["aerospace", "manufacturing"],
+      "listing_url": "https://embraer.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "embraer",
+        "public_listing_url": "https://embraer.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Programas de estágio podem usar subdomínios adicionais."
+    },
+    {
+      "id": "embraer_careers_global",
+      "name": "Embraer (careers global)",
+      "sectors": ["aerospace"],
+      "listing_url": "https://www.embraer.com/en-us/careers",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Entrada institucional EN; versão PT em embraer.com."
+    },
+    {
+      "id": "petrobras_carreiras_site",
+      "name": "Petrobras (site institucional)",
+      "sectors": ["energy", "oil_gas"],
+      "listing_url": "https://petrobras.com.br/carreiras/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Hub de programas e links para concursos/vagas."
+    },
+    {
+      "id": "petrobras_jobs2web",
+      "name": "Petrobras (Oracle Jobs2Web)",
+      "sectors": ["energy", "oil_gas"],
+      "listing_url": "https://petrobras.jobs2web.com/",
+      "ats": "oracle_jobs2web",
+      "api": {
+        "provider": "oracle_jobs2web",
+        "jobs_site_url": "https://petrobras.jobs2web.com/",
+        "docs_url": null
+      },
+      "ingestion_notes": "Oracle ecosystem; endpoints de busca podem mudar com campanhas."
+    },
+    {
+      "id": "eletrobras_carreira",
+      "name": "Eletrobras",
+      "sectors": ["energy", "utilities"],
+      "listing_url": "https://eletrobras.com/pt/Paginas/Carreira.aspx",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Muitas linhas via concurso; acompanhar links na página."
+    },
+    {
+      "id": "copel_trabalhe_conosco",
+      "name": "Copel",
+      "sectors": ["energy", "utilities"],
+      "listing_url": "https://www.copel.com/site/institucional/trabalhe-conosco/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Pode apontar para parceiros (CIEE etc.) em programas específicos."
+    },
+    {
+      "id": "claro_trabalhe_conosco",
+      "name": "Claro Brasil",
+      "sectors": ["telecom"],
+      "listing_url": "https://www.claro.com.br/institucional/trabalhe-conosco",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Pode redirecionar para ATS (ex.: Recrutei) dependendo da vaga."
+    },
+    {
+      "id": "tim_carreira_institucional",
+      "name": "TIM Brasil (institucional)",
+      "sectors": ["telecom"],
+      "listing_url": "https://www.tim.com.br/sobre-a-tim/carreira",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Página-mãe com links para portais por perfil."
+    },
+    {
+      "id": "tim_oportunidades_portal",
+      "name": "TIM Brasil (oportunidades.tim)",
+      "sectors": ["telecom"],
+      "listing_url": "https://oportunidades.tim.com.br/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal dedicado; pode coexistir com Gupy."
+    },
+    {
+      "id": "tim_gupy_vemprotime",
+      "name": "TIM Brasil (Gupy)",
+      "sectors": ["telecom"],
+      "listing_url": "https://vemprotime.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "vemprotime",
+        "public_listing_url": "https://vemprotime.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Usado para parte das vagas (varejo/call center etc.)."
+    },
+    {
+      "id": "vivo_vempravivo",
+      "name": "Vivo (Telefônica Brasil)",
+      "sectors": ["telecom"],
+      "listing_url": "https://vempravivo.vivo.com.br/oportunidades-de-carreira",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal Vem Pra Vivo; pode embutir formulários e links externos."
+    },
+    {
+      "id": "oi_gupy",
+      "name": "Oi (Gupy)",
+      "sectors": ["telecom"],
+      "listing_url": "https://oi.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "oi",
+        "public_listing_url": "https://oi.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": null
+    },
+    {
+      "id": "globo_vempra",
+      "name": "Grupo Globo (Vem Pra)",
+      "sectors": ["media", "entertainment"],
+      "listing_url": "https://vempra.globo.com/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal único de carreiras do grupo."
+    },
+    {
+      "id": "rd_saude_vagas",
+      "name": "RD Saúde (Raia Drogasil)",
+      "sectors": ["retail", "healthcare"],
+      "listing_url": "https://rdsaude.com.br/trabalhe-conosco/vagas",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Alto volume de vagas operacionais; portal pode usar stack própria."
+    },
+    {
+      "id": "localiza_gupy",
+      "name": "Localiza (Gupy)",
+      "sectors": ["mobility", "rental"],
+      "listing_url": "https://localiza.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "localiza",
+        "public_listing_url": "https://localiza.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": null
+    },
+    {
+      "id": "localiza_portal_carreira",
+      "name": "Localiza (portal carreira)",
+      "sectors": ["mobility", "rental"],
+      "listing_url": "https://portalcarreira.localiza.com/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Pode apontar/duplicar conteúdo do Gupy."
+    },
+    {
+      "id": "b3_vagas",
+      "name": "B3",
+      "sectors": ["financial_markets", "technology"],
+      "listing_url": "https://vagas.b3.com.br/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Programa de estágio pode estar em domínio separado (estagionab3.com.br)."
+    },
+    {
+      "id": "stellantis_careers_global_pt",
+      "name": "Stellantis (careers global PT-BR)",
+      "sectors": ["automotive"],
+      "listing_url": "https://careers.stellantis.com/pt-br/career-home/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Matriz Stellantis; filtrar país Brasil nas facetas."
+    },
+    {
+      "id": "stellantis_empregare_br",
+      "name": "Stellantis Brasil (Empregare)",
+      "sectors": ["automotive"],
+      "listing_url": "https://stellantis.empregare.com/pt-br/",
+      "ats": "empregare",
+      "api": null,
+      "ingestion_notes": "Portal Empregare para vagas locais BR (Fiat/Jeep/Peugeot/Citroën etc.)."
+    },
+    {
+      "id": "vw_brasil_gupy",
+      "name": "Volkswagen do Brasil (Gupy)",
+      "sectors": ["automotive"],
+      "listing_url": "https://vwbrasil.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "vwbrasil",
+        "public_listing_url": "https://vwbrasil.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": null
+    },
+    {
+      "id": "vw_group_jobs_portal",
+      "name": "Volkswagen Group (portal global)",
+      "sectors": ["automotive"],
+      "listing_url": "https://jobs.volkswagen-group.com/Volkswagen/?locale=pt_BR",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Canal VW Group internacional; complementa vagas BR."
+    },
+    {
+      "id": "gm_brazil_careers",
+      "name": "General Motors Brasil",
+      "sectors": ["automotive"],
+      "listing_url": "https://search-careers.gm.com/pt/localizacoes/brasil/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal GM global filtrado para Brasil."
+    },
+    {
+      "id": "ford_brasil_carreiras",
+      "name": "Ford Brasil",
+      "sectors": ["automotive"],
+      "listing_url": "https://www.ford.com.br/sobre-a-ford/carreiras/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Link Ver oportunidades costuma levar a ATS externo."
+    },
+    {
+      "id": "toyota_empregos_portal",
+      "name": "Toyota do Brasil (empregos)",
+      "sectors": ["automotive"],
+      "listing_url": "https://empregos.toyota.com.br/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal dedicado empregos.toyota.com.br."
+    },
+    {
+      "id": "toyota_institucional_carreiras",
+      "name": "Toyota do Brasil (institucional)",
+      "sectors": ["automotive"],
+      "listing_url": "https://www.toyota.com.br/mundo-toyota/carreiras",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Entrada institucional; pode redirecionar para empregos.toyota.com.br."
+    },
+    {
+      "id": "honda_brasil_carreira",
+      "name": "Honda Automóveis (Brasil)",
+      "sectors": ["automotive"],
+      "listing_url": "https://www.honda.com.br/carreira-na-honda/carreira-honda",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Programas jovens talentos na mesma árvore de URLs."
+    },
+    {
+      "id": "nissan_brasil_trabalhe_conosco",
+      "name": "Nissan Brasil",
+      "sectors": ["automotive"],
+      "listing_url": "https://www.nissan.com.br/trabalhe-conosco.html",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Pode embutir iframe ou link para ATS."
+    },
+    {
+      "id": "renault_brasil_carreiras",
+      "name": "Renault Brasil",
+      "sectors": ["automotive"],
+      "listing_url": "https://www.renault.com.br/carreiras.html",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": null
+    },
+    {
+      "id": "hyundai_motor_brazil_careers",
+      "name": "Hyundai Motor Brasil",
+      "sectors": ["automotive"],
+      "listing_url": "https://careers-americas.hyundai.com/hmcsa?locale=pt_BR",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal HMCSA; filtrar unidade Piracicaba quando aplicável."
+    },
+    {
+      "id": "mercedes_benz_cars_brasil_gupy",
+      "name": "Mercedes-Benz Cars & Vans Brasil (Gupy)",
+      "sectors": ["automotive"],
+      "listing_url": "https://mercedes-benz_cars.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "mercedes-benz_cars",
+        "public_listing_url": "https://mercedes-benz_cars.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Subdomínio Gupy com underscore no slug."
+    },
+    {
+      "id": "bmw_brasil_gupy",
+      "name": "BMW Group Brasil (Gupy)",
+      "sectors": ["automotive"],
+      "listing_url": "https://bmw.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "bmw",
+        "public_listing_url": "https://bmw.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": null
+    },
+    {
+      "id": "bmw_group_jobs_br",
+      "name": "BMW Group (portal global BR)",
+      "sectors": ["automotive"],
+      "listing_url": "https://www.bmwgroup.jobs/br/pt/jobs.html",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Canal global bmwgroup.jobs."
+    },
+    {
+      "id": "scania_brasil_gupy",
+      "name": "Scania Brasil (Gupy)",
+      "sectors": ["automotive", "logistics"],
+      "listing_url": "https://scania.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "scania",
+        "public_listing_url": "https://scania.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": null
+    },
+    {
+      "id": "scania_global_jobs",
+      "name": "Scania (jobs.scania)",
+      "sectors": ["automotive"],
+      "listing_url": "https://jobs.scania.com/search?locale=pt_BR",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal global TRATON/Scania; complementa Gupy BR."
+    },
+    {
+      "id": "volvo_group_brasil_job_openings",
+      "name": "Volvo Group Brasil",
+      "sectors": ["automotive", "industry"],
+      "listing_url": "https://www.volvogroup.com/br/careers/job-openings.html",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Alternativa PT: vagas-disponiveis.html."
+    },
+    {
+      "id": "ambev_gupy",
+      "name": "Ambev (Gupy)",
+      "sectors": ["food_beverage", "fmcg"],
+      "listing_url": "https://ambev.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "ambev",
+        "public_listing_url": "https://ambev.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": null
+    },
+    {
+      "id": "ambevtech_gupy",
+      "name": "Ambev Tech (Gupy)",
+      "sectors": ["technology", "food_beverage"],
+      "listing_url": "https://ambevtech.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "ambevtech",
+        "public_listing_url": "https://ambevtech.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Divisão de tecnologia Ambev Global Tech."
+    },
+    {
+      "id": "jbs_carreiras",
+      "name": "JBS",
+      "sectors": ["food_protein", "agribusiness"],
+      "listing_url": "https://www.jbs.com.br/carreiras/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Grupo JBS; pode haver subsites por marca."
+    },
+    {
+      "id": "brf_talents_global",
+      "name": "BRF (talent portal)",
+      "sectors": ["food_protein", "fmcg"],
+      "listing_url": "https://www.brf-global.com/vagas",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal talents.brf.com pode coexistir; validar redirect canônico."
+    },
+    {
+      "id": "suzano_gupy",
+      "name": "Suzano (Gupy)",
+      "sectors": ["pulp_paper", "industry"],
+      "listing_url": "https://suzano.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "suzano",
+        "public_listing_url": "https://suzano.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Programas de trainee/estágio podem usar fornecedores externos."
+    },
+    {
+      "id": "suzano_trabalhe_conosco",
+      "name": "Suzano (institucional)",
+      "sectors": ["pulp_paper"],
+      "listing_url": "https://www.suzano.com.br/trabalhe-conosco",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Hub institucional com links para Gupy e programas."
+    },
+    {
+      "id": "weg_gupy",
+      "name": "WEG (Gupy)",
+      "sectors": ["industrial", "energy_equipment"],
+      "listing_url": "https://weg.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "weg",
+        "public_listing_url": "https://weg.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Vagas operacionais podem estar em fluxos separados no site weg.net."
+    },
+    {
+      "id": "weg_institutional_opportunities",
+      "name": "WEG (institucional PT)",
+      "sectors": ["industrial"],
+      "listing_url": "https://www.weg.net/institutional/BR/pt/career/opportunities",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Lista oportunidades fora do fluxo Gupy quando aplicável."
+    },
+    {
+      "id": "klabin_carreiras",
+      "name": "Klabin",
+      "sectors": ["pulp_paper"],
+      "listing_url": "https://carreiras.klabin.com.br/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Provável stack ATS embutida (souvent Gupy white-label); validar redirects."
+    },
+    {
+      "id": "anthropic_jobs",
+      "name": "Anthropic",
+      "sectors": ["ai", "research", "technology"],
+      "listing_url": "https://www.anthropic.com/jobs",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Poucas vagas no BR; remoto e escritórios EU/UK. Site próprio SPA."
+    },
+    {
+      "id": "openai_jobs",
+      "name": "OpenAI",
+      "sectors": ["ai", "research", "technology"],
+      "listing_url": "https://openai.com/jobs",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Listagem global; filtrar por local/remoto nas facetas da UI."
+    },
+    {
+      "id": "ibm_careers_brazil_search",
+      "name": "IBM Brasil (busca de vagas)",
+      "sectors": ["technology", "consulting", "cloud"],
+      "listing_url": "https://www.ibm.com/br-pt/careers/search",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal IBM; filtrar localização Brasil. Pode usar stack de emprego IBM global."
+    },
+    {
+      "id": "byd_brasil_gupy",
+      "name": "BYD Brasil (Gupy)",
+      "sectors": ["automotive", "ev", "energy_storage"],
+      "listing_url": "https://bydbrasil.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "bydbrasil",
+        "public_listing_url": "https://bydbrasil.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Canal principal BR; Kenoby/outros podem coexistir em campanhas."
+    },
+    {
+      "id": "byd_global_career_br",
+      "name": "BYD (site global BR)",
+      "sectors": ["automotive", "ev"],
+      "listing_url": "https://www.byd.com/br/career",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Landing institucional; CTA costuma apontar para Gupy ou e-mail RH."
+    },
+    {
+      "id": "hapvida_ndi_gupy",
+      "name": "Hapvida NotreDame Intermédica (Gupy)",
+      "sectors": ["healthcare", "health_insurance"],
+      "listing_url": "https://hapvidandi.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "hapvidandi",
+        "public_listing_url": "https://hapvidandi.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Alto volume de vagas operacionais e administrativas."
+    },
+    {
+      "id": "fleury_carreiras",
+      "name": "Grupo Fleury",
+      "sectors": ["healthcare", "diagnostics"],
+      "listing_url": "https://carreiras.grupofleury.com.br/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal próprio; pode redirecionar para Vagas.com ou ATS parceiro."
+    },
+    {
+      "id": "dasa_carreira_hub",
+      "name": "Dasa (hub institucional)",
+      "sectors": ["healthcare", "diagnostics"],
+      "listing_url": "https://dasa.com.br/CARREIRA",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Hub com links para portais Gupy por frente de atuação."
+    },
+    {
+      "id": "dasa_atendimento_gupy",
+      "name": "Dasa Atendimento (Gupy)",
+      "sectors": ["healthcare", "diagnostics"],
+      "listing_url": "https://dasaatendimento.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "dasaatendimento",
+        "public_listing_url": "https://dasaatendimento.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": null
+    },
+    {
+      "id": "dasa_assistencial_gupy",
+      "name": "Dasa Assistencial (Gupy)",
+      "sectors": ["healthcare", "diagnostics"],
+      "listing_url": "https://dasaassistencial.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "dasaassistencial",
+        "public_listing_url": "https://dasaassistencial.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": null
+    },
+    {
+      "id": "oncoclinicas_vagas",
+      "name": "Grupo Oncoclínicas",
+      "sectors": ["healthcare", "oncology"],
+      "listing_url": "https://vagas.grupooncoclinicas.com/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal vagas.grupooncoclinicas.com; SPA ou ATS embutido."
+    },
+    {
+      "id": "einstein_carreiras",
+      "name": "Hospital Israelita Albert Einstein",
+      "sectors": ["healthcare", "hospital"],
+      "listing_url": "https://www.einstein.br/n/o-einstein/carreiras",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Fluxo pode envolver Vagas.com ou ATS; seguir CTAs até lista pesquisável."
+    },
+    {
+      "id": "pfizer_brasil_trabalhe",
+      "name": "Pfizer Brasil",
+      "sectors": ["pharma", "healthcare"],
+      "listing_url": "https://www.pfizer.com.br/sobre-a-pfizer/trabalhe-na-pfizer",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Aponta para portal Pfizer Careers global; filtrar país."
+    },
+    {
+      "id": "fiocruz_quadro_vagas",
+      "name": "Fiocruz (quadro de vagas)",
+      "sectors": ["research", "public_health", "healthcare"],
+      "listing_url": "https://fiocruz.br/quadro-de-vagas",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Mistura de concursos, editais e seleções; nem toda linha é CLT privada."
+    },
+    {
+      "id": "cnpem_gupy",
+      "name": "CNPEM (Gupy)",
+      "sectors": ["research", "energy", "materials"],
+      "listing_url": "https://cnpem.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "cnpem",
+        "public_listing_url": "https://cnpem.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Centro Nacional de Pesquisa em Energia e Materiais (Campinas)."
+    },
+    {
+      "id": "cnpem_pages_vagas_abertas",
+      "name": "CNPEM (pages vagas abertas)",
+      "sectors": ["research", "energy"],
+      "listing_url": "https://pages.cnpem.br/trabalheconosco/vagas-abertas/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Microsite institucional; pode complementar o Gupy."
+    },
+    {
+      "id": "shell_brasil_busca_vagas",
+      "name": "Shell Brasil (busca de vagas)",
+      "sectors": ["oil_gas", "energy"],
+      "listing_url": "https://www.shell.com.br/carreiras/profissionais/busca-de-vagas.html",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Busca local BR; pode linkar para jobs.shell.com."
+    },
+    {
+      "id": "shell_jobs_global",
+      "name": "Shell (jobs global)",
+      "sectors": ["oil_gas", "energy"],
+      "listing_url": "https://jobs.shell.com/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Filtrar Rio de Janeiro / Brasil nas facetas de localização."
+    },
+    {
+      "id": "raizen_carreiras",
+      "name": "Raízen",
+      "sectors": ["oil_gas", "bioenergy", "agribusiness"],
+      "listing_url": "https://carreiras.raizen.com.br/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal redireciona para genteraizen.gupy.io — coberto pelo scraper Gupy global."
+    },
+    {
+      "id": "raizen_gupy",
+      "name": "Raízen (Gupy)",
+      "sectors": ["oil_gas", "bioenergy", "agribusiness"],
+      "listing_url": "https://genteraizen.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "genteraizen",
+        "public_listing_url": "https://genteraizen.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "ATS real da Raízen; descoberto via inspeção do portal carreiras.raizen.com.br."
+    },
+    {
+      "id": "totalenergies_jobs_search_br",
+      "name": "TotalEnergies (busca BR)",
+      "sectors": ["oil_gas", "energy"],
+      "listing_url": "https://jobs.totalenergies.com/pt_BR/careers/SearchJobs",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal careers TotalEnergies; idioma pt_BR."
+    },
+    {
+      "id": "bp_hire_brazil",
+      "name": "bp (contratação Brasil)",
+      "sectors": ["oil_gas", "energy"],
+      "listing_url": "https://hire-brazil.bp.com/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Site regional; candidaturas costumam ir para careers.bp.com / Workday."
+    },
+    {
+      "id": "chevron_brazil_careers",
+      "name": "Chevron Brasil",
+      "sectors": ["oil_gas"],
+      "listing_url": "https://brazil.chevron.com/work-with-us/careers",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Links para careers.chevron.com e programas com parceiros (ex.: estágio)."
+    },
+    {
+      "id": "chevron_careers_brazil_jobs",
+      "name": "Chevron (careers Brazil filter)",
+      "sectors": ["oil_gas"],
+      "listing_url": "https://careers.chevron.com/brazil-jobs",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Listagem com foco Brasil no path; validar redirects."
+    },
+    {
+      "id": "equinor_workday",
+      "name": "Equinor (Workday)",
+      "sectors": ["oil_gas", "energy"],
+      "listing_url": "https://equinor.wd3.myworkdayjobs.com/pt-BR/EQNR",
+      "ats": "workday",
+      "api": {
+        "provider": "workday",
+        "careers_url": "https://equinor.wd3.myworkdayjobs.com/pt-BR/EQNR",
+        "docs_url": "https://community.workday.com/"
+      },
+      "ingestion_notes": "Hub global Equinor; filtrar localização Brasil quando existir."
+    },
+    {
+      "id": "aes_brasil_workday",
+      "name": "AES Brasil (Workday)",
+      "sectors": ["utilities", "renewables"],
+      "listing_url": "https://aes.wd1.myworkdayjobs.com/pt-BR/AES_BRAZIL",
+      "ats": "workday",
+      "api": {
+        "provider": "workday",
+        "careers_url": "https://aes.wd1.myworkdayjobs.com/pt-BR/AES_BRAZIL",
+        "docs_url": "https://community.workday.com/"
+      },
+      "ingestion_notes": "Geradora/distribuidora; vagas majoritariamente no Brasil."
+    },
+    {
+      "id": "engie_jobs_global_pt",
+      "name": "ENGIE (jobs global PT-BR)",
+      "sectors": ["utilities", "renewables", "energy"],
+      "listing_url": "https://jobs.engie.com/?locale=pt_BR",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Filtrar país Brasil ou unidades ENGIE Brasil."
+    },
+    {
+      "id": "engie_brasil_trabalhe_conosco",
+      "name": "ENGIE Brasil (institucional)",
+      "sectors": ["utilities", "energy"],
+      "listing_url": "https://www.engie.com.br/trabalhe-conosco/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Landing BR com link para jobs.engie.com."
+    },
+    {
+      "id": "edp_brasil_jobs_portal",
+      "name": "EDP Brasil (portal de vagas)",
+      "sectors": ["utilities", "energy"],
+      "listing_url": "https://jobs.edp.com/go/EDP-Brasil-BR/1169401/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal jobs.edp.com (SuccessFactors-like); URL pode incluir id de pasta."
+    },
+    {
+      "id": "neoenergia_vagas_com",
+      "name": "Neoenergia (Vagas.com)",
+      "sectors": ["utilities", "energy"],
+      "listing_url": "https://trabalheconosco.vagas.com.br/neoenergia",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Listagem em terceiro (Vagas.com); também há programas por distribuidora no site neoenergia.com."
+    },
+    {
+      "id": "meta_careers_jobs_brazil",
+      "name": "Meta (carreiras — filtro Brasil)",
+      "sectors": ["technology", "social", "ai"],
+      "listing_url": "https://www.metacareers.com/jobs?is_in_page=0&is_leadership=0&q=brazil",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Alternativas: metacareers.com/v2/locations/brasilia ou facetas de escritório São Paulo. facebook.com.br/careers pode redirecionar."
+    },
+    {
+      "id": "apple_jobs_brazil_search",
+      "name": "Apple (busca vagas Brasil)",
+      "sectors": ["technology", "retail"],
+      "listing_url": "https://jobs.apple.com/en-us/search?location=brazil-BRAC",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Retail e corporate; muitas vagas exigem inglês. Landing PT: apple.com/careers/br."
+    },
+    {
+      "id": "apple_careers_br_landing",
+      "name": "Apple (carreiras BR — landing)",
+      "sectors": ["technology", "retail"],
+      "listing_url": "https://www.apple.com/careers/br/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Marketing + links para jobs.apple.com."
+    },
+    {
+      "id": "oracle_careers_jobsearch_global",
+      "name": "Oracle (Job Search global)",
+      "sectors": ["technology", "cloud", "enterprise_software"],
+      "listing_url": "https://careers.oracle.com/en/sites/jobsearch/jobs",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Filtrar país Brasil na UI. Site regional: oracle.com/br/careers."
+    },
+    {
+      "id": "oracle_careers_brazil_site",
+      "name": "Oracle Brasil (carreiras)",
+      "sectors": ["technology", "cloud"],
+      "listing_url": "https://www.oracle.com/br/careers/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Hub BR com links para o job search global e programas (ex.: GenO estágio)."
+    },
+    {
+      "id": "sap_jobs_brazil",
+      "name": "SAP (vagas Brasil)",
+      "sectors": ["enterprise_software", "technology"],
+      "listing_url": "https://jobs.sap.com/go/Brazil/8806901/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal jobs.sap.com por pasta geográfica; IDs de pasta podem mudar com reorganização."
+    },
+    {
+      "id": "siemens_energy_jobs_brazil",
+      "name": "Siemens Energy (busca vagas Brasil)",
+      "sectors": ["energy", "industrial"],
+      "listing_url": "https://jobs.siemens-energy.com/en_US/jobs/searchJobsBrazil",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Careers Marketplace; paths en_US comuns mesmo para vagas BR."
+    },
+    {
+      "id": "siemens_energy_brasil_careers_pt",
+      "name": "Siemens Energy Brasil (institucional carreiras)",
+      "sectors": ["energy"],
+      "listing_url": "https://www.siemens-energy.com/br/pt/home/careers/working-with-us.html",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Conteúdo PT; CTA para jobs.siemens-energy.com."
+    },
+    {
+      "id": "braskem_careers",
+      "name": "Braskem",
+      "sectors": ["chemicals", "petrochemicals"],
+      "listing_url": "https://www.braskem.com.br/careers",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Programas de estágio podem usar domínio dedicado (ex.: estagiobraskem*.com.br); vagas CLT no mesmo ecossistema."
+    },
+    {
+      "id": "ultragaz_trabalhe_conosco",
+      "name": "Ultragaz (institucional)",
+      "sectors": ["energy", "lpg", "utilities"],
+      "listing_url": "https://www.ultragaz.com.br/trabalhe-conosco/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Pode apontar para Gupy Ultragaz Energia e outros canais."
+    },
+    {
+      "id": "ultragaz_energia_gupy",
+      "name": "Ultragaz Energia (Gupy)",
+      "sectors": ["energy", "lpg"],
+      "listing_url": "https://ultragazenergia.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "ultragazenergia",
+        "public_listing_url": "https://ultragazenergia.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Canal Gupy do grupo Ultragaz para vagas operacionais e administrativas."
+    },
+    {
+      "id": "prumo_engenharia_gupy",
+      "name": "Prumo Engenharia (Gupy)",
+      "sectors": ["infrastructure", "engineering", "logistics"],
+      "listing_url": "https://prumoengenharia.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "prumoengenharia",
+        "public_listing_url": "https://prumoengenharia.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Empresa do ecossistema Prumo; não confundir com todas as empresas do Porto do Açu."
+    },
+    {
+      "id": "prumo_grupo_programas_vagas_com",
+      "name": "Grupo Prumo / Porto do Açu (programas — Vagas.com)",
+      "sectors": ["ports", "logistics", "infrastructure"],
+      "listing_url": "https://trabalheconosco.vagas.com.br/estagio-prumo",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "URL de programas (ex.: estágio) muda a cada edição; validar links em notícias oficiais portodoacu.com.br."
+    },
+    {
+      "id": "porto_do_acu_institucional",
+      "name": "Porto do Açu (site oficial)",
+      "sectors": ["ports", "logistics", "industry"],
+      "listing_url": "https://portodoacu.com.br/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Não é grade de vagas: usar imprensa/comunicados e canais oficiais citados no rodapé; cruzar com programas Vagas.com e empresas instaladas."
+    },
+    {
+      "id": "grupo_boticario_gupy",
+      "name": "Grupo Boticário (Gupy)",
+      "sectors": ["cosmetics", "retail", "cpg"],
+      "listing_url": "https://grupoboticario.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "grupoboticario",
+        "public_listing_url": "https://grupoboticario.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "O Boticário, Eudora, Quem Disse Berenice?, etc."
+    },
+    {
+      "id": "natura_carreiras_portal",
+      "name": "Natura &Co (portal carreiras)",
+      "sectors": ["cosmetics", "cpg", "direct_sales"],
+      "listing_url": "https://carreiras.natura.com.br/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Hub institucional; candidaturas frequentemente redirecionam ao Workday NaturaCarreiras."
+    },
+    {
+      "id": "natura_workday_naturacarreiras",
+      "name": "Natura &Co (Workday)",
+      "sectors": ["cosmetics", "cpg"],
+      "listing_url": "https://avon.wd5.myworkdayjobs.com/NaturaCarreiras",
+      "ats": "workday",
+      "api": {
+        "provider": "workday",
+        "careers_url": "https://avon.wd5.myworkdayjobs.com/NaturaCarreiras",
+        "docs_url": "https://community.workday.com/"
+      },
+      "ingestion_notes": "Host legado 'avon' no subdomínio Workday após integração Natura&Co; filtrar país/time."
+    },
+    {
+      "id": "mcdonalds_brasil_trabalhe_conosco",
+      "name": "McDonald's Brasil — Arcos Dorados (institucional)",
+      "sectors": ["food_service", "retail"],
+      "listing_url": "https://www.mcdonalds.com.br/quemsomos/trabalhe-conosco",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Links para portais Gupy (restaurante vs corporativo) e conteúdo de programa."
+    },
+    {
+      "id": "mcdonalds_restaurantes_gupy",
+      "name": "McDonald's Brasil — Restaurantes (Gupy)",
+      "sectors": ["food_service", "retail"],
+      "listing_url": "https://restaurantemc.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "restaurantemc",
+        "public_listing_url": "https://restaurantemc.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Atendimento, operações de loja, jovem aprendiz."
+    },
+    {
+      "id": "mcdonalds_corporativo_gupy",
+      "name": "McDonald's Brasil — Corporativo (Gupy)",
+      "sectors": ["food_service", "corporate"],
+      "listing_url": "https://corporativomc.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "corporativomc",
+        "public_listing_url": "https://corporativomc.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Arcos Dorados — escritório e estágios corporativos."
+    },
+    {
+      "id": "arcos_dorados_digital_trabalhe_conosco",
+      "name": "Arcos Dorados Digital (institucional)",
+      "sectors": ["food_service", "technology"],
+      "listing_url": "https://arcosdoradosdigital.com/br/trabalhe-conosco/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Unidade digital do grupo; pode complementar canais McDonald's."
+    },
+    {
+      "id": "coca_cola_brasil_carreiras",
+      "name": "Coca-Cola Brasil",
+      "sectors": ["beverages", "cpg"],
+      "listing_url": "https://www.cocacolabrasil.com.br/br/pt/carreiras",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Alternativa de path: /trabalheconosco. Plataforma de candidatura pode ser ATS global."
+    },
+    {
+      "id": "unilever_brasil_busca_vagas",
+      "name": "Unilever Brasil",
+      "sectors": ["cpg", "fmcg"],
+      "listing_url": "https://careers.unilever.com.br/busca-de-vagas",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Site careers.unilever.com.br; também /search-jobs conforme navegação."
+    },
+    {
+      "id": "nestle_brasil_carreiras",
+      "name": "Nestlé Brasil (carreiras)",
+      "sectors": ["cpg", "fmcg", "food_beverage"],
+      "listing_url": "https://www.nestle.com.br/carreiras",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Hub com programas (estágio, trainee, jovem aprendiz) e link para busca."
+    },
+    {
+      "id": "nestle_brasil_jobs_search",
+      "name": "Nestlé Brasil (busca de vagas)",
+      "sectors": ["cpg", "fmcg"],
+      "listing_url": "https://www.nestle.com.br/jobs/search-jobs?career_area=All&country=BR&keyword=&location=&page=%2C0",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Query country=BR; parâmetros de URL podem variar."
+    },
+    {
+      "id": "pepsico_pepjobs_brazil",
+      "name": "PepsiCo Brasil (PepJobs)",
+      "sectors": ["beverages", "cpg", "fmcg"],
+      "listing_url": "https://pepjobs.mypepsico.com/brazil?lang=pt-BR",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal PepsiCo; categorias regionais (Sul, CONENO, etc.)."
+    },
+    {
+      "id": "pg_careers_brazil",
+      "name": "Procter & Gamble (P&G) Brasil",
+      "sectors": ["cpg", "fmcg"],
+      "listing_url": "https://www.pgcareers.com/br/en",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Filtrar vagas no Brasil; páginas PT podem existir com path alternativo."
+    },
+    {
+      "id": "grupo_carrefour_brasil_gupy",
+      "name": "Grupo Carrefour Brasil (Gupy)",
+      "sectors": ["retail", "supermarket"],
+      "listing_url": "https://grupocarrefourbrasil.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "grupocarrefourbrasil",
+        "public_listing_url": "https://grupocarrefourbrasil.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Carrefour, Atacadão, Sam's, etc.; canais adicionais (Pandapé/Infojobs) fora deste registro."
+    },
+    {
+      "id": "gpa_lojas_gupy",
+      "name": "GPA — Grupo Pão de Açúcar / Lojas (Gupy)",
+      "sectors": ["retail", "supermarket"],
+      "listing_url": "https://gpa.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "gpa",
+        "public_listing_url": "https://gpa.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Vagas operacionais e administrativas nas bandeiras do grupo."
+    },
+    {
+      "id": "gpa_estagiarios_aprendizes_gupy",
+      "name": "GPA — Estágio e Aprendiz (Gupy)",
+      "sectors": ["retail", "supermarket"],
+      "listing_url": "https://estagiarioseaprendizesgpa.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "estagiarioseaprendizesgpa",
+        "public_listing_url": "https://estagiarioseaprendizesgpa.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Canal separado para jovens talentos."
+    },
+    {
+      "id": "cea_gupy",
+      "name": "C&A Modas (Gupy)",
+      "sectors": ["retail", "fashion"],
+      "listing_url": "https://cea.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "cea",
+        "public_listing_url": "https://cea.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Vagas externas; oportunidades internas costumam usar outro subdomínio Gupy."
+    },
+    {
+      "id": "lojas_renner_gupy",
+      "name": "Lojas Renner — Loja (Gupy)",
+      "sectors": ["retail", "fashion"],
+      "listing_url": "https://lojasrenner.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "lojasrenner",
+        "public_listing_url": "https://lojasrenner.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Operações de loja e funções correlatas."
+    },
+    {
+      "id": "renner_corporativo_gupy",
+      "name": "Lojas Renner S.A. — Corporativo (Gupy)",
+      "sectors": ["retail", "fashion", "corporate"],
+      "listing_url": "https://renner.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "renner",
+        "public_listing_url": "https://renner.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Matriz e áreas corporativas."
+    },
+    {
+      "id": "renner_encantech_gupy",
+      "name": "Renner — Encantech / tecnologia (Gupy)",
+      "sectors": ["retail", "technology"],
+      "listing_url": "https://encantech.gupy.io/",
+      "ats": "gupy",
+      "api": {
+        "provider": "gupy",
+        "career_subdomain": "encantech",
+        "public_listing_url": "https://encantech.gupy.io/",
+        "docs_url": "https://developers.gupy.io/"
+      },
+      "ingestion_notes": "Hub de vagas de tecnologia e dados do ecossistema Renner."
+    },
+    {
+      "id": "heineken_brazil_careers_portal",
+      "name": "HEINEKEN (busca vagas Brasil)",
+      "sectors": ["beverages", "brewing"],
+      "listing_url": "https://careers.theheinekencompany.com/Brazil/?locale=pt_BR",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Portal global Heineken Company filtrado para Brasil."
+    },
+    {
+      "id": "heineken_brasil_institucional_carreiras",
+      "name": "Grupo Heineken Brasil (institucional)",
+      "sectors": ["beverages", "brewing"],
+      "listing_url": "https://www.heinekenbrasil.com.br/carreiras/",
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Time de estrelas; CTA para careers.theheinekencompany.com."
+    }
+  ]
+}

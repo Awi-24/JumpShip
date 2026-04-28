@@ -1,6 +1,11 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+import logging
 import os
+
+from sqlalchemy import create_engine
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
+
+logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./jobspy_ui.db")
 
@@ -22,3 +27,12 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def init_db() -> None:
+    """Create all ORM tables. Logs and re-raises on SQLAlchemy errors."""
+    try:
+        Base.metadata.create_all(bind=engine)
+    except SQLAlchemyError as exc:
+        logger.error("Database schema initialization failed: %s", exc)
+        raise

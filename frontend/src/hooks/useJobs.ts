@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, type UseMutationResult } from '@tanstack/react-query';
 import type { JobSearchRequest, JobResult } from '../types';
 
 async function searchJobs(request: JobSearchRequest): Promise<JobResult[]> {
@@ -11,7 +11,7 @@ async function searchJobs(request: JobSearchRequest): Promise<JobResult[]> {
   return res.json();
 }
 
-export function useJobSearch() {
+export function useJobSearch(): UseMutationResult<JobResult[], Error, JobSearchRequest> {
   return useMutation({
     mutationFn: searchJobs,
   });

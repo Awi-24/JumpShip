@@ -47,6 +47,29 @@ class Resume(Base):
 
 
 class Analysis(Base):
+    """
+    Persistence layer for JobAssessment results.
+
+    NOTE on schema drift (B-013): the Pydantic ``JobAssessment`` (API contract,
+    in ``backend/models/schemas.py``) carries fields that do NOT have dedicated
+    columns here — notably ``hire_recommendation``, ``strong_points``,
+    ``income_range``, ``career_suggestions``, ``company_insights``, ``job_tags``,
+    ``is_relevant``, ``resume_generation_triggered``.
+
+    The legacy column layout uses ``strengths`` / ``gaps`` / ``suggestions`` JSON
+    blobs.  Mapping rules used by callers:
+      - ``strong_points``       → ``strengths``  (JSON list)
+      - ``career_suggestions``  → ``suggestions`` (JSON list)
+      - ``gaps``                → ``gaps``        (JSON list)
+      - everything else (``hire_recommendation``, ``income_range``,
+        ``company_insights``, ``job_tags``, flags) is round-tripped through
+        ``raw_assessment`` (JSON column on ``Application.assessment_data`` for
+        live data; here we expose ``to_assessment`` / ``from_assessment``
+        helpers that round-trip the full Pydantic model into the JSON blobs we
+        already have).
+
+    Adding new columns would require a migration and is out of scope.
+    """
     __tablename__ = "analyses"
 
     id = Column(String, primary_key=True, default=gen_uuid)
@@ -64,6 +87,60 @@ class Analysis(Base):
     tailored_resume = Column(Text)
     provider = Column(String, default="ollama")
     analyzed_at = Column(DateTime, server_default=func.now())
+
+    # ── Pydantic <-> ORM round-trip ──────────────────────────────────────
+    # Kept as small helpers (no migration required). They pack/unpack the
+    # extra JobAssessment fields into the existing JSON columns so callers
+    # don't lose data on save/load.
+
+    def to_assessment(self):
+        """Reconstruct a ``JobAssessment`` (Pydantic) from this ORM row."""
+        from backend.models.schemas import JobAssessment
+
+        extras = {}
+        # ``suggestions`` historically stored either a plain list or a dict
+        # with the extra keys when round-tripping; support both.
+        suggestions = self.suggestions or []
+        if isinstance(suggestions, dict):
+            extras = {k: v for k, v in suggestions.items() if k != "career_suggestions"}
+            suggestions = suggestions.get("career_suggestions", [])
+
+        return JobAssessment(
+            match_score=int(self.score or 0),
+            summary=self.summary or "",
+            strong_points=self.strengths or [],
+            gaps=self.gaps or [],
+            career_suggestions=suggestions or [],
+            keywords_matched=self.keywords_matched or [],
+            keywords_missing=self.keywords_missing or [],
+            company_insights=extras.get("company_insights", ""),
+            income_range=extras.get("income_range", ""),
+            is_relevant=extras.get("is_relevant", True),
+            job_tags=extras.get("job_tags", []),
+            resume_generation_triggered=extras.get("resume_generation_triggered", False),
+            hire_recommendation=extras.get("hire_recommendation", "borderline"),
+        )
+
+    def apply_assessment(self, assessment) -> None:
+        """Populate columns from a ``JobAssessment`` (Pydantic) instance."""
+        data = assessment.model_dump()
+        self.score = float(data.get("match_score", 0))
+        self.summary = data.get("summary", "")
+        self.strengths = data.get("strong_points", [])
+        self.gaps = data.get("gaps", [])
+        # Stash overflow fields alongside career_suggestions so we never drop
+        # API-contract data on persistence.
+        self.suggestions = {
+            "career_suggestions": data.get("career_suggestions", []),
+            "company_insights": data.get("company_insights", ""),
+            "income_range": data.get("income_range", ""),
+            "is_relevant": data.get("is_relevant", True),
+            "job_tags": data.get("job_tags", []),
+            "resume_generation_triggered": data.get("resume_generation_triggered", False),
+            "hire_recommendation": data.get("hire_recommendation", "borderline"),
+        }
+        self.keywords_matched = data.get("keywords_matched", [])
+        self.keywords_missing = data.get("keywords_missing", [])
 
 
 class Application(Base):
@@ -117,6 +194,11 @@ class UserProfile(Base):
     salary_currency = Column(String, default="USD")
 
     custom_answers  = Column(JSON, default=dict)
+    extra_info      = Column(Text)  # freeform: projects, experiences, achievements the LLM can use for resume
+
+    # Fernet-encrypted JSON blob: {"openai": "...", "anthropic": "...", ...}
+    # See HDF-20260427-10 — moved from frontend localStorage to server-side Fernet store.
+    llm_keys_encrypted = Column(Text, nullable=True)
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
@@ -144,3 +226,25 @@ class Settings(Base):
     key = Column(String, primary_key=True)
     value = Column(Text)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class InterviewSession(Base):
+    """
+    Persistent mock-interview session — one per Application.
+    Allows the user to resume an interview from where they stopped, and stores
+    the final report once the interview is closed.
+    """
+    __tablename__ = "interview_sessions"
+
+    id              = Column(String, primary_key=True, default=gen_uuid)
+    application_id  = Column(String, index=True, nullable=False)  # FK to Application.id
+    persona_name    = Column(String, default="")
+    persona_bio     = Column(Text, default="")
+    session_context = Column(Text)                # full system prompt (built once at /init)
+    interview_track = Column(String, default="behavioral")  # behavioral | system_design | coding
+    messages        = Column(JSON, default=list)  # [{role, content}, ...]
+    state           = Column(String, default="")  # last <estado_interno> from LLM
+    completed       = Column(Boolean, default=False)
+    report          = Column(JSON, nullable=True) # {strengths, improvements, study_tips, score}
+    created_at      = Column(DateTime, server_default=func.now())
+    updated_at      = Column(DateTime, server_default=func.now(), onupdate=func.now())

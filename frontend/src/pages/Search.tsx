@@ -15,7 +15,7 @@ import { useResumeParse } from '../hooks/useResume';
 import { useJobSearch } from '../hooks/useJobs';
 import { useSettings } from '../hooks/useSettings';
 import { useResumeCache } from '../hooks/useResumeCache';
-import type { ResumeProfile, JobResult, JobAssessment, SortOption } from '../types';
+import type { ResumeProfile, JobResult, JobAssessment, SortOption, ProfileResponse } from '../types';
 
 interface SearchProps {
   onBack: () => void;
@@ -23,6 +23,13 @@ interface SearchProps {
 }
 
 const ALL_SITES = ['linkedin', 'indeed', 'glassdoor', 'zip_recruiter', 'remoteok', 'arbeitnow', 'gupy', 'programathor', 'trampos'];
+const JUMPSHIP_SITES = ['greenhouse', 'lever', 'workday', 'playwright'];
+const JUMPSHIP_SITE_LABELS: Record<string, string> = {
+  greenhouse: 'Greenhouse',
+  lever: 'Lever',
+  workday: 'Workday',
+  playwright: 'Career Pages',
+};
 const PAGE_SIZE = 20;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -113,12 +120,14 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [llmStatus, setLlmStatus] = useState<'green' | 'yellow' | 'red'>('yellow');
+  const [profileFillCount, setProfileFillCount] = useState(0);
 
   // Resume — with localStorage persistence
   const resumeMutation = useResumeParse();
   const { cache: resumeCache, saveResume, clearResume } = useResumeCache();
   const [resumeProfile, setResumeProfile] = useState<ResumeProfile | null>(resumeCache?.profile ?? null);
   const [resumeFileName, setResumeFileName] = useState(resumeCache?.fileName ?? '');
+  const [resumeError, setResumeError] = useState<string | null>(null);
 
   // Search filters — pre-fill from cached resume if available
   const [keywords, setKeywords] = useState<string[]>(resumeCache?.keywords ?? []);
@@ -178,19 +187,26 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
 
   // ── Resume upload ──────────────────────────────────────────────────────────
   const handleResumeUpload = useCallback(async (file: File) => {
+    setResumeError(null);
     const s = settingsRef.current;
     const apiKey =
       s.llmProvider === 'openai'    ? s.openaiKey :
       s.llmProvider === 'anthropic' ? s.anthropicKey :
       s.llmProvider === 'groq'      ? s.groqKey : '';
 
-    const profile = await resumeMutation.mutateAsync({
-      file,
-      llmProvider: s.llmProvider,
-      llmModel:    s.llmModel    || undefined,
-      llmBaseUrl:  s.ollamaUrl   || undefined,
-      llmApiKey:   apiKey        || undefined,
-    });
+    let profile;
+    try {
+      profile = await resumeMutation.mutateAsync({
+        file,
+        llmProvider: s.llmProvider,
+        llmModel:    s.llmModel    || undefined,
+        llmBaseUrl:  s.ollamaUrl   || undefined,
+        llmApiKey:   apiKey        || undefined,
+      });
+    } catch (err) {
+      setResumeError(err instanceof Error ? err.message : 'Failed to parse resume');
+      return;
+    }
     setResumeProfile(profile);
     setResumeFileName(file.name);
     setAssessments({});
@@ -208,6 +224,41 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     saveResume(profile, kws, file.name);
     if (!location && s.defaultLocation) setLocation(s.defaultLocation);
     else if (!location) setLocation('Remote');
+
+    // Auto-fill profile fields (only empty ones)
+    const hasExtracted = profile.name || profile.email || profile.phone ||
+      profile.location_city || profile.experience_years > 0;
+    if (hasExtracted) {
+      try {
+        const fetchProfile = async (): Promise<ProfileResponse | null> => {
+          try {
+            const r = await fetch('/api/profile');
+            if (!r.ok) return null;
+            return (await r.json()) as ProfileResponse;
+          } catch {
+            return null;
+          }
+        };
+        const current: ProfileResponse = (await fetchProfile()) ?? {};
+        const merged: Record<string, unknown> = { ...current };
+        let filled = 0;
+        if (!current.full_name && profile.name)                   { merged.full_name = profile.name; filled++; }
+        if (!current.email && profile.email)                      { merged.email = profile.email; filled++; }
+        if (!current.phone && profile.phone)                      { merged.phone = profile.phone; filled++; }
+        if (!current.location_city && profile.location_city)      { merged.location_city = profile.location_city; filled++; }
+        if (!current.location_country && profile.location_country){ merged.location_country = profile.location_country; filled++; }
+        if (!current.years_experience && profile.experience_years > 0) { merged.years_experience = profile.experience_years; filled++; }
+        if (filled > 0) {
+          await fetch('/api/profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(merged),
+          });
+          setProfileFillCount(filled);
+          setTimeout(() => setProfileFillCount(0), 5000);
+        }
+      } catch { /* non-critical, ignore */ }
+    }
   }, [resumeMutation, location, saveResume]);
 
   const handleResetResume = () => {
@@ -275,7 +326,6 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     };
     setAssessments(prev => ({ ...prev, [job.id]: lastData ?? fallback }));
     setAssessingIds(prev => { const s = new Set(prev); s.delete(job.id); return s; });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getLlmFields]);
 
   // ── Batch assess (cloud providers — parallel, one round-trip) ─────────────
@@ -540,6 +590,23 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
 
   return (
     <div className="search-page">
+
+      {/* ── Profile auto-fill toast ── */}
+      {profileFillCount > 0 && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24, zIndex: 9000,
+          padding: '10px 16px', borderRadius: 10,
+          background: 'var(--card-bg)', border: '1px solid rgba(74,222,128,0.35)',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', gap: 8,
+          fontSize: 13, color: '#4ade80', fontWeight: 600,
+          animation: 'fadeIn 0.2s ease',
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Profile auto-filled ({profileFillCount} field{profileFillCount !== 1 ? 's' : ''})
+        </div>
+      )}
+
       {/* ── HEADER ── */}
       <header className="search-header">
         <div
@@ -587,6 +654,11 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
               onUpload={handleResumeUpload}
               cached={!!resumeCache && !resumeMutation.isPending}
             />
+            {resumeError && (
+              <div style={{ color: 'var(--color-error, #e55)', fontSize: 12, marginTop: 6, wordBreak: 'break-word' }}>
+                ⚠ {resumeError}
+              </div>
+            )}
             {resumeProfile && (
               <button
                 onClick={handleResetResume}
@@ -749,6 +821,19 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                     onClick={() => toggleSite(site)}
                   >
                     {site.replace('_', ' ')}
+                  </button>
+                ))}
+              </div>
+              <div className="filter-label" style={{ marginTop: 10, fontSize: 11, opacity: 0.7 }}>JumpShip Scrapper</div>
+              <div className="site-pills">
+                {JUMPSHIP_SITES.map(site => (
+                  <button
+                    key={site}
+                    type="button"
+                    className={`site-pill${activeSites.includes(site) ? ' active' : ''}`}
+                    onClick={() => toggleSite(site)}
+                  >
+                    {JUMPSHIP_SITE_LABELS[site]}
                   </button>
                 ))}
               </div>

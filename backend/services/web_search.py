@@ -36,8 +36,15 @@ async def _ddg_instant(query: str) -> list[str]:
             for topic in data.get("RelatedTopics", [])[:3]:
                 if isinstance(topic, dict) and topic.get("Text"):
                     snippets.append(topic["Text"].strip())
-    except Exception as exc:
-        logger.debug("DDG instant failed: %s", exc)
+    except httpx.TimeoutException as exc:
+        logger.warning("DDG instant timed out for query %r: %s", query, exc)
+    except httpx.HTTPError as exc:
+        logger.warning("DDG instant HTTP error for query %r: %s", query, exc)
+    except (ValueError, KeyError, TypeError) as exc:
+        # ValueError covers JSON decode errors; KeyError/TypeError covers payload shape drift
+        logger.warning("DDG instant payload parse error for query %r: %s", query, exc)
+    except Exception as exc:  # noqa: BLE001 — surface unexpected failures, still degrade gracefully
+        logger.error("DDG instant unexpected error for query %r: %s", query, exc, exc_info=True)
     return snippets
 
 
@@ -65,8 +72,14 @@ async def _ddg_lite(query: str) -> list[str]:
                 text = re.sub(r'\s+', ' ', text)
                 if len(text) > 40:
                     snippets.append(text)
-    except Exception as exc:
-        logger.debug("DDG lite failed: %s", exc)
+    except httpx.TimeoutException as exc:
+        logger.warning("DDG lite timed out for query %r: %s", query, exc)
+    except httpx.HTTPError as exc:
+        logger.warning("DDG lite HTTP error for query %r: %s", query, exc)
+    except (ValueError, KeyError) as exc:
+        logger.warning("DDG lite parse error for query %r: %s", query, exc)
+    except Exception as exc:  # noqa: BLE001 — surface unexpected failures, still degrade gracefully
+        logger.error("DDG lite unexpected error for query %r: %s", query, exc, exc_info=True)
     return snippets
 
 

@@ -28,19 +28,21 @@ class LLMService:
         )
 
     async def complete(self, system_prompt: str, user_prompt: str) -> str:
-        """Send a single completion to Ollama and return the response text."""
-        url     = f"{self.ollama_base_url}/api/generate"
+        """Send a single completion via Ollama OpenAI-compat endpoint."""
+        url = f"{self.ollama_base_url}/v1/chat/completions"
         payload = {
-            "model":  self.model,
-            "prompt": user_prompt,
-            "system": system_prompt,
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
             "stream": False,
         }
         try:
             async with httpx.AsyncClient(timeout=120) as client:
-                r = await client.post(url, json=payload)
+                r = await client.post(url, json=payload, headers={"Authorization": "Bearer local"})
                 r.raise_for_status()
-                return r.json().get("response", "")
+                return r.json()["choices"][0]["message"]["content"]
         except httpx.ConnectError:
             raise RuntimeError(
                 f"Cannot connect to Ollama at {self.ollama_base_url}. "

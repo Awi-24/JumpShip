@@ -25,7 +25,7 @@ from backend.models.schemas import (
 )
 from backend.services.job_scraper_v2 import search_jobs
 from backend.services.llm_service import get_llm_service
-from backend.services.llm_client import LLMClient, get_local_sem, is_local_provider
+from backend.services.llm_client import LLMClient, get_local_sem, is_local_provider, needs_semaphore
 from backend.services.web_search import search_company_info
 
 logger = logging.getLogger(__name__)
@@ -39,14 +39,17 @@ async def ollama_models(
     base_url: str = Query(default=None, description="Override base URL"),
     provider: str = Query(default="ollama", description="ollama | lmstudio"),
 ):
-    """Return available models for Ollama or LM Studio."""
+    """Return available models for Ollama or LM Studio.
+
+    Ollama: merges /api/tags (installed) + /api/ps (currently running, catches
+    cloud models like gemma4:31b-cloud that are active but not locally stored).
+    LM Studio: /v1/models as-is.
+    """
     from backend.config import settings
     url = (base_url or settings.ollama_base_url).rstrip("/")
     try:
         async with httpx.AsyncClient(timeout=4) as client:
             if provider == "lmstudio":
-                # LM Studio exposes OpenAI-compatible /v1/models
-                # Strip /v1 suffix if user already included it, then add it once
                 clean = url.rstrip("/")
                 if clean.endswith("/v1"):
                     clean = clean[:-3]
@@ -55,10 +58,35 @@ async def ollama_models(
                 data = r.json().get("data", [])
                 return [m["id"] for m in data if m.get("id")]
             else:
-                # Ollama native API
-                r = await client.get(f"{url}/api/tags")
-                r.raise_for_status()
-                return [m["name"] for m in r.json().get("models", [])]
+                seen: set[str] = set()
+                result: list[str] = []
+
+                # Installed models: filter size > 0 to exclude registry catalog entries
+                # (Ollama newer versions include undownloaded models with size=0)
+                try:
+                    r = await client.get(f"{url}/api/tags")
+                    r.raise_for_status()
+                    for m in r.json().get("models", []):
+                        name = m.get("name", "")
+                        if name and m.get("size", 0) > 0 and name not in seen:
+                            seen.add(name)
+                            result.append(name)
+                except Exception as exc:
+                    logger.warning("Ollama /api/tags failed (%s): %s", url, exc)
+
+                # Currently running models (includes cloud models active right now)
+                try:
+                    r = await client.get(f"{url}/api/ps")
+                    if r.status_code == 200:
+                        for m in r.json().get("models", []):
+                            name = m.get("name", "")
+                            if name and name not in seen:
+                                seen.add(name)
+                                result.append(name)
+                except Exception as exc:
+                    logger.debug("Ollama /api/ps best-effort failed: %s", exc)
+
+                return result
     except Exception as exc:
         logger.warning("Could not fetch models (%s) from %s: %s", provider, url, exc)
         return []
@@ -373,7 +401,7 @@ async def _run_assessment(llm: LLMClient, profile, job, include_company_research
 
     raw_response = ""
     try:
-        if is_local_provider(llm.provider):
+        if needs_semaphore(llm.provider, llm._resolve_model()):
             async with get_local_sem():
                 raw_response = await asyncio.to_thread(llm.complete, _ASSESS_SYSTEM, user)
         else:

@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     resume_gen_threshold: int = 70
     # Directory for storing generated PDF resumes
     resume_output_dir: str = "./generated_resumes"
+    # Max concurrent local LLM calls (cloud-relay models bypass this entirely)
+    llm_max_concurrent: int = 1
+    # When False, default SECRET_KEY raises at startup
+    debug: bool = False
 
     class Config:
         env_file = str(_REPO_ROOT / ".env")

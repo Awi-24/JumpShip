@@ -35,6 +35,10 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt \
     && rm -rf /wheels
 
+# Install Playwright browser (chromium) + system deps required by playwright_scraper.py
+# Adds ~150MB to image but is required for runtime; without this, scraper fails.
+RUN python -m playwright install chromium --with-deps
+
 COPY . .
 
 EXPOSE 8000

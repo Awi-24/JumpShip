@@ -109,4 +109,4 @@ class TestHealthResponse:
         h = HealthResponse()
         assert h.status == "ok"
         assert h.llm_available is False
-        assert h.version == "3.0.0"
+        assert h.version == "1.0.0"

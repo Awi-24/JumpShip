@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useId, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   DndContext,
@@ -21,7 +22,7 @@ import {
   FileDown, Upload, Sparkles,
   Building2, Calendar, BarChart2, FileText, StickyNote,
   Trash2, Bookmark, CheckCircle2, Users, Trophy, XCircle,
-  TrendingUp,
+  TrendingUp, MoreHorizontal, ArrowRightLeft,
 } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
 
@@ -145,14 +146,87 @@ function TrackerScoreRing({ score, size = 38 }: { score: number | null; size?: n
   );
 }
 
+// ── PortalMenu — anchored dropdown rendered at body level (escapes any clipping) ──
+
+interface PortalMenuProps {
+  open: boolean;
+  anchorRef: React.RefObject<HTMLElement | null>;
+  align?: 'left' | 'right';
+  onClose: () => void;
+  children: React.ReactNode;
+}
+
+function PortalMenu({ open, anchorRef, align = 'left', onClose, children }: PortalMenuProps) {
+  const [pos, setPos] = useState<{ top: number; left: number; right?: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open || !anchorRef.current) { setPos(null); return; }
+    const r = anchorRef.current.getBoundingClientRect();
+    setPos(
+      align === 'right'
+        ? { top: r.bottom + 4, left: 0, right: window.innerWidth - r.right }
+        : { top: r.bottom + 4, left: r.left }
+    );
+  }, [open, align, anchorRef]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handle = (e: MouseEvent) => {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        anchorRef.current && !anchorRef.current.contains(e.target as Node)
+      ) {
+        onClose();
+      }
+    };
+    const onScroll = () => onClose();
+    document.addEventListener('mousedown', handle);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handle);
+      window.removeEventListener('scroll', onScroll, true);
+    };
+  }, [open, onClose, anchorRef]);
+
+  if (!open || !pos) return null;
+  return createPortal(
+    <div
+      ref={menuRef}
+      className="portal-menu"
+      style={{
+        position: 'fixed',
+        top: pos.top,
+        ...(align === 'right' ? { right: pos.right } : { left: pos.left }),
+      }}
+    >
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
 // ── Interview Panel ───────────────────────────────────────────────────────────
 
-type InterviewStage = 'prep' | 'persona' | 'chat';
+type InterviewStage = 'prep' | 'persona' | 'chat' | 'report';
 
 interface SessionData {
+  session_id?: string | null;
   session_context: string;
   persona_name: string;
   persona_bio: string;
+  interview_track?: string;
+  messages?: ChatMessage[];
+  completed?: boolean;
+}
+
+interface InterviewReport {
+  score: number;
+  strengths: string[];
+  improvements: string[];
+  technical_gaps: string[];
+  study_tips: string[];
+  next_steps: string[];
 }
 
 function InterviewPanel({ app, onClose }: { app: ApplicationRecord; onClose: () => void }) {
@@ -180,6 +254,8 @@ function InterviewPanel({ app, onClose }: { app: ApplicationRecord; onClose: () 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [report, setReport] = useState<InterviewReport | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -198,6 +274,7 @@ function InterviewPanel({ app, onClose }: { app: ApplicationRecord; onClose: () 
             company_name: app.company_name,
             job_description: app.job_description || '',
             resume_text: getCachedResumeText(),
+            application_id: app.id,
             ...getLlmFields(settings.interviewLlmModel),
           }),
         });
@@ -205,9 +282,23 @@ function InterviewPanel({ app, onClose }: { app: ApplicationRecord; onClose: () 
         const data: SessionData = await res.json();
         if (!cancelled) {
           setPrepStatus('Building your interviewer persona…');
-          await new Promise(r => setTimeout(r, 500));
+          await new Promise(r => setTimeout(r, 400));
           setSession(data);
-          setStage('persona');
+          // Resume path: server returned existing messages
+          if (data.messages && data.messages.length > 0) {
+            setMessages(data.messages);
+            setStage(data.completed ? 'persona' : 'chat');
+            // Auto-load existing report if interview was completed
+            if (data.completed && data.session_id) {
+              try {
+                const r = await fetch(`/api/interview/by-application/${app.id}`);
+                const d = await r.json();
+                if (d.report && !cancelled) setReport(d.report);
+              } catch { /* noop */ }
+            }
+          } else {
+            setStage('persona');
+          }
         }
       } catch (err) {
         if (!cancelled) setPrepStatus(`Failed to initialize: ${String(err)}`);
@@ -220,12 +311,13 @@ function InterviewPanel({ app, onClose }: { app: ApplicationRecord; onClose: () 
   const startChat = useCallback(async () => {
     if (!session) return;
     setStage('chat');
+    if (messages.length > 0) return;  // Resumed: skip auto-greeting
     setIsLoading(true);
     try {
       const res = await fetch('/api/interview/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_context: session.session_context, persona_name: session.persona_name, messages: [], message: '', ...getLlmFields(settings.interviewLlmModel) }),
+        body: JSON.stringify({ session_id: session.session_id, session_context: session.session_context, persona_name: session.persona_name, messages: [], message: '', ...getLlmFields(settings.interviewLlmModel) }),
       });
       const data = await res.json();
       setMessages([{ role: 'assistant', content: data.content }]);
@@ -234,7 +326,7 @@ function InterviewPanel({ app, onClose }: { app: ApplicationRecord; onClose: () 
     } finally {
       setIsLoading(false);
     }
-  }, [session]);
+  }, [session, messages.length]);
 
   const sendMessage = useCallback(async () => {
     if (!session || !input.trim() || isLoading) return;
@@ -246,7 +338,7 @@ function InterviewPanel({ app, onClose }: { app: ApplicationRecord; onClose: () 
       const res = await fetch('/api/interview/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_context: session.session_context, persona_name: session.persona_name, messages, message: text, ...getLlmFields(settings.interviewLlmModel) }),
+        body: JSON.stringify({ session_id: session.session_id, session_context: session.session_context, persona_name: session.persona_name, messages, message: text, ...getLlmFields(settings.interviewLlmModel) }),
       });
       const data = await res.json();
       setMessages(prev => [...prev, { role: 'assistant', content: data.content }]);
@@ -256,6 +348,36 @@ function InterviewPanel({ app, onClose }: { app: ApplicationRecord; onClose: () 
       setIsLoading(false);
     }
   }, [session, input, messages, isLoading]);
+
+  const generateReport = useCallback(async () => {
+    if (!session?.session_id || messages.length < 4) return;
+    setReportLoading(true);
+    setStage('report');
+    try {
+      const res = await fetch('/api/interview/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: session.session_id, ...getLlmFields(settings.interviewLlmModel) }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Report failed: ${res.statusText}`);
+      }
+      const data = await res.json();
+      setReport(data.report);
+    } catch (err) {
+      setReport({
+        score: 0,
+        strengths: [],
+        improvements: [`Failed to generate report: ${String(err)}`],
+        technical_gaps: [],
+        study_tips: [],
+        next_steps: [],
+      });
+    } finally {
+      setReportLoading(false);
+    }
+  }, [session, messages.length]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -356,13 +478,77 @@ function InterviewPanel({ app, onClose }: { app: ApplicationRecord; onClose: () 
                 onClick={sendMessage}
                 disabled={!input.trim() || isLoading}
                 className="btn btn-primary btn-icon"
+                aria-label="Send message"
               >
                 <Send size={15} />
+              </button>
+              <button
+                onClick={generateReport}
+                disabled={messages.length < 4 || isLoading}
+                className="btn btn-secondary"
+                title="End interview and generate performance report"
+                aria-label="End interview and generate report"
+              >
+                <Trophy size={14} /> End & Report
               </button>
             </div>
           </>
         )}
+
+        {/* Report */}
+        {stage === 'report' && (
+          <div style={{ flex: 1, overflowY: 'auto', padding: '20px 28px' }}>
+            {reportLoading && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16 }}>
+                <Loader2 size={28} className="spin" style={{ color: 'var(--gold)' }} />
+                <div style={{ fontSize: 14, color: 'var(--text-muted)' }}>Analyzing your interview…</div>
+              </div>
+            )}
+            {report && !reportLoading && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{ width: 64, height: 64, borderRadius: '50%', background: report.score >= 70 ? '#4ade80' : report.score >= 50 ? '#fbbf24' : '#f87171', color: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 800 }}>
+                    {report.score}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Performance Report</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{app.job_title} · {app.company_name}</div>
+                  </div>
+                </div>
+
+                <ReportSection title="Strengths" color="#4ade80" items={report.strengths} />
+                <ReportSection title="Improvements" color="#f87171" items={report.improvements} />
+                {report.technical_gaps.length > 0 && (
+                  <ReportSection title="Technical Gaps" color="#fbbf24" items={report.technical_gaps} />
+                )}
+                <ReportSection title="Study Tips" color="#60a5fa" items={report.study_tips} />
+                <ReportSection title="Next Steps" color="#a78bfa" items={report.next_steps} />
+
+                <div style={{ display: 'flex', gap: 10, paddingTop: 8 }}>
+                  <button onClick={() => setStage('chat')} className="btn btn-secondary">
+                    <MessageSquare size={14} /> Back to Transcript
+                  </button>
+                  <button onClick={onClose} className="btn btn-primary">
+                    <CheckCircle2 size={14} /> Done
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+function ReportSection({ title, color, items }: { title: string; color: string; items: string[] }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color, marginBottom: 6 }}>{title}</div>
+      <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text)', fontSize: 13, lineHeight: 1.7 }}>
+        {items.map((it, i) => (<li key={i} style={{ marginBottom: 4 }}>{it}</li>))}
+      </ul>
     </div>
   );
 }
@@ -621,6 +807,9 @@ function DraggableCard({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: app.id });
   const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const [showOverflow, setShowOverflow] = useState(false);
+  const moveBtnRef = useRef<HTMLButtonElement>(null);
+  const overflowBtnRef = useRef<HTMLButtonElement>(null);
   const [localNotes, setLocalNotes] = useState(app.notes || '');
 
   const scoreVal = app.match_score ?? app.assessment_data?.match_score ?? null;
@@ -688,42 +877,65 @@ function DraggableCard({
         )}
       </div>
 
-      {/* Action row */}
+      {/* Action row — hierarchy: Apply > Resume > Interview > Move > overflow (Delete) */}
       <div className="tracker-card-actions">
-        <div style={{ position: 'relative' }}>
-          <button type="button" className="tracker-action-btn" onClick={() => setShowStatusMenu(v => !v)}>
-            Move <ChevronDown size={12} strokeWidth={1.75} />
-          </button>
-          {showStatusMenu && (
-            <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 50, background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', minWidth: 150, boxShadow: '0 8px 32px rgba(0,0,0,0.6)', marginTop: 4 }} onMouseLeave={() => setShowStatusMenu(false)}>
-              {STATUS_PIPELINE.map(s => (
-                <div key={s} style={{ padding: '8px 14px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: s === app.status ? STATUS_COLORS[s] : 'var(--text)', fontWeight: s === app.status ? 600 : 400 }} onClick={() => { onStatusChange(app.id, s); setShowStatusMenu(false); }}>
-                  <span style={{ color: STATUS_COLORS[s] }}>{STATUS_ICONS[s]}</span>
-                  {STATUS_LABELS[s]}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        {app.job_url ? (
+          <a
+            href={app.job_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="tracker-action-btn primary"
+            style={{ textDecoration: 'none' }}
+            aria-label="Open job posting"
+          >
+            <ExternalLink size={13} /> Apply
+          </a>
+        ) : null}
 
-        <button className="tracker-action-btn interview" onClick={() => onInterview(app)}>
-          <MessageSquare size={13} /> Interview
-        </button>
-
-        <button className="tracker-action-btn resume" onClick={() => onGenerateResume(app)}>
+        <button className="tracker-action-btn resume" onClick={() => onGenerateResume(app)} aria-label="Generate tailored resume">
           <FileDown size={13} /> Resume
         </button>
 
-        {app.job_url && (
-          <a href={app.job_url} target="_blank" rel="noopener noreferrer" className="tracker-action-btn" style={{ textDecoration: 'none' }}>
-            <ExternalLink size={13} /> Open
-          </a>
-        )}
+        <button className="tracker-action-btn interview" onClick={() => onInterview(app)} aria-label="Start mock interview">
+          <MessageSquare size={13} /> Interview
+        </button>
 
-        <button className="tracker-action-btn danger" onClick={() => onDelete(app.id)}>
-          <Trash2 size={13} /> Delete
+        <button
+          ref={moveBtnRef}
+          type="button"
+          className="tracker-action-btn"
+          onClick={() => setShowStatusMenu(v => !v)}
+          aria-label="Change status"
+        >
+          <ArrowRightLeft size={12} /> Move <ChevronDown size={12} strokeWidth={1.75} />
+        </button>
+
+        <button
+          ref={overflowBtnRef}
+          type="button"
+          className="tracker-action-btn"
+          onClick={() => setShowOverflow(v => !v)}
+          aria-label="More actions"
+          style={{ marginLeft: 'auto' }}
+        >
+          <MoreHorizontal size={14} />
         </button>
       </div>
+
+      <PortalMenu open={showStatusMenu} anchorRef={moveBtnRef} align="left" onClose={() => setShowStatusMenu(false)}>
+        {STATUS_PIPELINE.map(s => (
+          <div key={s} className="portal-menu-item" style={{ color: s === app.status ? STATUS_COLORS[s] : 'var(--text)', fontWeight: s === app.status ? 600 : 400 }} onClick={() => { onStatusChange(app.id, s); setShowStatusMenu(false); }}>
+            <span style={{ color: STATUS_COLORS[s], display: 'inline-flex' }}>{STATUS_ICONS[s]}</span>
+            {STATUS_LABELS[s]}
+          </div>
+        ))}
+      </PortalMenu>
+
+      <PortalMenu open={showOverflow} anchorRef={overflowBtnRef} align="right" onClose={() => setShowOverflow(false)}>
+        <div className="portal-menu-item" style={{ color: '#f87171' }} onClick={() => { setShowOverflow(false); onDelete(app.id); }}>
+          <Trash2 size={13} /> Delete
+        </div>
+      </PortalMenu>
 
       {/* Expandable body */}
       <AnimatePresence initial={false}>
@@ -1132,3 +1344,4 @@ export default function JobTracker({ onBack }: JobTrackerProps) {
     </div>
   );
 }
+

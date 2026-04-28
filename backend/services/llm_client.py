@@ -20,22 +20,40 @@ from typing import Optional
 
 # ── Concurrency control ────────────────────────────────────────────────────────
 # Local providers (Ollama / LM Studio) run one inference at a time on the GPU.
-# A semaphore prevents resume generation from starving job assessments and vice-versa.
+# Cloud-relay models (Ollama *-cloud suffix) bypass the semaphore — inference is remote.
+# LLM_MAX_CONCURRENT env var overrides the default slot count (default: 1).
 
 LOCAL_PROVIDERS = frozenset({"ollama", "lmstudio", "openclaw"})
 _local_sem: asyncio.Semaphore | None = None
 
 
+def _sem_slots() -> int:
+    import os
+    try:
+        return max(1, int(os.getenv("LLM_MAX_CONCURRENT", "1")))
+    except ValueError:
+        return 1
+
+
 def get_local_sem() -> asyncio.Semaphore:
-    """Lazy singleton semaphore for local LLM providers (1 slot)."""
+    """Lazy singleton semaphore for local LLM providers."""
     global _local_sem
     if _local_sem is None:
-        _local_sem = asyncio.Semaphore(1)
+        _local_sem = asyncio.Semaphore(_sem_slots())
     return _local_sem
 
 
 def is_local_provider(provider: str) -> bool:
     return provider in LOCAL_PROVIDERS
+
+
+def needs_semaphore(provider: str, model: str) -> bool:
+    """False for cloud-relay models (Ollama *-cloud) — no GPU contention."""
+    if not is_local_provider(provider):
+        return False
+    if model and model.endswith("-cloud"):
+        return False
+    return True
 
 
 # ── Thinking-model helpers ─────────────────────────────────────────────────────
@@ -259,9 +277,12 @@ class LLMClient:
         if self.provider == "ollama":
             host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
             return f"{host.rstrip('/')}/v1/"
-        # LM Studio: default local port
+        # LM Studio: OpenAI-compat server (see LMSTUDIO_BASE_URL; models router uses same env)
         if self.provider == "lmstudio":
-            return "http://localhost:1234/v1/"
+            host = (os.getenv("LMSTUDIO_BASE_URL") or "http://localhost:1234").strip()
+            if not host:
+                host = "http://localhost:1234"
+            return f"{host.rstrip('/')}/v1/"
         _, default_base, _ = _PROVIDERS.get(self.provider, (None, None, None))
         return default_base
 
@@ -312,6 +333,14 @@ class LLMClient:
             json_schema,
         )
 
+    async def complete_async(self, system: str, user: str, json_schema: Optional[dict] = None) -> str:
+        """Async wrapper for complete() — offloads sync provider call to a thread.
+
+        Use from async routers (interview.py, jobs_v2.py) to avoid blocking the
+        event loop on synchronous HTTP calls in provider adapters.
+        """
+        return await asyncio.to_thread(self.complete, system, user, json_schema)
+
     def complete_json(self, system: str, user: str, schema: Optional[dict] = None) -> dict:
         """Call LLM and return parsed JSON dict. Retries once on parse failure."""
         raw = self.complete(system, user, json_schema=schema)
@@ -328,6 +357,10 @@ class LLMClient:
                 json_schema=None,
             )
             return clean_and_parse_json(raw2)
+
+    async def complete_json_async(self, system: str, user: str, schema: Optional[dict] = None) -> dict:
+        """Async wrapper for complete_json() — offloads sync provider call to a thread."""
+        return await asyncio.to_thread(self.complete_json, system, user, schema)
 
     @classmethod
     def from_settings(cls) -> "LLMClient":

@@ -13,6 +13,10 @@ services:
       - jumpship-uploads:/app/uploads
       - jumpship-generated:/app/generated_resumes
     environment:
+      # Pydantic default is debug=false; .env is not baked into the image (.dockerignore).
+      # Without this, startup fails on the default SECRET_KEY. This compose file is for
+      # local stacks — for production, use a real SECRET_KEY and set DEBUG=false (override).
+      DEBUG: "true"
       DATABASE_URL: sqlite:////app/data/jobspy_ui.db
       UPLOAD_DIR: /app/uploads
       RESUME_OUTPUT_DIR: /app/generated_resumes
@@ -26,6 +30,8 @@ services:
       # are set so all code paths resolve to the correct address.
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      # LM Studio on the host (same pattern as Ollama). Override in `.env` if your server uses another port.
+      LMSTUDIO_BASE_URL: ${LMSTUDIO_BASE_URL:-http://host.docker.internal:1234}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
@@ -34,6 +40,8 @@ services:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
     healthcheck:
+      # Hits FastAPI /api/health (backend/routers/health.py).
+      # Expected: HTTP 200 with JSON {"status": "ok", ...}. curl -f fails on non-2xx.
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 15s
       timeout: 5s

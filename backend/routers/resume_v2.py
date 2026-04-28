@@ -21,22 +21,6 @@ router = APIRouter(prefix="/api/resume", tags=["resume-v2"])
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
-@router.post("/extract-text")
-async def extract_text_debug(file: UploadFile = File(...)):
-    """Debug: returns the cleaned text that would be sent to the LLM."""
-    content = await file.read()
-    try:
-        text = await extract_text(content, file.filename or "resume.pdf")
-    except Exception as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    return {
-        "char_count": len(text),
-        "line_count": text.count('\n'),
-        "preview_500": text[:500],
-        "full_text": text[:5000],
-    }
-
-
 @router.post("/parse", response_model=ResumeProfile)
 async def parse_resume_endpoint(
     file: UploadFile = File(...),

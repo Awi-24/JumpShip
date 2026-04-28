@@ -20,6 +20,10 @@ const mockJob: JobResult = {
 const mockProfile: ResumeProfile = {
   name: 'Ada',
   title: 'ML Engineer',
+  email: 'ada@example.com',
+  phone: '+1-555-0100',
+  location_city: 'San Francisco',
+  location_country: 'USA',
   skills: ['Python', 'GCP'],
   experience_years: 5,
   domains: ['MLOps'],

@@ -79,11 +79,16 @@ CRITICAL RULES:
 3. "suggested_titles" = same list but English-only, ordered by best fit (used as display labels).
 4. "skills" = specific tools/technologies only (e.g. "FastAPI", "PostgreSQL", "React", "Kubernetes").
 5. Infer seniority (Júnior/Pleno/Sênior or Junior/Mid/Senior) from years of experience and job titles.
-6. Use empty array [] or 0 for missing fields — never invent information.
+6. Use empty string "" or empty array [] or 0 for missing fields — never invent information.
+7. For contact fields: extract ONLY what is explicitly stated in the resume. Empty string if not found.
 
 OUTPUT SCHEMA (strict — no extra keys):
 {
-  "name": "Full Name",
+  "name": "Full Name as written in the resume",
+  "email": "email address or empty string",
+  "phone": "phone number as written or empty string",
+  "location_city": "city of residence or empty string",
+  "location_country": "country of residence or empty string",
   "title": "Current/most recent role with seniority level in English",
   "skills": ["up to 20 specific technologies and tools"],
   "experience_years": <integer>,
@@ -110,6 +115,10 @@ RESUME:
 
         # Validate and sanitise fields
         data.setdefault("name", "")
+        data.setdefault("email", "")
+        data.setdefault("phone", "")
+        data.setdefault("location_city", "")
+        data.setdefault("location_country", "")
         data.setdefault("title", "")
         data.setdefault("skills", [])
         data.setdefault("experience_years", 0)
@@ -136,13 +145,10 @@ RESUME:
             exc, response[:800],
         )
         return {
-            "name": "",
-            "title": "",
-            "skills": [],
-            "experience_years": 0,
-            "domains": [],
-            "suggested_keywords": [],
-            "suggested_titles": [],
+            "name": "", "email": "", "phone": "",
+            "location_city": "", "location_country": "",
+            "title": "", "skills": [], "experience_years": 0,
+            "domains": [], "suggested_keywords": [], "suggested_titles": [],
             "raw_text": text[:8000],
         }
 

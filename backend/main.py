@@ -31,14 +31,20 @@ from backend.routers import resume_v2, jobs_v2, profile, models, resume_gen, int
 
 logger = logging.getLogger(__name__)
 
-# Validate SECRET_KEY at startup
+# Validate SECRET_KEY at startup — fail hard outside DEBUG
 if settings.secret_key == "dev-secret-change-me-in-production":
+    if not settings.debug:
+        raise RuntimeError(
+            "SECRET_KEY is still the default dev value. Set SECRET_KEY in .env, "
+            "or set DEBUG=true to allow the default in development."
+        )
     logger.critical(
-        "❌ SECRET_KEY is still using default dev value. "
-        "Change it in .env or environment variables before deploying to production."
+        "SECRET_KEY is using default dev value (DEBUG=true). Do not deploy this way."
     )
 
-Base.metadata.create_all(bind=engine)
+from backend.database import init_db  # noqa: E402
+
+init_db()
 
 
 def _migrate_db():
@@ -49,14 +55,15 @@ def _migrate_db():
         "ALTER TABLE applications ADD COLUMN assessment_data JSON",
         "ALTER TABLE applications ADD COLUMN match_score INTEGER",
         "ALTER TABLE applications ADD COLUMN job_description TEXT",
+        "ALTER TABLE user_profiles ADD COLUMN llm_keys_encrypted TEXT",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
             try:
                 conn.execute(text(stmt))
                 conn.commit()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Migration skipped (%s): %s", stmt, exc)
 
 
 _migrate_db()
@@ -64,7 +71,7 @@ _migrate_db()
 app = FastAPI(
     title="JumpShip API",
     description="AI-powered job search. Resume parsing, multi-source scraping, LLM job assessment, tailored resume generation.",
-    version="3.0.0",
+    version="1.0.0",
 )
 
 origins = settings.cors_origins_list
@@ -105,7 +112,7 @@ async def health():
         llm_provider=settings.llm_provider,
         llm_model=settings.llm_model,
         llm_available=available,
-        version="3.0.0",
+        version="1.0.0",
     )
 
 
@@ -152,4 +159,4 @@ async def health_llm():
 
 @app.get("/")
 def root():
-    return {"message": "JumpShip API v3 — visit /docs"}
+    return {"message": "JumpShip API 1.0 — visit /docs"}

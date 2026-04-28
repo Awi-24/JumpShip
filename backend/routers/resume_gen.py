@@ -95,6 +95,8 @@ async def generate_resume(
             if getattr(user_profile_row, c.name) is not None
         }
 
+    extra_info = user_profile.pop("extra_info", None) or None
+
     async def _generate():
         return await asyncio.to_thread(
             generate_pdf,
@@ -105,6 +107,7 @@ async def generate_resume(
             assessment=req.assessment,
             client=client,
             user_profile=user_profile,
+            extra_context=extra_info,
         )
 
     try:
@@ -169,6 +172,10 @@ async def generate_resume_for_application(
             if getattr(user_profile_row, c.name) is not None
         }
 
+    # Merge profile extra_info with any request-level extra_context
+    profile_extra = user_profile.pop("extra_info", None) or ""
+    merged_extra = "\n\n".join(filter(None, [profile_extra, req.extra_context or ""])) or None
+
     async def _generate():
         return await asyncio.to_thread(
             generate_pdf,
@@ -180,7 +187,7 @@ async def generate_resume_for_application(
             client=client,
             user_profile=user_profile,
             custom_instructions=req.custom_instructions,
-            extra_context=req.extra_context,
+            extra_context=merged_extra,
         )
 
     try:

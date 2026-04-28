@@ -19,7 +19,7 @@ _CACHE_TTL = 900  # 15 minutes
 # Sites handled by JobSpy
 _JOBSPY_SITES = {"linkedin", "indeed", "glassdoor", "zip_recruiter", "bayt", "google"}
 # Sites handled by our extra scrapers
-_EXTRA_SITES = {"remoteok", "arbeitnow", "gupy", "programathor", "trampos"}
+_EXTRA_SITES = {"remoteok", "arbeitnow", "gupy", "programathor", "trampos", "greenhouse", "lever", "workday", "playwright"}
 
 # ZipRecruiter only returns results for US locations.
 # When the user searches "Remote" or a non-US location, we swap in a broad US fallback.
@@ -223,9 +223,10 @@ async def search_jobs(
         else:
             tasks.append(_search_jobspy(keywords, location, job_type, jobspy_sites, results_wanted))
 
-    # BR sources work better with PT-BR keywords — translate on the fly if needed
-    br_sites = [s for s in extra_sites if s in {"gupy", "programathor", "trampos"}]
-    other_extra = [s for s in extra_sites if s not in {"gupy", "programathor", "trampos"}]
+    # BR/JumpShip sources benefit from PT-BR keywords — translate on the fly
+    _BR_AND_JUMPSHIP = {"gupy", "programathor", "trampos", "greenhouse", "lever", "workday", "playwright"}
+    br_sites = [s for s in extra_sites if s in _BR_AND_JUMPSHIP]
+    other_extra = [s for s in extra_sites if s not in _BR_AND_JUMPSHIP]
     br_keywords = _pt_keywords(keywords)
     for site in other_extra:
         tasks.append(_search_extra(site, keywords, location, results_wanted))
@@ -247,9 +248,15 @@ async def search_jobs(
 
     all_results = _dedup_jobs(all_results)
 
-    # Post-filter by location (JobSpy doesn't guarantee country-level filtering)
+    # Post-filter by location (JobSpy doesn't guarantee country-level filtering).
+    # greenhouse/lever/playwright hardcode "Brasil" as location — bypass filter for them.
+    # workday returns real location strings (e.g. "Boadilla del Monte") — keep filtering it.
+    _JUMPSHIP_BYPASS = {"greenhouse", "lever", "playwright"}
     before = len(all_results)
-    all_results = [j for j in all_results if _location_matches(j.get("location", ""), location)]
+    all_results = [
+        j for j in all_results
+        if j.get("site") in _JUMPSHIP_BYPASS or _location_matches(j.get("location", ""), location)
+    ]
     if before != len(all_results):
         logger.info("Location filter '%s': kept %d/%d jobs", location, len(all_results), before)
 
@@ -285,7 +292,8 @@ async def _search_jobspy(
 
     try:
         from jobspy import scrape_jobs
-        df = scrape_jobs(
+        df = await asyncio.to_thread(
+            scrape_jobs,
             site_name=sites,
             search_term=search_term,
             location=location,
@@ -372,6 +380,18 @@ async def _search_extra(site: str, keywords: list[str], location: str, results_w
         return await fetch_programathor(keywords, results_wanted)
     elif site == "trampos":
         return await fetch_trampos(keywords, results_wanted)
+    elif site == "greenhouse":
+        from backend.services.greenhouse_scraper import fetch_greenhouse
+        return await fetch_greenhouse(keywords, results_wanted)
+    elif site == "lever":
+        from backend.services.lever_scraper import fetch_lever
+        return await fetch_lever(keywords, results_wanted)
+    elif site == "workday":
+        from backend.services.workday_scraper import fetch_workday
+        return await fetch_workday(keywords, results_wanted)
+    elif site == "playwright":
+        from backend.services.playwright_scraper import fetch_playwright
+        return await fetch_playwright(keywords, results_wanted)
     return []
 
 

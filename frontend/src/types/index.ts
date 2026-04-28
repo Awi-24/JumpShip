@@ -3,6 +3,10 @@
 export interface ResumeProfile {
   name: string;
   title: string;
+  email: string;
+  phone: string;
+  location_city: string;
+  location_country: string;
   skills: string[];
   experience_years: number;
   domains: string[];
@@ -66,16 +70,6 @@ export interface JobAssessment {
   hire_recommendation?: 'strong_yes' | 'yes' | 'borderline' | 'no' | 'strong_no';
 }
 
-export interface GenerateResumeRequest {
-  job: JobResult;
-  resume_profile: ResumeProfile;
-  assessment?: Record<string, unknown>;
-  llm_provider?: string;
-  llm_model?: string;
-  llm_api_key?: string;
-  llm_base_url?: string;
-}
-
 export interface GeneratedResumeItem {
   id: string;
   job_title: string;
@@ -108,22 +102,42 @@ export type LLMProvider =
   | 'cohere';
 
 export interface LLMConfig {
-  provider: LLMProvider;
+  provider: LLMProvider | string;
   model: string;
-  api_key?: string;
+  apiKey?: string;
+  baseUrl?: string;
+}
+
+// Backend `/api/profile` response shape (mirrors backend ProfileOut)
+export interface ProfileResponse {
+  full_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  linkedin_url?: string | null;
+  github_url?: string | null;
+  portfolio_url?: string | null;
+  location_city?: string | null;
+  location_state?: string | null;
+  location_country?: string | null;
+  work_authorization?: string | null;
+  willing_to_relocate?: boolean | null;
+  preferred_work_mode?: string | null;
+  years_experience?: number | null;
+  highest_degree?: string | null;
+  university?: string | null;
+  graduation_year?: number | null;
+  salary_min?: number | null;
+  salary_max?: number | null;
+  salary_currency?: string | null;
+  linkedin_email?: string | null;
+  custom_answers?: Record<string, unknown> | null;
+  extra_info?: string | null;
 }
 
 export type SortOption = 'match' | 'newest' | 'salary';
 export type JobTypeFilter = 'all' | 'fulltime' | 'parttime' | 'contract' | 'remote';
 export type AssessmentSpeed = 'careful' | 'balanced' | 'turbo';
 export type BookmarkStatus = 'saved' | 'applied' | 'interview' | 'rejected' | 'offer';
-
-export interface BookmarkedJob {
-  job: JobResult;
-  status: BookmarkStatus;
-  savedAt: string;
-  assessment?: JobAssessment;
-}
 
 // ─── Model Discovery ─────────────────────────────────────────────────────────
 

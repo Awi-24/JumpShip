@@ -3,12 +3,33 @@ JumpShip — Pydantic v2 schemas for all API request/response types
 """
 from __future__ import annotations
 
+from typing import TypedDict
+
 from pydantic import BaseModel
+
+
+class AssessmentOverflow(TypedDict, total=False):
+    """
+    Schema for the JSON blob stored in ``Analysis.suggestions`` (see
+    ``db_models.py``). Documents the overflow fields not represented as
+    dedicated ORM columns. Kept in sync with ``JobAssessment`` below.
+    """
+    career_suggestions: list[str]
+    company_insights: str
+    income_range: str
+    is_relevant: bool
+    job_tags: list[str]
+    resume_generation_triggered: bool
+    hire_recommendation: str  # strong_yes | yes | borderline | no | strong_no
 
 
 class ResumeProfile(BaseModel):
     name: str = ""
     title: str = ""
+    email: str = ""
+    phone: str = ""
+    location_city: str = ""
+    location_country: str = ""
     skills: list[str] = []
     experience_years: int = 0
     domains: list[str] = []
@@ -90,4 +111,4 @@ class HealthResponse(BaseModel):
     llm_provider: str = ""
     llm_model: str = ""
     llm_available: bool = False
-    version: str = "3.0.0"
+    version: str = "1.0.0"

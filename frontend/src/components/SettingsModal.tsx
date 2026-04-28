@@ -117,9 +117,18 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) =>
     setDraft(d => ({ ...d, [key]: value }));
 
+  const DEFAULT_URLS: Partial<Record<LLMProvider, string>> = {
+    ollama:   'http://localhost:11434',
+    lmstudio: 'http://localhost:1234',
+  };
+
   const handleProviderChange = (p: LLMProvider) => {
     const defaultModel = PROVIDER_MODELS[p][0] ?? '';
-    setDraft(d => ({ ...d, llmProvider: p, llmModel: defaultModel }));
+    const autoUrl = DEFAULT_URLS[p];
+    const currentUrl = draft.ollamaUrl;
+    const isDefaultOfOther = Object.entries(DEFAULT_URLS).some(([k, v]) => k !== p && v === currentUrl);
+    const newUrl = autoUrl && (!currentUrl || isDefaultOfOther) ? autoUrl : currentUrl;
+    setDraft(d => ({ ...d, llmProvider: p, llmModel: defaultModel, ollamaUrl: newUrl }));
     setStatus('idle');
     setTestMessage('');
   };

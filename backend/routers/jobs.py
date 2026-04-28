@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.models.db_models import SavedJob
-from backend.services.scraper import search_jobs
+from backend.services.job_scraper_v2 import search_jobs
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -62,23 +62,19 @@ class SaveJobRequest(BaseModel):
 
 
 @router.post("/search")
-def search(req: JobSearchRequest):
+async def search(req: JobSearchRequest):
     """
     Scrape jobs from the requested sites and return results.
     Results are NOT automatically saved — use /save to persist a job.
     """
     try:
-        jobs = search_jobs(
+        location = "Remote" if req.is_remote else (req.location or "Remote")
+        jobs = await search_jobs(
+            keywords=[req.search_term] if req.search_term else [],
+            location=location,
+            job_type=req.job_type or "fulltime",
             sites=req.sites,
-            search_term=req.search_term,
-            location=req.location,
-            distance=req.distance,
-            is_remote=req.is_remote,
-            job_type=req.job_type,
-            easy_apply=req.easy_apply,
             results_wanted=req.results_wanted,
-            country_indeed=req.country_indeed,
-            hours_old=req.hours_old,
         )
         return {"jobs": jobs, "count": len(jobs)}
     except Exception as e:

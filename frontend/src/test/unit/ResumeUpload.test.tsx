@@ -6,6 +6,10 @@ import type { ResumeProfile } from '../../types';
 const mockProfile: ResumeProfile = {
   name: 'Ada Lovelace',
   title: 'ML Engineer',
+  email: 'ada@example.com',
+  phone: '+1-555-0100',
+  location_city: 'London',
+  location_country: 'UK',
   skills: ['Python', 'GCP', 'TensorFlow'],
   experience_years: 5,
   domains: ['MLOps'],

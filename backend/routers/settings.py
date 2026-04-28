@@ -6,15 +6,20 @@ Router for managing user settings:
 """
 from __future__ import annotations
 
+import json
+import logging
 import os
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel, RootModel
 from sqlalchemy.orm import Session
 from typing import Optional, Dict
 
 from backend.database import get_db
-from backend.models.db_models import Settings
+from backend.models.db_models import Settings, UserProfile as UserProfileORM
+from backend.services.crypto import encrypt, decrypt
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -297,3 +302,79 @@ def get_active_provider_key(db: Session) -> tuple[str, str]:
             "Go to Settings → AI Keys to add one."
         )
     return provider, api_key
+
+
+# ── LLM Keys (Fernet-encrypted, server-side) ─────────────────────────────────
+# HDF-20260427-10 — migration from frontend localStorage to backend Fernet store.
+# Single-user app: stored on the singleton/first row of user_profiles.
+
+def _get_or_create_profile(db: Session) -> UserProfileORM:
+    profile = db.query(UserProfileORM).order_by(UserProfileORM.created_at).first()
+    if not profile:
+        profile = UserProfileORM()
+        db.add(profile)
+        db.commit()
+        db.refresh(profile)
+    return profile
+
+
+class LlmKeysPayload(RootModel[Dict[str, str]]):
+    """Dict of {provider: api_key}. Empty string clears that provider."""
+    root: Dict[str, str]
+
+
+@router.get("/llm-keys")
+def get_llm_keys(db: Session = Depends(get_db)) -> Dict[str, str]:
+    """Return decrypted {provider: key} dict. Empty {} if none stored."""
+    profile = db.query(UserProfileORM).order_by(UserProfileORM.created_at).first()
+    if not profile or not profile.llm_keys_encrypted:
+        return {}
+    try:
+        decrypted = decrypt(profile.llm_keys_encrypted)
+        if not decrypted:
+            return {}
+        data = json.loads(decrypted)
+        if not isinstance(data, dict):
+            return {}
+        return {k: v for k, v in data.items() if isinstance(v, str) and v}
+    except Exception as exc:
+        logger.error("Failed to decrypt llm_keys: %s", exc)
+        return {}
+
+
+@router.put("/llm-keys", status_code=204)
+def update_llm_keys(payload: LlmKeysPayload, db: Session = Depends(get_db)):
+    """Store {provider: key} as a single Fernet-encrypted JSON blob.
+
+    Empty string for a provider removes that key. Missing providers are preserved.
+    """
+    profile = _get_or_create_profile(db)
+
+    # Merge with existing
+    current: Dict[str, str] = {}
+    if profile.llm_keys_encrypted:
+        try:
+            decrypted = decrypt(profile.llm_keys_encrypted)
+            if decrypted:
+                loaded = json.loads(decrypted)
+                if isinstance(loaded, dict):
+                    current = {k: v for k, v in loaded.items() if isinstance(v, str)}
+        except Exception as exc:
+            logger.warning("Could not decrypt existing llm_keys; overwriting: %s", exc)
+
+    for provider, key in payload.root.items():
+        if key == "":
+            current.pop(provider, None)
+        else:
+            current[provider] = key
+
+    if not current:
+        profile.llm_keys_encrypted = None
+    else:
+        encrypted = encrypt(json.dumps(current))
+        if not encrypted:
+            raise HTTPException(status_code=500, detail="Failed to encrypt LLM keys")
+        profile.llm_keys_encrypted = encrypted
+
+    db.commit()
+    return Response(status_code=204)

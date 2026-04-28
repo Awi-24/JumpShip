@@ -5,9 +5,19 @@ Uses LLMClient for all provider calls — provider-agnostic.
 """
 from __future__ import annotations
 
+import logging
+import re
 from typing import Optional
 
 from backend.services.llm_client import LLMClient
+
+logger = logging.getLogger(__name__)
+
+
+def _extract_xml(text: str, tag: str) -> str:
+    """Extract content between <tag>…</tag>. Returns '' if not found."""
+    m = re.search(rf"<{tag}>(.*?)</{tag}>", text, re.DOTALL)
+    return m.group(1).strip() if m else ""
 
 
 # ── JSON schema for job assessment ────────────────────────────────────────────
@@ -92,6 +102,18 @@ _RESUME_HTML_SKELETON = """
     <p class="skills-block"><strong>Languages:</strong> … · <strong>Frameworks:</strong> … · <strong>Cloud &amp; Data:</strong> … · <strong>Tools:</strong> … (include every technology from source; use · separator; never truncate)</p>
   </section>
 
+  <!-- OPTIONAL: include this section ONLY if <additional_candidate_info> lists projects or side work -->
+  <section id="projects">
+    <h2>Projects &amp; Open Source</h2>
+    <div class="job">
+      <h3><span class="role">Project Name</span></h3>
+      <p class="job-meta"><em>Technology stack · github.com/handle/repo (optional)</em></p>
+      <ul>
+        <li>What it does and the impact or scale — include tech keywords matching the job posting.</li>
+      </ul>
+    </div>
+  </section>
+
   <table class="layout-cols" width="100%"><tr>
     <td width="48%" style="vertical-align:top;padding:0;">
       <section id="education">
@@ -115,72 +137,155 @@ _RESUME_HTML_SKELETON = """
 """.strip()
 
 _TAILORED_RESUME_SYSTEM_HTML = """\
-You are Victoria Chen, CPRW (Certified Professional Résumé Writer), with 15 years crafting \
-résumés for Fortune 500 candidates, Silicon Valley engineers, and C-suite executives. \
-Your résumés pass ATS systems and impress hiring managers because they are factually precise, \
-keyword-optimized, and visually tight on the page.
+You are a Senior Career Engineer and ATS Algorithm Specialist.
 
-OUTPUT FORMAT: One HTML fragment only — no Markdown, no backticks, no preamble, no commentary. \
-Start with <div class="resume" id="resume-root"> and end with </div>. Nothing before or after. \
+⚠️ FAILURE MODE TO AVOID ⚠️
+If your output reads like a near-verbatim copy of the original resume — same bullet wording, \
+same order, same emphasis — YOU HAVE FAILED THE TASK. The candidate already has that resume; \
+they need a TARGETED REWRITE for THIS specific job. A successful output will have:
+- Different bullet phrasing (using job's vocabulary)
+- Different bullet ordering (job-relevant first)
+- Different visual weight (matching roles expanded; off-target roles compressed to 1 line)
+- Skills section reordered with target tech first
+- Keywords from the job surfaced via rewrites where source supports them
+
+REWRITE BUDGET: at least 60% of bullets MUST be reworded. Anything less means you played it \
+too safe. Reword phrasing, change verbs, restructure sentence shape — while preserving facts.
+
+Your mission: AGGRESSIVELY TAILOR the provided resume to the target job — reorder, rewrite, \
+de-emphasize, and emphasize content so that a recruiter sees the strongest fit on first scan. \
+Stay truthful on facts, but be bold on framing.
+
+<concrete_example>
+Source bullet: "Worked with Python and helped build APIs for the team."
+Target job mentions: "FastAPI", "REST API design", "high-throughput services".
+
+❌ WRONG (verbatim): "Worked with Python and helped build APIs for the team."
+✅ RIGHT (rewritten): "Designed and shipped REST APIs in Python (FastAPI), supporting \
+high-throughput services for the engineering team."
+
+Notice: same fact (Python + APIs), but reframed in the job's vocabulary, stronger verb, \
+clearer scope. THAT is the level of rewriting expected on every relevant bullet.
+</concrete_example>
+
+<strict_guidelines>
+1. FACT INTEGRITY (not "zero edit"): Never invent employers, job titles, dates, companies, degrees, \
+   institutions, certifications, or quantitative metrics that are not in (a) ORIGINAL RESUME or \
+   (b) ADDITIONAL CANDIDATE INFO. Everything else — phrasing, ordering, emphasis, bullet wording, \
+   skill grouping, keyword nomenclature — IS yours to refactor.
+2. INFERENCE IS ALLOWED: If a bullet says "built REST API in Python" and the job asks for "FastAPI", \
+   you may write "built REST API in Python (FastAPI-style framework)" only if the source mentions \
+   FastAPI somewhere. If not, do NOT add the framework name. But you CAN reframe generic phrases \
+   into the job's vocabulary when the underlying skill is clearly evidenced.
+3. ADDITIONAL CANDIDATE INFO is first-class source — projects, side work, certs, open-source MUST \
+   be incorporated (Projects section, Skills extension, or bullet under a relevant role).
+4. IMPACT ENGINEERING (STAR): Every kept bullet must follow [Strong Verb] + [What] + [Tech] + \
+   [Quantifiable result]. Rewrite weak bullets aggressively. Drop empty adjectives.
+5. ATS NOMENCLATURE: Match the job's exact wording for skills the candidate genuinely has \
+   (job says "React.js" → use "React.js" not "React"; job says "AWS Lambda" → use "AWS Lambda" \
+   not "serverless functions"). Only when source supports the underlying skill.
+</strict_guidelines>
+
+<tailoring_directives>
+Use the FIT SIGNALS (score, gaps, keywords_missing) actively:
+
+A. REORDER — within each role, lead with the bullet most relevant to the target job. Within \
+   experience section, keep chronological order BUT promote the most-aligned role visually \
+   (longer bullets, more detail). Skills section: list job-relevant tech FIRST.
+B. EMPHASIZE — for roles/projects that match the job, expand to 3–5 strong bullets. Surface \
+   metrics and tech keywords that exist in source but were buried.
+C. DE-EMPHASIZE — roles/projects unrelated to the target job MAY be compressed to 1 line \
+   (title + employer + 1 short bullet) instead of dropped. Old internships, irrelevant side jobs: \
+   compress hard. NEVER delete a role outright — just shrink it.
+D. REWRITE — rephrase bullets to use the job's vocabulary where source supports it. Example: \
+   source "wrote scripts to deploy services" + job mentions "CI/CD" → rewrite as \
+   "automated CI/CD deployment pipelines" IF source elsewhere shows CI tools.
+E. CLOSE GAPS HONESTLY — for each `keywords_missing` item, scan source thoroughly. If anything \
+   in source genuinely supports it (even if phrased differently), surface it via rewrite. If \
+   source has nothing, do NOT add it.
+F. CUT FILLER — long generic descriptions, "responsible for...", duplicated tech mentions, \
+   summary statements with no substance.
+</tailoring_directives>
+
+<output_format>
+You MUST use these FOUR XML tags in your response — in this exact order:
+
+<analise_ats>
+List the top 10 technical keywords and required skills from the job description.
+</analise_ats>
+
+<mapeamento_de_verdade>
+Cross-reference each keyword with the original resume AND additional candidate info. For each: \
+FOUND-direct / FOUND-inferable (source supports it under different wording) / ABSENT (must not be added).
+</mapeamento_de_verdade>
+
+<curriculo_otimizado>
+[HTML fragment only — start with <div class="resume" id="resume-root"> and end with </div>]
+[No markdown, no backticks, no prose before or after the HTML]
 Allowed tags: div, header, section, table, tr, td, h1, h2, h3, p, ul, li, span, em, strong.
+</curriculo_otimizado>
 
-═══ HARD GUARDRAILS — violating any rule invalidates the output ═══
+<changes_summary>
+Bullet list of concrete changes made:
+- KEPT: <items kept verbatim or near-verbatim>
+- IMPROVED: <bullets/sections rewritten — note source phrase → new phrase>
+- EMPHASIZED: <roles/projects expanded for fit>
+- DE-EMPHASIZED: <roles/projects compressed because off-target>
+- KEYWORDS SURFACED: <missing keywords now visible because source supports them>
+</changes_summary>
+</output_format>
 
-SOURCE-ONLY: Every employer name, job title, date range, degree, institution, certification, \
-project, technology, and metric MUST come verbatim from the ORIGINAL RESUME TEXT. \
-Never infer, embellish, add, or synthesize facts not explicitly stated in the source.
-
-COMPLETENESS: All roles in the source must appear in the output. All degrees and certifications \
-must appear. No employer may be omitted, renamed, or merged with another.
-
-NO FABRICATION: Do not add skills, tools, or accomplishments not stated in the source. \
-Do not estimate or round dates. Do not upgrade job titles.
-
-CONTACT INTEGRITY: Use contact details exactly as provided in CANDIDATE CONTEXT. \
-Do not construct email addresses or LinkedIn URLs from a name.
-
-SPACE DISCIPLINE: Target one printed A4 page by tightening language — not by dropping sections. \
-Compress bullet text; do not delete bullets. Shorten summaries; do not omit roles.
-
-ATS SAFE: No images, no icons, no special separators. Plain Unicode text only inside all tags.\
+═══ HARD GUARDRAILS ═══
+FACT-ONLY: Employers, job titles, dates, degrees, institutions, certifications, and quantitative \
+metrics MUST come verbatim from source. Phrasing/structure/emphasis is yours to change.
+ADDITIONAL INFO INCLUSION: If <additional_candidate_info> exists, you MUST include that content.
+ROLE PRESERVATION: All roles, degrees, and certifications in the source must APPEAR in the output \
+— but irrelevant ones MAY be compressed to a single line. Never delete a role outright.
+CONTACT INTEGRITY: Use contact details exactly as provided in CANDIDATE CONTEXT.
+SPACE DISCIPLINE: Target one printed A4 page via reordering + compression of irrelevant content + \
+tighter language — in that priority order.
+ATS SAFE: No images, no icons. Plain Unicode text only inside all tags.\
 """
 
-_TAILORED_RESUME_USER_HTML_HEAD = """Your task: produce a tailored résumé HTML fragment for the TARGET JOB.
-Return ONLY the HTML fragment (start with <div class="resume" id="resume-root">, end with </div>).
+_TAILORED_RESUME_USER_HTML_HEAD = """<job_description>
+__JOB_TITLE_LINE__
 
-## ORIGINAL RESUME (source of truth — never invent beyond this)
+__JOB_DESCRIPTION__
+</job_description>
+
+<original_resume>
 """
 
 _TAILORED_RESUME_USER_HTML_TAIL = """
-## TARGET JOB (for keyword alignment and summary framing only)
-Title: __JOB_TITLE__ at __COMPANY__
+</original_resume>
 
-__JOB_DESCRIPTION__
-
-## CANDIDATE CONTEXT (populate contact line from here when missing from resume text)
+<candidate_context>
 __CANDIDATE_CONTEXT__
+</candidate_context>
 
-## FIT SIGNALS (context only — do not paste into the résumé as-is)
+<fit_signals>
 Match score: __SCORE__ / 100
 Gap areas: __GAPS__
 Keywords to weave in (only where source content supports them): __MISSING_KW__
+</fit_signals>
 
-## INSTRUCTIONS
+<html_instructions>
 1. Follow the SKELETON structure exactly — same HTML section IDs and CSS classes.
-2. Replace every placeholder with real content from the ORIGINAL RESUME only.
+2. Replace every placeholder with real content from ORIGINAL RESUME or ADDITIONAL CANDIDATE INFO.
 3. Repeat <div class="job">…</div> for each role (most recent first).
-4. Omit <section id="education"> entirely if source has no degree/school facts.
-5. Omit <section id="certifications"> entirely if source has no certifications.
-   Never output these sections with "N/A" or empty lists.
-6. skills-block: include every technology from source, use · separator, never truncate.
-7. Use the <table class="layout-cols"> for education + certifications as shown in SKELETON.
-8. No <style>, <script>, <html>, <head>, or <body> tags.
+4. Include <section id="projects"> if <additional_candidate_info> lists any projects, side work, or open-source. Omit if no project data exists.
+5. Omit <section id="education"> entirely if source has no degree/school facts.
+6. Omit <section id="certifications"> entirely if source has no certifications. Never output empty sections.
+7. skills-block: include every technology from source AND from additional candidate info; ORDER them by relevance to the job (matching tech first); use · separator.
+8. Use the <table class="layout-cols"> for education + certifications as shown in SKELETON.
+9. No <style>, <script>, <html>, <head>, or <body> tags.
+</html_instructions>
 
-## SKELETON (follow this structure exactly)
+<skeleton>
 """ + _RESUME_HTML_SKELETON + """
+</skeleton>
 
-## OUTPUT
-Return the filled HTML fragment only. Start immediately with <div class="resume" id="resume-root">.
+Execute all steps. Return the three XML tags (<analise_ats>, <mapeamento_de_verdade>, <curriculo_otimizado>).
 """
 
 _COMPACT_RESUME_SYSTEM_HTML = """\
@@ -208,20 +313,33 @@ def _build_tailored_resume_user_html(
     extra_context: Optional[str] = None,
 ) -> str:
     # Placeholder replace (not str.format) so job descriptions can contain "{" or "}".
-    tail = (
-        _TAILORED_RESUME_USER_HTML_TAIL.replace("__JOB_TITLE__", job_title or "")
-        .replace("__COMPANY__", company_name or "")
+    job_title_line = f"Title: {job_title} at {company_name}" if job_title or company_name else ""
+    head = (
+        _TAILORED_RESUME_USER_HTML_HEAD
+        .replace("__JOB_TITLE_LINE__", job_title_line)
         .replace("__JOB_DESCRIPTION__", job_description or "")
+    )
+    tail = (
+        _TAILORED_RESUME_USER_HTML_TAIL
         .replace("__CANDIDATE_CONTEXT__", candidate_context or "")
         .replace("__SCORE__", str(score))
         .replace("__GAPS__", gaps or "N/A")
         .replace("__MISSING_KW__", missing_keywords or "N/A")
     )
-    body = _TAILORED_RESUME_USER_HTML_HEAD + resume + tail
+    body = head + resume + tail
     if extra_context and extra_context.strip():
-        body += f"\n\n## ADDITIONAL CANDIDATE INFORMATION (incorporate where relevant and supported by the above resume)\n{extra_context.strip()}"
+        body += (
+            f"\n\n<additional_candidate_info>\n"
+            f"{extra_context.strip()}\n"
+            f"(Incorporate where relevant and supported by the resume above.)\n"
+            f"</additional_candidate_info>"
+        )
     if custom_instructions and custom_instructions.strip():
-        body += f"\n\n## USER CUSTOMIZATION INSTRUCTIONS (highest priority — follow exactly)\n{custom_instructions.strip()}"
+        body += (
+            f"\n\n<custom_instructions priority=\"highest\">\n"
+            f"{custom_instructions.strip()}\n"
+            f"</custom_instructions>"
+        )
     return body
 
 
@@ -263,7 +381,16 @@ def generate_tailored_resume_html(
         extra_context=extra_context,
     )
 
-    return llm.complete(_TAILORED_RESUME_SYSTEM_HTML, user_prompt)
+    raw = llm.complete(_TAILORED_RESUME_SYSTEM_HTML, user_prompt)
+
+    # Log changes_summary for diagnostic visibility (does not block flow)
+    summary = _extract_xml(raw, "changes_summary")
+    if summary:
+        logger.info("Tailoring changes for %s @ %s:\n%s", job_title, company_name, summary.strip())
+
+    # Extract the HTML from <curriculo_otimizado>; discard reasoning tags
+    html_fragment = _extract_xml(raw, "curriculo_otimizado")
+    return html_fragment if html_fragment else raw  # fallback: return raw if no tag found
 
 
 def compact_tailored_resume_html(fragment: str, client: Optional[LLMClient] = None) -> str:

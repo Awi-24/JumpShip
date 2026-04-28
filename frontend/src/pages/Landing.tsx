@@ -1,8 +1,8 @@
 import { motion, type Variants } from 'framer-motion';
 import {
   Brain, FileText, Search, BarChart3, Globe, Lock,
-  Bookmark, Zap, ChevronRight, Database, Layers,
-  Map, Cpu, GitBranch, Mail, Rocket,
+  Bookmark, Zap, ChevronRight, Database,
+  Map, Cpu, GitBranch, Mail, Rocket, BookOpen, MessageCircle, Settings2,
 } from 'lucide-react';
 import ThemeToggle from '../components/ThemeToggle';
 
@@ -42,8 +42,8 @@ const PIPELINE_STEPS = [
   {
     num: '02',
     Icon: Search,
-    title: 'Search 9+ job boards',
-    desc: 'LinkedIn, Indeed, Glassdoor, RemoteOK, Gupy, Programathor, Trampos and more, aggregated into one unified, deduplicated feed.',
+    title: 'Search JobSpy + JumpShip Scrapper',
+    desc: 'Major boards via JobSpy, plus optional Greenhouse, Lever, Workday, and Playwright career-page sources — one deduplicated feed, toggled from the UI.',
   },
   {
     num: '03',
@@ -83,47 +83,93 @@ const FEATURES = [
   {
     Icon: Bookmark,
     name: 'Kanban Tracker',
-    desc: 'Drag cards from Saved → Applied → Interview → Offer. IMAP inbox polling auto-classifies recruiter emails into the right column.',
+    desc: 'Drag cards from Saved → Applied → Interview → Offer → Rejected. SQLite-backed state; you own the pipeline end to end.',
   },
   {
     Icon: Lock,
     name: 'Privacy by Default',
-    desc: 'Your résumé never leaves your machine unless you choose cloud APIs. All inference runs locally via Ollama. Keys are yours, stored locally.',
+    desc: 'Run everything on Ollama or LM Studio with no account. Optional cloud keys can be saved from Settings and encrypted at rest when you opt in.',
   },
   {
-    Icon: Layers,
-    name: 'Parallel Assessment',
-    desc: 'Cloud providers run all assessments concurrently. Local providers queue safely with a semaphore, so no GPU contention with résumé generation.',
+    Icon: MessageCircle,
+    name: 'Mock interview',
+    desc: 'Company-aware practice chat: lightweight web context plus LLM turns. Stateless API — the full transcript stays in your browser.',
   },
 ];
 
-const ROADMAP = [
+type RoadmapStatus = 'shipped' | 'progress' | 'planned';
+
+const WHATS_NEXT: { Icon: typeof Map; title: string; desc: string; status: RoadmapStatus }[] = [
   {
-    Icon: Map,
-    title: 'Brazilian Job Aggregator',
-    desc: 'A standalone scraper layer, independent of JobSpy, targeting Catho, InfoJobs, Vagas.com, 99jobs, Empregos.com.br, and Trampos directly via headless browsing. No third-party API dependency, no rate limits.',
+    Icon: Search,
+    title: 'JumpShip 1.0',
+    desc: 'Unified JobSpy + Scrapper search, LLM scoring and tailored PDFs, Kanban tracker, mock interview flow, Ollama/LM Studio defaults, and encrypted optional API keys.',
+    status: 'shipped',
   },
   {
-    Icon: Cpu,
-    title: 'Browser-Native Scraper Engine',
-    desc: 'Replace JobSpy as the core data layer with a headless browser engine that handles login-walled boards, dynamic pagination, and anti-bot measures natively.',
+    Icon: Map,
+    title: 'Deeper Brazilian & regional aggregation',
+    desc: 'Expand first-class sources beyond today’s JobSpy + registry mix — more local boards and better deduplication as data quality improves.',
+    status: 'progress',
   },
   {
     Icon: GitBranch,
-    title: 'Multi-Profile Support',
-    desc: 'Switch between multiple résumé profiles (e.g. backend engineer vs. data engineer) without re-uploading. Each profile gets its own keyword set and saved searches.',
+    title: 'Multi-profile support',
+    desc: 'Switch personas (e.g. backend vs. data) without re-uploading — separate keyword sets and saved searches per profile.',
+    status: 'planned',
   },
   {
     Icon: Mail,
-    title: 'Inbox Intelligence',
-    desc: 'Beyond email classification: parse recruiter messages to extract compensation ranges, interview slots, and follow-up deadlines, synced to the tracker.',
+    title: 'Inbox workflows',
+    desc: 'Optional email-assisted stages tied to the tracker — compensation snippets, interview slots, and follow-up reminders.',
+    status: 'planned',
   },
   {
     Icon: Rocket,
-    title: 'Cover Letter Generator',
-    desc: 'LLM-drafted cover letters tailored per job, using your profile, the company context, and your gap analysis, exported as PDF alongside the résumé.',
+    title: 'Cover letter export',
+    desc: 'LLM-drafted letters per job using your profile and company context, exported alongside the tailored résumé.',
+    status: 'planned',
   },
 ];
+
+const LOCAL_LLM_STEPS = [
+  {
+    num: 'A',
+    Icon: Cpu,
+    title: 'Install a local runtime',
+    desc: 'Ollama (default) or LM Studio. Pull or download a 7B+ instruct-class model — JumpShip relies on structured JSON and XML from the model.',
+  },
+  {
+    num: 'B',
+    Icon: BookOpen,
+    title: 'Configure `.env`',
+    desc: 'Copy `.env.example` to `.env` at the repo root. Set LLM_PROVIDER, LLM_MODEL, and base URL (host.docker.internal from Docker).',
+  },
+  {
+    num: 'C',
+    Icon: Settings2,
+    title: 'Verify in Settings',
+    desc: 'Open the in-app Settings panel, pick Ollama or LM Studio, and run Test Connection before searching or assessing in batch.',
+  },
+  {
+    num: 'D',
+    Icon: Zap,
+    title: 'Use the app',
+    desc: 'Upload your résumé once, search with board toggles including JumpShip Scrapper, assess matches, export PDFs, and track applications on the board.',
+  },
+];
+
+function statusLabel(s: RoadmapStatus): string {
+  if (s === 'shipped') return 'Shipped · 1.0';
+  if (s === 'progress') return 'In progress';
+  return 'Planned';
+}
+
+function statusBadgeClass(s: RoadmapStatus): string {
+  if (s === 'shipped') return 'roadmap-badge roadmap-badge--shipped';
+  if (s === 'progress') return 'roadmap-badge roadmap-badge--progress';
+  return 'roadmap-badge roadmap-badge--planned';
+}
 
 // ── Floating icons (landing only) ────────────────────────────────────────────
 
@@ -160,7 +206,8 @@ export default function Landing({ onEnter }: LandingProps) {
           <li><a href="#pipeline">Pipeline</a></li>
           <li><a href="#features">Features</a></li>
           <li><a href="#architecture">Architecture</a></li>
-          <li><a href="#roadmap">Roadmap</a></li>
+          <li><a href="#local-llm">Local LLM</a></li>
+          <li><a href="#whats-next">What&apos;s next</a></li>
           <li><a href={LINKS.portfolio} target="_blank" rel="noopener noreferrer">Author</a></li>
         </ul>
         <div className="nav-actions">
@@ -298,7 +345,7 @@ export default function Landing({ onEnter }: LandingProps) {
             <div className="arch-node arch-node--gold arch-diagram-grid__node" style={{ gridColumn: 3, gridRow: 1 }}>
               <div className="arch-node-icon"><Brain size={22} strokeWidth={1.5} /></div>
               <div className="arch-node-label">LLM parser</div>
-              <div className="arch-node-sub">Ollama · Groq · OpenAI</div>
+              <div className="arch-node-sub">Ollama · LM Studio · cloud</div>
             </div>
             <div className="arch-arrow arch-diagram-grid__arrow" style={{ gridColumn: 4, gridRow: 1 }} aria-hidden><ChevronRight size={22} strokeWidth={2} /></div>
             <div className="arch-node arch-diagram-grid__node" style={{ gridColumn: 5, gridRow: 1 }}>
@@ -311,14 +358,14 @@ export default function Landing({ onEnter }: LandingProps) {
             </div>
             <div className="arch-node arch-diagram-grid__node" style={{ gridColumn: 1, gridRow: 3 }}>
               <div className="arch-node-icon"><Search size={22} strokeWidth={1.5} /></div>
-              <div className="arch-node-label">9+ Job boards</div>
-              <div className="arch-node-sub">LinkedIn · Gupy · Indeed · +</div>
+              <div className="arch-node-label">JobSpy + Scrapper</div>
+              <div className="arch-node-sub">boards · Greenhouse · Lever · +</div>
             </div>
             <div className="arch-arrow arch-diagram-grid__arrow" style={{ gridColumn: 2, gridRow: 3 }} aria-hidden><ChevronRight size={22} strokeWidth={2} /></div>
             <div className="arch-node arch-node--gold arch-diagram-grid__node" style={{ gridColumn: 3, gridRow: 3 }}>
               <div className="arch-node-icon"><Globe size={22} strokeWidth={1.5} /></div>
               <div className="arch-node-label">Aggregator</div>
-              <div className="arch-node-sub">unified job feed</div>
+              <div className="arch-node-sub">unified · deduped feed</div>
             </div>
             <div className="arch-arrow arch-diagram-grid__arrow" style={{ gridColumn: 4, gridRow: 3 }} aria-hidden><ChevronRight size={22} strokeWidth={2} /></div>
             <div className="arch-node arch-node--gold arch-diagram-grid__node" style={{ gridColumn: 5, gridRow: 3 }}>
@@ -330,30 +377,66 @@ export default function Landing({ onEnter }: LandingProps) {
         </div>
       </motion.section>
 
-      {/* ── ROADMAP: titles RIGHT ── */}
+      {/* ── LOCAL LLM: titles LEFT ── */}
       <motion.section
         className="landing-section landing-section--alt"
-        id="roadmap"
+        id="local-llm"
+        initial="hidden" whileInView="visible" viewport={VIEWPORT} variants={fadeUp}
+      >
+        <div className="landing-section-inner section-align-left">
+          <div className="section-label">Configuration</div>
+          <h2 className="section-title">
+            Local models,<br />
+            <span style={{ color: 'var(--gold)' }}>first-class.</span>
+          </h2>
+          <p className="section-sub">
+            JumpShip 1.0 defaults to Ollama; LM Studio works out of the box with the same UI. Cloud providers are optional — flip them on only when you want them.
+          </p>
+          <motion.div
+            className="how-grid how-grid--setup"
+            variants={staggerParent} initial="hidden" whileInView="visible" viewport={VIEWPORT}
+          >
+            {LOCAL_LLM_STEPS.map((row) => (
+              <motion.div key={row.num} className="how-card how-card--setup" variants={staggerItem}>
+                <div className="how-card-top">
+                  <div className="how-num">{row.num}</div>
+                  <div className="how-icon-wrap"><row.Icon size={18} strokeWidth={1.5} /></div>
+                </div>
+                <div className="how-title">{row.title}</div>
+                <div className="how-desc">{row.desc}</div>
+              </motion.div>
+            ))}
+          </motion.div>
+          <p className="section-sub section-sub--tight" style={{ marginTop: 28 }}>
+            Full walkthrough (Docker, LM Studio, cloud keys): see the repository <strong>README</strong> → <em>LLM setup</em> and the Portuguese quick guide under the same heading.
+          </p>
+        </div>
+      </motion.section>
+
+      {/* ── WHAT'S NEXT: titles RIGHT ── */}
+      <motion.section
+        className="landing-section landing-section--alt"
+        id="whats-next"
         initial="hidden" whileInView="visible" viewport={VIEWPORT} variants={fadeUp}
       >
         <div className="landing-section-inner section-align-right">
-          <div className="section-label">What's coming</div>
+          <div className="section-label">Product direction</div>
           <h2 className="section-title">
-            Built to grow<br />
-            <span style={{ color: 'var(--gold)' }}>beyond JobSpy.</span>
+            Shipped today.<br />
+            <span style={{ color: 'var(--gold)' }}>Clear next bets.</span>
           </h2>
           <p className="section-sub">
-            The goal: a browser-native aggregator targeting Brazilian platforms directly, with no third-party APIs, no rate limits, no restrictions.
+            1.0 is the consolidation release: search stack, LLM scoring, tailored PDFs, tracker, and interview prep. What follows is depth — more regional coverage, richer profiles, and optional inbox workflows.
           </p>
           <motion.div
             className="roadmap-grid"
             variants={staggerParent} initial="hidden" whileInView="visible" viewport={VIEWPORT}
           >
-            {ROADMAP.map((item) => (
+            {WHATS_NEXT.map((item) => (
               <motion.div key={item.title} className="roadmap-card" variants={staggerItem}>
                 <div className="roadmap-card-header">
                   <div className="roadmap-icon"><item.Icon size={18} strokeWidth={1.5} /></div>
-                  <span className="roadmap-badge">Planned</span>
+                  <span className={statusBadgeClass(item.status)} title={statusLabel(item.status)}>{statusLabel(item.status)}</span>
                 </div>
                 <div className="roadmap-title">{item.title}</div>
                 <div className="roadmap-desc">{item.desc}</div>

@@ -5,14 +5,7 @@ import {
   FileText, Bot, Check, Sparkles, Tag, Globe, ChevronDown,
 } from 'lucide-react';
 import ScoreRing from './ScoreRing';
-import type { JobResult, JobAssessment, ResumeProfile } from '../types';
-
-interface LLMConfig {
-  provider: string;
-  model: string;
-  apiKey: string;
-  baseUrl: string;
-}
+import type { JobResult, JobAssessment, ResumeProfile, LLMConfig } from '../types';
 
 interface JobCardProps {
   job: JobResult;
@@ -388,15 +381,31 @@ export default function JobCard({
 
           {/* Actions bar */}
           <div className="job-expanded-actions">
-            <a
-              href={job.url || '#'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="apply-btn"
-              style={{ textDecoration: 'none', opacity: job.url ? 1 : 0.4 }}
-            >
-              Apply Now →
-            </a>
+            {(() => {
+              let safeUrl: string | null = null;
+              if (job.url) {
+                try {
+                  const u = new URL(job.url);
+                  if (u.protocol === 'http:' || u.protocol === 'https:') safeUrl = u.toString();
+                } catch { /* invalid URL — render disabled */ }
+              }
+              return safeUrl ? (
+                <a
+                  href={safeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="apply-btn"
+                  style={{ textDecoration: 'none' }}
+                  aria-label={`Apply to ${job.title} at ${job.company}`}
+                >
+                  Apply Now →
+                </a>
+              ) : (
+                <span className="apply-btn" style={{ opacity: 0.4 }} aria-disabled="true">
+                  Apply Now →
+                </span>
+              );
+            })()}
 
             {resumeProfile && onReassess && (
               <button
@@ -404,6 +413,7 @@ export default function JobCard({
                 style={{ background: 'transparent', border: '1px solid var(--border-bright)', color: 'var(--gold)' }}
                 onClick={onReassess}
                 disabled={assessing}
+                aria-label={`Re-assess ${job.title}`}
               >
                 {assessing ? <><div className="spinner" style={{ width: 10, height: 10 }} /> Analyzing…</> : '↺ Re-assess'}
               </button>
@@ -412,6 +422,7 @@ export default function JobCard({
             {onSave && (
               <button
                 className="apply-btn"
+                aria-label={isSaved ? `${job.title} saved` : `Save ${job.title} to tracker`}
                 style={{
                   background: isSaved ? 'rgba(74,222,128,0.08)' : 'transparent',
                   border: `1px solid ${isSaved ? 'rgba(74,222,128,0.35)' : 'var(--border-bright)'}`,

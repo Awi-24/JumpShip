@@ -2,23 +2,41 @@
 
 > AI-powered job search built around your résumé. Aggregates multiple job boards, scores each listing with an LLM (local or cloud), and generates **tailored résumé PDFs** per job, designed to run locally with your data under your control.
 
+**JumpShip 1.0** (April 2026) is the first stable release: unified search (JobSpy + **JumpShip Scrapper**), LLM assessment and tailored PDFs, Kanban tracker, optional **mock interview** flow with web-backed company context, and **local-first** defaults (Ollama / LM Studio) with optional cloud providers.
+
 ---
 
 ## Table of contents
 
-1. [Why JumpShip exists](#why-jumpship-exists)
-2. [What it does](#what-it-does)
-3. [Stack](#stack)
-4. [Repository layout](#repository-layout)
-5. [Prerequisites](#prerequisites)
-6. [How to run (without Docker)](#how-to-run-without-docker)
-7. [How to run (with Docker)](#how-to-run-with-docker)
-8. [LLM setup](#llm-setup)
-9. [Environment variables](#environment-variables)
-10. [API overview](#api-overview)
-11. [Troubleshooting](#troubleshooting)
-12. [Roadmap](#roadmap)
-13. [License](#license)
+1. [JumpShip 1.0 at a glance](#jumpship-10-at-a-glance)
+2. [Why JumpShip exists](#why-jumpship-exists)
+3. [What it does](#what-it-does)
+4. [Stack](#stack)
+5. [Repository layout](#repository-layout)
+6. [Prerequisites](#prerequisites)
+7. [How to run (without Docker)](#how-to-run-without-docker)
+8. [How to run (with Docker)](#how-to-run-with-docker)
+9. [LLM setup (local models guide)](#llm-setup)
+10. [Environment variables](#environment-variables)
+11. [API overview](#api-overview)
+12. [Troubleshooting](#troubleshooting)
+13. [Roadmap](#roadmap)
+14. [License](#license)
+
+---
+
+## JumpShip 1.0 at a glance
+
+| Area | What you get in 1.0 |
+|------|---------------------|
+| **Search** | JobSpy boards (LinkedIn, Indeed, Glassdoor, …) plus **JumpShip Scrapper**: Greenhouse, Lever, Workday, and Playwright-based career pages (`backend/data/brazil-career-sources.json`). Toggle sources in the UI. |
+| **LLM** | **Ollama** (default) and **LM Studio** with discovery + semaphore for local batch scoring; OpenAI, Anthropic, Groq, Gemini, and others via env or Settings. |
+| **Résumé** | PDF/DOCX → structured profile; tailored one-page PDF per job from an ATS-oriented HTML template. |
+| **Tracker** | Drag-and-drop Kanban (Saved → Applied → Interview → Offer → Rejected). |
+| **Interview** | Stateless chat endpoints: company/role research (DuckDuckGo) + persona; full conversation state stays in the browser. |
+| **Privacy** | No account required; optional API keys can be stored encrypted (Fernet) from Settings when you choose cloud providers. |
+
+**Fastest path (local LLM):** install [Ollama](https://ollama.com/download) → `ollama pull` a 7B+ instruct model → `ollama serve` → copy `.env.example` to `.env`, set `LLM_PROVIDER=ollama` and `LLM_MODEL` → run backend + frontend (see [How to run](#how-to-run-without-docker)) → in the app, **Settings → Test Connection**. Details: [LLM setup](#llm-setup).
 
 ---
 
@@ -32,7 +50,7 @@ Employers automate candidate filtering before anyone reads a résumé. JumpShip 
 
 | Feature | Details |
 |--------|---------|
-| **Job aggregation** | Unified search across many boards (via JobSpy and related sources: LinkedIn, Indeed, Glassdoor, and regional boards such as Gupy, Programathor, Trampos, etc., depending on configuration). |
+| **Job aggregation** | Unified search across many boards (via JobSpy and related sources: LinkedIn, Indeed, Glassdoor, and regional boards such as Gupy, Programathor, Trampos, etc.) **plus the JumpShip Scrapper** — a set of four purpose-built scrapers that pull directly from company career portals not syndicated to aggregators (see below). |
 | **AI scoring** | LLM assesses each job (0–100), strengths, gaps, salary line, and company-oriented notes, grounded in your parsed résumé. |
 | **Batch assessment** | Cloud-capable providers can assess many jobs concurrently; **local** providers share a semaphore so one GPU-heavy call runs at a time. |
 | **Tailored résumé PDFs** | LLM fills an ATS-oriented **HTML** template → **xhtml2pdf** one-page PDF. Locally, pip usually installs pre-built wheels; **Docker** uses a multi-stage image so **pycairo** (a transitive dependency) can compile in the builder without keeping a compiler in the runtime image (see [How to run (with Docker)](#how-to-run-with-docker)). |
@@ -43,7 +61,7 @@ Employers automate candidate filtering before anyone reads a résumé. JumpShip 
 
 ## Stack
 
-**Backend:** Python 3.11 · FastAPI · SQLAlchemy 2.0 (SQLite) · JobSpy / custom scrapers · unified `LLMClient`  
+**Backend:** Python 3.11 · FastAPI · SQLAlchemy 2.0 (SQLite) · JobSpy / JumpShip Scrapper (Greenhouse · Lever · Workday · Playwright) · unified `LLMClient`  
 **Frontend:** React 19 · TypeScript · Vite · TanStack Query v5 · @dnd-kit  
 **LLM:** Ollama (default) · LM Studio (OpenAI-compatible) · Anthropic · OpenAI · Groq · Google Gemini · additional providers wired in `LLMClient`  
 **PDF:** xhtml2pdf (+ HTML résumé template; requires **libcairo2** at runtime and, in Docker, a **builder** stage with Cairo headers + a C toolchain to build **pycairo**)
@@ -58,7 +76,10 @@ JumpShip/
 │   ├── Dockerfile       # Multi-stage backend image (wheels for pycairo / xhtml2pdf; slim runtime)
 │   ├── models/          # SQLAlchemy models + Pydantic schemas
 │   ├── routers/         # FastAPI routers (jobs_v2, resume_v2, resume_gen, profile, …)
+│   ├── data/            # brazil-career-sources.json — registry of ~100 company career portals
 │   ├── services/        # job_scraper_v2, ai_evaluator, resume_parser_v2, resume_generator, llm_client, …
+│   │                    # JumpShip Scrapper: career_sources, greenhouse_scraper, lever_scraper,
+│   │                    #                   workday_scraper, playwright_scraper
 │   └── main.py          # App entry + router registration
 ├── frontend/
 │   └── src/
@@ -157,7 +178,7 @@ npm run preview    # serves the built assets; still expects API at /api or confi
 
 ## How to run (with Docker)
 
-Compose builds a **backend** image (FastAPI on port **8000**) and a **frontend** image (static build behind nginx on port **80**).
+Compose builds a **backend** image (FastAPI on port **8000**) and a **frontend** image (static build behind nginx on port **80**). The backend service sets **`DEBUG=true`** so the default `SECRET_KEY` from settings does not abort startup (your `.env` is not copied into the image). For a real deployment, override with a strong `SECRET_KEY` and `DEBUG=false`. The same compose file passes **host** defaults for **`OLLAMA_BASE_URL`** / **`OLLAMA_HOST`** and **`LMSTUDIO_BASE_URL`** via `host.docker.internal` so local LLMs on the machine running Docker are reachable from the container.
 
 ### Backend image (`backend/Dockerfile`)
 
@@ -172,7 +193,9 @@ If you fork the Dockerfile, keep **libcairo2** in the final stage and keep build
 
 ### 1. Configure environment for containers
 
-Create a `.env` file at the repo root (Compose substitutes variables from it). Minimum for local Ollama on the host:
+Create a `.env` file at the repo root (Compose substitutes variables from it).
+
+**Ollama on the host** (default in `docker-compose.yml`):
 
 ```env
 LLM_PROVIDER=ollama
@@ -180,6 +203,16 @@ LLM_MODEL=llama3.1:8b
 OLLAMA_BASE_URL=http://host.docker.internal:11434
 # Optional: OLLAMA_HOST=... (legacy alias, same purpose as OLLAMA_BASE_URL)
 ```
+
+**LM Studio on the host** (OpenAI-compatible server; same `host.docker.internal` pattern so the backend container reaches your machine):
+
+```env
+LLM_PROVIDER=lmstudio
+LLM_MODEL=<exact-id-of-the-model-loaded-in-lm-studio>
+LMSTUDIO_BASE_URL=http://host.docker.internal:1234
+```
+
+`docker-compose.yml` defaults `LMSTUDIO_BASE_URL` to `http://host.docker.internal:1234` if unset; change the port if LM Studio’s **Local Server** uses another one. In JumpShip **Settings**, set **Base URL** to the same value (or rely on env defaults after restart).
 
 Add cloud keys to the same file if you use OpenAI / Anthropic / Groq, etc. (see `.env.example` for names).
 
@@ -198,9 +231,13 @@ docker compose up -d
 
 ### 3. Ollama on the host
 
-The backend container talks to Ollama at **`host.docker.internal:11434`** by default (`docker-compose.yml`). On Linux, `extra_hosts` maps `host.docker.internal` to the host gateway. Start Ollama on the machine running Docker before relying on local models.
+The backend container talks to Ollama at **`http://host.docker.internal:11434`** by default (`docker-compose.yml`). On Linux, `extra_hosts` maps `host.docker.internal` to the host gateway. Start Ollama on the machine running Docker before relying on local models.
 
-### 4. Useful Docker commands
+### 4. LM Studio on the host
+
+If **`LLM_PROVIDER=lmstudio`**, the backend must reach LM Studio’s **Local Server** on the host (default **port 1234**). Set **`LMSTUDIO_BASE_URL=http://host.docker.internal:1234`** in `.env` (or rely on the same default in `docker-compose.yml`). In LM Studio, load a model and click **Start Server** before using JumpShip. Use **Settings → Test Connection** in the app to confirm.
+
+### 5. Useful Docker commands
 
 ```bash
 docker compose logs -f backend    # follow API logs
@@ -217,22 +254,123 @@ docker compose build --no-cache && docker compose up -d   # full rebuild
 
 ## LLM setup
 
-### Local: Ollama (default)
+### Guia rápido (PT-BR): modelos locais
+
+1. **Instale o Ollama** a partir de [ollama.com/download](https://ollama.com/download) (ou use **LM Studio** se preferir baixar modelos GGUF com interface gráfica).
+2. **Obtenha um modelo** com boa aderência a instruções estruturadas (recomenda-se **≥7B** instruct, por exemplo `gemma3:12b` ou `qwen2.5:7b`): `ollama pull <nome>` e, em seguida, `ollama serve`.
+3. **Crie o `.env` na raiz** (`cp .env.example .env`) com `LLM_PROVIDER=ollama`, `LLM_MODEL` igual ao nome do modelo, e `OLLAMA_BASE_URL=http://localhost:11434`. Com **Docker** e Ollama no computador host: use `http://host.docker.internal:11434`.
+4. **Suba API e UI** (ver [How to run](#how-to-run-without-docker)); no app, **Settings** → **Test Connection**; envie o currículo, pesquise em **Search** e organize candidaturas no **Job tracker**.
+
+**LM Studio:** carregue um modelo, inicie o servidor local. **Sem Docker:** base URL **`http://localhost:1234`**. **Com Docker** (API no container, LM Studio no PC): **`http://host.docker.internal:1234`** (variável `LMSTUDIO_BASE_URL` no `.env` ou o default do `docker-compose.yml`). Escolha o provedor LM Studio nas configurações e teste a conexão.
+
+---
+
+### Option 1 — Ollama (default, local)
+
+Ollama runs models locally on your machine. JumpShip uses it as the default provider.
+
+#### 1. Install Ollama
+
+Download from [ollama.com](https://ollama.com/download) and follow the installer for your OS.
+
+#### 2. Pull a model
 
 ```bash
-ollama pull gemma3:27b    # or a smaller model your GPU can hold
+ollama pull gemma3:27b        # recommended — strong instruction-following, ~17 GB
+ollama pull gemma3:12b        # lighter alternative, ~8 GB
+ollama pull qwen2.5:7b        # fastest option for low-VRAM machines
+```
+
+> **Pick a model that can follow structured instructions.** JumpShip sends multi-step prompts with JSON and XML output requirements. Models smaller than 7B often fail at these. `gemma3:12b` is a good minimum.
+
+#### 3. Start the Ollama server
+
+```bash
 ollama serve
 ```
 
-Use `LLM_PROVIDER=ollama` and set `LLM_MODEL` to the pulled model name. Tailored résumé generation and job assessment use JSON-style structured completions; pick a model that follows instructions reliably.
+Ollama listens on **http://localhost:11434** by default. Leave this terminal open while using JumpShip. In JumpShip’s **Settings**, set the provider to **Ollama (local)** and the Base URL to `http://localhost:11434`.
 
-### Local: LM Studio
+#### 4. Verify the connection
 
-Run LM Studio’s local server (OpenAI-compatible). Point the app at it (base URL and provider) via **Settings** in the UI or via `.env` / request overrides, depending on how you configure the project.
+Open JumpShip → Settings → click **Test Connection**. A green "Connected" message confirms Ollama is reachable.
 
-### Cloud
+---
 
-Set the appropriate API keys in `.env` (see `.env.example`) and choose the matching provider in settings. Cloud batches can run assessments in parallel; local providers stay behind the shared semaphore to avoid starving the GPU.
+#### Using Ollama Cloud models (e.g. `gemma4:31b-cloud`)
+
+Ollama supports cloud-hosted models that stream inference from Ollama’s servers without a local download. These models **only appear in JumpShip’s model list while they are actively running** — they are not indexed by Ollama’s API until a session is open.
+
+**To activate a cloud model so it appears in JumpShip:**
+
+1. Open a terminal and start a chat session with the model:
+
+   ```bash
+   ollama run gemma4:31b-cloud
+   ```
+
+2. Wait for the prompt (`>>>`). The model is now running and will appear in JumpShip’s model dropdown.
+3. Leave that terminal open while using JumpShip. The model will be listed as long as the session is active.
+4. Select the model in JumpShip’s Settings and save.
+
+> **Note:** If you close the terminal session, the cloud model disappears from the list. Re-run step 1 to bring it back. Locally downloaded models (pulled with `ollama pull`) always appear regardless of active sessions.
+
+---
+
+### Option 2 — LM Studio (local, OpenAI-compatible)
+
+LM Studio provides a local server with an OpenAI-compatible API. It lets you download and switch models from a GUI without using the terminal.
+
+#### 1. Install LM Studio
+
+Download from [lmstudio.ai](https://lmstudio.ai) and install it.
+
+#### 2. Download a model inside LM Studio
+
+1. Open LM Studio and go to the **Search** tab (magnifying glass icon).
+2. Search for a model (e.g. `Gemma 3`, `Qwen 2.5`, `Mistral`).
+3. Click **Download** on the variant you want (GGUF Q4 or Q5 is a good balance of speed and quality).
+
+#### 3. Load the model and start the local server
+
+1. In LM Studio, go to the **Developer** tab (or **Local Server** tab depending on your version).
+2. Select the downloaded model from the dropdown.
+3. Click **Start Server**.
+
+LM Studio will start an OpenAI-compatible server on **http://localhost:1234** by default (change the port in LM Studio if needed).
+
+#### 4. Configure JumpShip
+
+In JumpShip’s **Settings**:
+- **LLM Provider** → **LM Studio (local)**
+- **Base URL** — use the URL that matches where the **backend** runs:
+  | Where the API runs | Base URL for LM Studio |
+  |--------------------|-------------------------|
+  | Same machine as LM Studio (e.g. `uvicorn` + `npm run dev`) | **`http://localhost:1234`** |
+  | **Docker** backend, LM Studio on the host | **`http://host.docker.internal:1234`** (or your custom port) |
+
+You can also set **`LMSTUDIO_BASE_URL`** in `.env` at the repo root; `LLMClient` uses it when `LLM_PROVIDER=lmstudio` and no per-request override is set. `docker-compose.yml` defaults this to **`http://host.docker.internal:1234`** for containerized stacks.
+
+- The model list will populate automatically with whatever is loaded in LM Studio.
+
+Click **Test Connection** to verify.
+
+> **Note:** Only the model currently loaded in LM Studio appears in the dropdown. To switch models, load a different model in LM Studio and click **Test Connection** again in JumpShip to refresh the list.
+
+---
+
+### Option 3 — Cloud providers
+
+Set the appropriate API key in `.env` (or in JumpShip’s Settings UI) and choose the matching provider. Supported: OpenAI, Anthropic (Claude), Groq, Google Gemini, Mistral, DeepSeek, OpenRouter, Cohere, HuggingFace.
+
+```env
+# .env (repo root)
+LLM_PROVIDER=anthropic
+LLM_MODEL=claude-sonnet-4-6
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Cloud providers run batch assessments in parallel (no semaphore); local providers (Ollama, LM Studio) serialize GPU calls automatically.
 
 ---
 
@@ -246,6 +384,7 @@ Copy **`.env.example`** to **`.env`** at the repo root. Common entries:
 | `LLM_MODEL` | `gemma3:27b` | Must match a model available to that provider |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Use `http://host.docker.internal:11434` from Docker to reach host Ollama |
 | `OLLAMA_HOST` | _(optional)_ | Legacy alias; some health paths read it if `OLLAMA_BASE_URL` is unset |
+| `LMSTUDIO_BASE_URL` | `http://localhost:1234` | LM Studio **Local Server**; use `http://host.docker.internal:1234` when the FastAPI backend runs in Docker and LM Studio stays on the host (see [How to run (with Docker)](#how-to-run-with-docker)) |
 | `DATABASE_URL` | `sqlite:///./jobspy_ui.db` | Main SQLite database |
 | `UPLOAD_DIR` | `./uploads` | Parsed résumé uploads (legacy `/api/resume` paths) |
 | `CORS_ORIGINS` | `http://localhost:5173,...` | Comma-separated origins for browser access |
@@ -285,6 +424,33 @@ pytest
 
 Frontend: `cd frontend && npm run test:run`
 
+## JumpShip Scrapper
+
+Many companies post jobs exclusively on their own ATS portals, never syndicating to LinkedIn or Indeed. The **JumpShip Scrapper** fills that gap with four specialized scrapers wired into the same `/api/jobs/search` endpoint. Enable them from the **Job Boards** panel in the UI under the *JumpShip Scrapper* group.
+
+| Scraper | Site string | How it works | Coverage (examples) |
+|---------|-------------|--------------|---------------------|
+| **Greenhouse** | `greenhouse` | Public Job Board REST API — no auth | iFood, Hotmart, Anthropic, Banco Inter |
+| **Lever** | `lever` | Public Postings API v0 — no auth | Neon Pagamentos |
+| **Workday** | `workday` | Undocumented CXS REST endpoint (POST) | Santander, Equinor, AES Brasil, Natura&Co |
+| **Career Pages** | `playwright` | Headless Chromium (Playwright) — generic link extraction | PicPay, Itaú, Magalu, B3, SAP, Toyota, Shell, Amazon, Google, Vale, Mercado Livre, + 8 more |
+
+Source registry: `backend/data/brazil-career-sources.json` (~100 Brazilian and global companies with ATS metadata).
+
+### Adding more companies
+
+1. Add an entry to `brazil-career-sources.json` with the correct `ats` value (`greenhouse`, `lever`, `workday`, `custom`, `eightfold`, `empregare`, etc.).
+2. For Greenhouse/Lever/Workday: set the `api` block with the board token / site / careers URL.
+3. For custom portals: add the source ID to `_PRIORITY_SOURCE_IDS` in `backend/services/playwright_scraper.py`.
+
+### Known limitations
+
+- Playwright scraper targets 38 portals but ~19 currently return results; heavy SPAs (Meta, Bradesco, VW, etc.) need stealth browser tooling (`patchright`) or a managed proxy to bypass bot detection.
+- Workday boards are global — results may include non-Brazil locations for multinational tenants; use the keyword filter to narrow results.
+- Playwright requires Chromium binaries: run `playwright install chromium` after `pip install -r backend/requirements.txt`.
+
+---
+
 ## Troubleshooting
 
 **`ModuleNotFoundError: No module named 'backend'`**  
@@ -300,7 +466,8 @@ Some boards rate-limit or require specific sites/keywords. Narrow sites, reduce 
 Check browser console for CORS errors; align `CORS_ORIGINS` with the exact URL you use (`http://localhost` vs `http://127.0.0.1`).
 
 **Docker: LLM unreachable**  
-Confirm Ollama is listening on the host and that `OLLAMA_BASE_URL` / `OLLAMA_HOST` in Compose points at `host.docker.internal` (or your host IP on Linux if you customise it).
+**Ollama:** confirm `ollama serve` on the host and that `OLLAMA_BASE_URL` / `OLLAMA_HOST` in Compose point at `http://host.docker.internal:11434` (or your host IP on Linux if you customise it).  
+**LM Studio:** confirm **Local Server** is started in LM Studio and set `LMSTUDIO_BASE_URL` (and Settings **Base URL**) to **`http://host.docker.internal:<port>`** — `localhost` inside the container is the container itself, not your Mac/Windows/Linux host.
 
 **Docker: `pip install` fails on `pycairo` / Meson “Unknown compiler(s)”**  
 `xhtml2pdf` depends on **svglib**, which pulls **pycairo**. On minimal images, pycairo often builds from source and needs a C compiler plus Cairo **development** headers. The repo’s **`backend/Dockerfile`** fixes this with a **builder** stage (`build-essential`, `pkg-config`, `libcairo2-dev`) and `pip wheel`, then installs from those wheels in the final image with **`libcairo2`** only. If you see this error, ensure you are using the current Dockerfile (or add the same build deps before `pip install`). Rebuild with `docker compose build backend --no-cache`.
@@ -311,9 +478,15 @@ Confirm Ollama is listening on the host and that `OLLAMA_BASE_URL` / `OLLAMA_HOS
 
 | Item | Status |
 |------|--------|
-| Deeper Brazilian / regional aggregation | Planned |
+| **JumpShip 1.0** — stable search, LLM stack, tracker, interview flow | ✅ Shipped |
+| AI job scoring with hire recommendation verdict | ✅ Shipped |
+| ATS-optimized tailored résumé PDF generation | ✅ Shipped |
+| Mock interview chatbot (state-machine, one question per turn) | ✅ Shipped |
+| Per-step model overrides (evaluator / résumé gen / interview) | ✅ Shipped |
+| Ollama + LM Studio auto model discovery | ✅ Shipped |
+| JumpShip Scrapper — Greenhouse, Lever, Workday, Playwright scrapers | ✅ Shipped |
+| Deeper Brazilian / regional aggregation | In progress |
 | Multi-résumé profiles (switch persona without re-upload) | Planned |
-| Interview prep from gap analysis | Planned |
 | Richer inbox / email workflows tied to the tracker | Planned |
 
 ---

@@ -47,6 +47,7 @@ class ProfileSchema(BaseModel):
     linkedin_email:      Optional[str] = None
     linkedin_password:   Optional[str] = None
     custom_answers:      Optional[dict] = None
+    extra_info:          Optional[str] = None  # freeform: projects, experiences, achievements
 
     model_config = {"from_attributes": True}
 

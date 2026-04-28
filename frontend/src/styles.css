@@ -1958,10 +1958,9 @@ html[data-theme="light"] .al-message-ref {
 .tracker-pipeline {
   display: flex;
   padding: 16px 20px;
-  overflow-x: clip;
-  overflow-y: visible;
+  overflow: hidden;
   flex: 1;
-  align-items: flex-start;
+  align-items: stretch;
   min-height: 0;
   width: 100%;
   box-sizing: border-box;
@@ -1975,8 +1974,9 @@ html[data-theme="light"] .al-message-ref {
   padding: 0;
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 160px);
-  overflow: visible;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .pipeline-col-title {
@@ -1997,6 +1997,7 @@ html[data-theme="light"] .al-message-ref {
   border-radius: var(--radius);
   padding: 0;
   overflow: hidden;
+  flex-shrink: 0;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
@@ -2054,6 +2055,40 @@ html[data-theme="light"] .al-message-ref {
 .tracker-action-btn.resume:hover { background: rgba(96,165,250,0.08); border-color: #60a5fa; }
 .tracker-action-btn.danger { color: #f87171; border-color: rgba(248,113,113,0.3); }
 .tracker-action-btn.danger:hover { background: rgba(248,113,113,0.08); border-color: #f87171; }
+.tracker-action-btn.primary {
+  background: var(--gold);
+  color: #1a1a1a;
+  border-color: var(--gold);
+  font-weight: 600;
+}
+.tracker-action-btn.primary:hover {
+  background: transparent;
+  color: var(--gold);
+  border-color: var(--gold);
+}
+
+.portal-menu {
+  z-index: 9999;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-width: 150px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  padding: 4px 0;
+}
+.portal-menu-item {
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  transition: background 0.12s;
+}
+.portal-menu-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
 
 .tracker-error-banner {
   display: flex;
@@ -2078,10 +2113,49 @@ html[data-theme="light"] .al-message-ref {
 .empty-title { font-family: 'Roboto', sans-serif; font-size: 22px; font-weight: 700; margin-bottom: 10px; }
 .empty-sub { font-size: 15px; color: var(--text-muted); font-weight: 300; }
 
-/* SCROLLBAR */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+/* SCROLLBAR — invisible by default (large areas), accent on small/secondary regions */
+* { scrollbar-width: none; }
+*::-webkit-scrollbar { width: 0; height: 0; background: transparent; }
+*::-webkit-scrollbar-thumb { background: transparent; }
+
+/* Accent scroll: thin, gold-tinted — for compact secondary regions */
+.tracker-jd-scroll,
+.tracker-notes-field,
+.custom-select-list-body,
+.job-expanded-col,
+.modal-body,
+.interview-messages {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold-dim) transparent;
+}
+.tracker-jd-scroll::-webkit-scrollbar,
+.tracker-notes-field::-webkit-scrollbar,
+.custom-select-list-body::-webkit-scrollbar,
+.job-expanded-col::-webkit-scrollbar,
+.modal-body::-webkit-scrollbar,
+.interview-messages::-webkit-scrollbar { width: 6px; height: 6px; }
+.tracker-jd-scroll::-webkit-scrollbar-track,
+.tracker-notes-field::-webkit-scrollbar-track,
+.custom-select-list-body::-webkit-scrollbar-track,
+.job-expanded-col::-webkit-scrollbar-track,
+.modal-body::-webkit-scrollbar-track,
+.interview-messages::-webkit-scrollbar-track { background: transparent; }
+.tracker-jd-scroll::-webkit-scrollbar-thumb,
+.tracker-notes-field::-webkit-scrollbar-thumb,
+.custom-select-list-body::-webkit-scrollbar-thumb,
+.job-expanded-col::-webkit-scrollbar-thumb,
+.modal-body::-webkit-scrollbar-thumb,
+.interview-messages::-webkit-scrollbar-thumb {
+  background: var(--gold-dim);
+  border-radius: 3px;
+  transition: background 0.15s;
+}
+.tracker-jd-scroll::-webkit-scrollbar-thumb:hover,
+.tracker-notes-field::-webkit-scrollbar-thumb:hover,
+.custom-select-list-body::-webkit-scrollbar-thumb:hover,
+.job-expanded-col::-webkit-scrollbar-thumb:hover,
+.modal-body::-webkit-scrollbar-thumb:hover,
+.interview-messages::-webkit-scrollbar-thumb:hover { background: var(--gold); }
 
 /* RESPONSIVE */
 @media (max-width: 900px) {
@@ -2737,11 +2811,37 @@ html[data-theme="light"] .al-message-ref {
   font-weight: 600;
   letter-spacing: 0.8px;
   text-transform: uppercase;
+  border-radius: 100px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+
+.roadmap-badge--planned {
   color: #60a5fa;
   background: rgba(96,165,250,0.08);
   border: 1px solid rgba(96,165,250,0.2);
-  border-radius: 100px;
-  padding: 3px 9px;
+}
+
+.roadmap-badge--progress {
+  color: #fbbf24;
+  background: rgba(251,191,36,0.1);
+  border: 1px solid rgba(251,191,36,0.28);
+}
+
+.roadmap-badge--shipped {
+  color: #4ade80;
+  background: rgba(74,222,128,0.1);
+  border: 1px solid rgba(74,222,128,0.3);
+}
+
+.section-sub--tight {
+  max-width: 42rem;
+  margin-left: 0;
+  margin-right: auto;
+}
+
+.how-card--setup .how-title {
+  font-size: 15px;
 }
 
 .roadmap-title {

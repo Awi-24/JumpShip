@@ -7,7 +7,7 @@ import os
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
@@ -100,8 +100,13 @@ def get_resume(db: Session = Depends(get_db)):
 
 
 @router.delete("")
-def delete_resume(db: Session = Depends(get_db)):
-    """Delete the stored resume."""
+def delete_resume(
+    confirm: bool = Query(False, description="Must be true to authorise deletion"),
+    db: Session = Depends(get_db),
+):
+    """Delete the stored resume. Requires ?confirm=true."""
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Pass ?confirm=true to delete resume.")
     deleted = db.query(Resume).delete()
     db.commit()
     if deleted == 0:

@@ -193,7 +193,7 @@ export default function LocationSelect({ value, onChange }: Props) {
         aria-expanded={open}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpen(); } }}
       >
-        <span className="custom-select-value">{value || 'Remote'}</span>
+        <span className="custom-select-value">{value || 'Any location'}</span>
         <svg className="custom-select-arrow" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden>
           <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -220,6 +220,14 @@ export default function LocationSelect({ value, onChange }: Props) {
 
           {/* Scrollable options body */}
           <div className="custom-select-list-body">
+            {!query.trim() && (
+              <div
+                className={`custom-select-option${value === '' ? ' selected' : ''}`}
+                onMouseDown={e => { e.preventDefault(); pick(''); }}
+              >
+                Any location
+              </div>
+            )}
             {query.trim() && !filtered.some(g => g.items.some(i => i.toLowerCase() === query.toLowerCase())) && (
               <div
                 className="custom-select-option"

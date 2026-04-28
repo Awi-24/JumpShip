@@ -15,10 +15,13 @@ build/
 .ruff_cache/
 .mypy_cache/
 
-# Env / secrets
+# Env / secrets (never commit real keys)
 .env
 .env.local
 .env.*.local
+# Other env filenames (e.g. .env.production) — keep .env.example tracked
+.env.*
+!.env.example
 
 # Database
 *.db
@@ -70,3 +73,5 @@ generated_resumes/
 
 # Test coverage
 frontend/coverage/
+/tests
+/tests
