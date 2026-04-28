@@ -26,6 +26,7 @@ _BASE_URL = "https://boards-api.greenhouse.io/v1/boards/{token}/jobs"
 _SUPPLEMENTAL_BOARDS: dict[str, dict] = {
     "anthropic_jobs": {"board_token": "anthropic", "company": "Anthropic"},
     "inter_carreiras": {"board_token": "inter", "company": "Banco Inter"},
+    "picpay_central_vagas": {"board_token": "picpay", "company": "PicPay"},
 }
 _HEADERS = {
     "User-Agent": (

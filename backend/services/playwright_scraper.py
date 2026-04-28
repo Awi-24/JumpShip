@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 _PRIORITY_SOURCE_IDS: set[str] = {
     # Fintech / banking
     "stone_jornada",            # /vagas-abertas override
-    "picpay_central_vagas",     # Oracle HCM links
     "itau_carreiras",
     "bradesco_carreiras",
     # Retail
@@ -175,6 +174,27 @@ async def _navigate_to_listing(page, base_url: str) -> bool:
     return False
 
 
+async def _container_title(el) -> str:
+    """Extract title from nearest card/row container when the <a> tag has no text."""
+    try:
+        return await el.evaluate(
+            """el => {
+                const c = el.closest(
+                    'li, article, tr, [class*="card"], [class*="job"], [class*="item"], [class*="position"], [class*="vacancy"]'
+                );
+                if (!c) return '';
+                const h = c.querySelector(
+                    'h1,h2,h3,h4,h5,p[class*="title"],span[class*="title"],div[class*="title"],'
+                    + 'p[class*="name"],span[class*="name"],div[class*="name"],'
+                    + 'p[class*="position"],span[class*="position"],div[class*="position"]'
+                );
+                return h ? h.innerText.trim() : '';
+            }"""
+        )
+    except Exception:
+        return ""
+
+
 async def _extract_jobs(page, source: dict, keywords: list[str]) -> list[dict]:
     company = source.get("name", "")
     base_url = source.get("_effective_url") or source["listing_url"]
@@ -189,10 +209,13 @@ async def _extract_jobs(page, source: dict, keywords: list[str]) -> list[dict]:
                 continue
             for el in elements:
                 href = await el.get_attribute("href") or ""
-                title = (await el.inner_text()).strip()
                 if not href:
                     continue
-                title = re.sub(r"\s+", " ", title)
+                title = re.sub(r"\s+", " ", (await el.inner_text()).strip())
+                if len(title) < 6 or len(title) > 250:
+                    # aria-label is often set by Oracle HCM / accessible SPAs
+                    aria = re.sub(r"\s+", " ", ((await el.get_attribute("aria-label")) or "").strip())
+                    title = aria if len(aria) >= 6 else re.sub(r"\s+", " ", (await _container_title(el)).strip())
                 if len(title) < 6 or len(title) > 250:
                     continue
                 if _SKIP_TEXT_RE.match(title):
@@ -234,11 +257,19 @@ async def _extract_jobs(page, source: dict, keywords: list[str]) -> list[dict]:
             if not any(kw in title.lower() for kw in kw_lower):
                 continue
 
+        if not title:
+            slug = url.split("/")[-1].replace("-", " ").replace("_", " ").title()
+            # A purely numeric slug (e.g. "10958") carries no information — skip.
+            title = "" if slug.replace(" ", "").isdigit() else slug
+
+        if not title:
+            continue
+
         uid = hashlib.md5(url.encode()).hexdigest()[:8]
         results.append(
             {
                 "id": f"pw_{src_id[:8]}_{uid}",
-                "title": title or url.split("/")[-1].replace("-", " ").replace("_", " ").title(),
+                "title": title,
                 "company": company,
                 "company_url": "",
                 "location": "Brasil",

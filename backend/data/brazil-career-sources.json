@@ -230,10 +230,13 @@
       "id": "picpay_central_vagas",
       "name": "PicPay",
       "sectors": ["fintech", "payments"],
-      "listing_url": "https://picpay.com/jobs",
-      "ats": "custom",
-      "api": null,
-      "ingestion_notes": "Central de vagas no domínio picpay.com; ATS pode variar."
+      "listing_url": "https://picpay.com/oportunidades-de-emprego-e-carreiras/central-de-vagas",
+      "ats": "greenhouse",
+      "api": {
+        "provider": "greenhouse",
+        "board_token": "picpay"
+      },
+      "ingestion_notes": "Usa Greenhouse (board token: picpay). Coberto por greenhouse_scraper via _SUPPLEMENTAL_BOARDS."
     },
     {
       "id": "loft_gupy",
