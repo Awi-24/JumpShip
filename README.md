@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/jumpship-readme.svg" alt="JumpShip" width="300">
+  <table cellpadding="24"><tbody><tr><td align="center" bgcolor="#0a0a0a"><img src="frontend/public/jumpship-logo.png" alt="JumpShip" width="380"></td></tr></tbody></table>
 </p>
 
 # JumpShip
