@@ -1,6 +1,6 @@
-<p align="center">
-  <table cellpadding="24"><tbody><tr><td align="center" bgcolor="#0a0a0a"><img src="frontend/public/jumpship-logo.png" alt="JumpShip" width="380"></td></tr></tbody></table>
-</p>
+<div align="center">
+  <table align="center" cellpadding="24"><tbody><tr><td align="center" bgcolor="#0a0a0a"><img src="frontend/public/jumpship-logo.png" alt="JumpShip" width="380"></td></tr></tbody></table>
+</div>
 
 # JumpShip
 
