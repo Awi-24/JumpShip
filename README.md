@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/jumpship-readme.svg" alt="JumpShip" width="300">
+</p>
+
 # JumpShip
 
 > AI-powered job search built around your résumé. Aggregates multiple job boards, scores each listing with an LLM (local or cloud), and generates **tailored résumé PDFs** per job, designed to run locally with your data under your control.

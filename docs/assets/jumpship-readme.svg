@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 72" role="img" aria-label="JumpShip">
+  <defs>
+    <linearGradient id="jsg" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FFD080"/>
+      <stop offset="50%" stop-color="#F5A623"/>
+      <stop offset="100%" stop-color="#B8791A"/>
+    </linearGradient>
+  </defs>
+  <!-- mark: upward arc (launch) -->
+  <path fill="none" stroke="url(#jsg)" stroke-width="5" stroke-linecap="round"
+        d="M8 52 Q 36 12 72 28"/>
+  <circle cx="72" cy="28" r="6" fill="url(#jsg)"/>
+  <text x="92" y="50" font-family="Segoe UI,system-ui,sans-serif" font-size="40" font-weight="800" letter-spacing="-0.5" fill="url(#jsg)">JumpShip</text>
+</svg>
