@@ -32,7 +32,7 @@ playwright>=1.40.0
 # ── jobspy transitive dependencies ──────
 requests>=2.32.0
 beautifulsoup4>=4.12.0
-tls-client>=1.0.1
+curl_cffi>=0.16.2
 markdownify>=1.1.0
 regex>=2024.11.0
 numpy>=1.26.0

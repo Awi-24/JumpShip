@@ -2,18 +2,15 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import date, datetime, timezone
 from itertools import cycle
 
-import numpy as np
 import requests
-import tls_client
-import urllib3
+from bs4 import BeautifulSoup
+from curl_cffi import CurlOpt, requests as curl_requests
 from markdownify import markdownify as md
-from requests.adapters import HTTPAdapter, Retry
 
-from jobspy.model import CompensationInterval, JobType, Site
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from jobspy.model import DescriptionFormat, JobType, Site
 
 
 def create_logger(name: str):
@@ -30,104 +27,76 @@ def create_logger(name: str):
 
 
 class RotatingProxySession:
+    request_timeout = 15
+
     def __init__(self, proxies=None):
         if isinstance(proxies, str):
-            self.proxy_cycle = cycle([self.format_proxy(proxies)])
-        elif isinstance(proxies, list):
-            self.proxy_cycle = (
-                cycle([self.format_proxy(proxy) for proxy in proxies])
-                if proxies
-                else None
-            )
-        else:
-            self.proxy_cycle = None
+            proxies = [proxies]
+        elif not isinstance(proxies, (list, tuple)):
+            proxies = []
+        self.rotates = len(set(proxies)) > 1
+        self.proxy_cycle = cycle(map(self.format_proxy, proxies)) if proxies else None
 
     @staticmethod
     def format_proxy(proxy):
         """Utility method to format a proxy string into a dictionary."""
-        if proxy.startswith("http://") or proxy.startswith("https://"):
-            return {"http": proxy, "https": proxy}
-        if proxy.startswith("socks5://"):
-            return {"http": proxy, "https": proxy}
-        return {"http": f"http://{proxy}", "https": f"http://{proxy}"}
+        if not re.match(r"[a-zA-Z][a-zA-Z0-9+.-]*://", proxy):
+            proxy = f"http://{proxy}"
+        return {"http": proxy, "https": proxy}
+
+    def request(self, method, url, **kwargs):
+        if self.proxy_cycle:
+            proxy = next(self.proxy_cycle)
+            self.proxies = {} if proxy["http"] == "http://localhost" else proxy
+        kwargs.setdefault("verify", self.verify)
+        kwargs.setdefault("timeout", self.request_timeout)
+        return super().request(method, url, **kwargs)
 
 
 class RequestsRotating(RotatingProxySession, requests.Session):
-    def __init__(self, proxies=None, has_retry=False, delay=1, clear_cookies=False):
+    def __init__(self, proxies=None, clear_cookies=False):
         RotatingProxySession.__init__(self, proxies=proxies)
         requests.Session.__init__(self)
         self.clear_cookies = clear_cookies
-        self.allow_redirects = True
-        self.setup_session(has_retry, delay)
-
-    def setup_session(self, has_retry, delay):
-        if has_retry:
-            retries = Retry(
-                total=3,
-                connect=3,
-                status=3,
-                status_forcelist=[500, 502, 503, 504, 429],
-                backoff_factor=delay,
-            )
-            adapter = HTTPAdapter(max_retries=retries)
-            self.mount("http://", adapter)
-            self.mount("https://", adapter)
 
     def request(self, method, url, **kwargs):
         if self.clear_cookies:
             self.cookies.clear()
-
-        if self.proxy_cycle:
-            next_proxy = next(self.proxy_cycle)
-            if next_proxy["http"] != "http://localhost":
-                self.proxies = next_proxy
-            else:
-                self.proxies = {}
-        return requests.Session.request(self, method, url, **kwargs)
+        return super().request(method, url, **kwargs)
 
 
-class TLSRotating(RotatingProxySession, tls_client.Session):
+class TLSRotating(RotatingProxySession, curl_requests.Session):
     def __init__(self, proxies=None):
         RotatingProxySession.__init__(self, proxies=proxies)
-        tls_client.Session.__init__(self, random_tls_extension_order=True)
-
-    def execute_request(self, *args, **kwargs):
-        if self.proxy_cycle:
-            next_proxy = next(self.proxy_cycle)
-            if next_proxy["http"] != "http://localhost":
-                self.proxies = next_proxy
-            else:
-                self.proxies = {}
-        response = tls_client.Session.execute_request(self, *args, **kwargs)
-        response.ok = response.status_code in range(200, 400)
-        return response
+        curl_requests.Session.__init__(
+            self,
+            impersonate="chrome",
+            allow_redirects=False,
+            curl_options={CurlOpt.SSL_SESSIONID_CACHE: 0} if self.rotates else None,
+        )
 
 
 def create_session(
     *,
-    proxies: dict | str | None = None,
+    proxies: list[str] | str | None = None,
     ca_cert: str | None = None,
     is_tls: bool = True,
-    has_retry: bool = False,
-    delay: int = 1,
     clear_cookies: bool = False,
-) -> requests.Session:
+    user_agent: str | None = None,
+) -> RequestsRotating | TLSRotating:
     """
-    Creates a requests session with optional tls, proxy, and retry settings.
-    :return: A session object
+    Creates a proxy-rotating session: curl_cffi with a browser fingerprint if is_tls,
+    else requests (supports clear_cookies).
     """
     if is_tls:
         session = TLSRotating(proxies=proxies)
     else:
-        session = RequestsRotating(
-            proxies=proxies,
-            has_retry=has_retry,
-            delay=delay,
-            clear_cookies=clear_cookies,
-        )
+        session = RequestsRotating(proxies=proxies, clear_cookies=clear_cookies)
 
     if ca_cert:
         session.verify = ca_cert
+    if user_agent:
+        session.headers["user-agent"] = user_agent
 
     return session
 
@@ -137,69 +106,57 @@ def set_logger_level(verbose: int):
     Adjusts the logger's level. This function allows the logging level to be changed at runtime.
 
     Parameters:
-    - verbose: int {0, 1, 2} (default=2, all logs)
+    - verbose: int {0, 1, 2} (0 errors only, 1 adds warnings, 2 all logs)
     """
     if verbose is None:
         return
-    level_name = {2: "INFO", 1: "WARNING", 0: "ERROR"}.get(verbose, "INFO")
-    level = getattr(logging, level_name.upper(), None)
-    if level is not None:
-        for logger_name in logging.root.manager.loggerDict:
-            if logger_name.startswith("JobSpy:"):
-                logging.getLogger(logger_name).setLevel(level)
-    else:
-        raise ValueError(f"Invalid log level: {level_name}")
+    level = {1: logging.WARNING, 0: logging.ERROR}.get(verbose, logging.INFO)
+    for logger_name in logging.root.manager.loggerDict:
+        if logger_name.startswith("JobSpy:"):
+            logging.getLogger(logger_name).setLevel(level)
+
+
+def _as_markup(text: str) -> str:
+    return text if "<" in text else f"<!---->{text}"
 
 
 def markdown_converter(description_html: str):
     if description_html is None:
         return None
-    markdown = md(description_html)
-    return markdown.strip()
+    return md(_as_markup(description_html)).strip()
 
-def plain_converter(decription_html:str):
-    from bs4 import BeautifulSoup
-    if decription_html is None:
+
+def plain_converter(description_html: str):
+    if description_html is None:
         return None
-    soup = BeautifulSoup(decription_html, "html.parser")
-    text = soup.get_text(separator=" ")
-    text = re.sub(r'\s+',' ',text)
-    return text.strip()
+    soup = BeautifulSoup(_as_markup(description_html), "html.parser")
+    return re.sub(r"\s+", " ", soup.get_text(separator=" ")).strip()
 
 
 def extract_emails_from_text(text: str) -> list[str] | None:
     if not text:
         return None
     email_regex = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
-    return email_regex.findall(text)
+    return list(dict.fromkeys(email_regex.findall(text)))
+
+
+def format_description(html: str | None, description_format) -> tuple:
+    """The description in the format asked for, and the emails in it."""
+    emails = extract_emails_from_text(html)
+    if description_format == DescriptionFormat.MARKDOWN:
+        return markdown_converter(html), emails
+    if description_format == DescriptionFormat.PLAIN:
+        return plain_converter(html), emails
+    return html, emails
+
+
+def utc_date(epoch: float | None) -> date | None:
+    """The UTC date of a Unix time in seconds; None for a missing or zero one."""
+    return datetime.fromtimestamp(epoch, timezone.utc).date() if epoch else None
 
 
 def get_enum_from_job_type(job_type_str: str) -> JobType | None:
-    """
-    Given a string, returns the corresponding JobType enum member if a match is found.
-    """
-    res = None
-    for job_type in JobType:
-        if job_type_str in job_type.value:
-            res = job_type
-    return res
-
-
-def currency_parser(cur_str):
-    # Remove any non-numerical characters
-    # except for ',' '.' or '-' (e.g. EUR)
-    cur_str = re.sub("[^-0-9.,]", "", cur_str)
-    # Remove any 000s separators (either , or .)
-    cur_str = re.sub("[.,]", "", cur_str[:-3]) + cur_str[-3:]
-
-    if "." in list(cur_str[-3:]):
-        num = float(cur_str)
-    elif "," in list(cur_str[-3:]):
-        num = float(cur_str.replace(",", "."))
-    else:
-        num = float(cur_str)
-
-    return np.round(num, 2)
+    return next((t for t in JobType if job_type_str in t.value), None)
 
 
 def remove_attributes(tag):
@@ -208,119 +165,56 @@ def remove_attributes(tag):
     return tag
 
 
-def extract_salary(
-    salary_str,
-    lower_limit=1000,
-    upper_limit=700000,
-    hourly_threshold=350,
-    monthly_threshold=30000,
-    enforce_annual_salary=False,
-):
-    """
-    Extracts salary information from a string and returns the salary interval, min and max salary values, and currency.
-    (TODO: Needs test cases as the regex is complicated and may not cover all edge cases)
-    """
-    if not salary_str:
+salary_range = re.compile(
+    r"\$(\d+(?:,\d+)?(?:\.\d+)?)([kK]?)\s*[-—–]\s*(?:\$)?(\d+(?:,\d+)?(?:\.\d+)?)([kK]?)"
+)
+
+
+def extract_salary(salary_str, enforce_annual_salary=False):
+    """The first "$min - $max" of a text as (interval, min, max, currency)."""
+    lower_limit, upper_limit = 1000, 700000
+    hourly_threshold, monthly_threshold = 350, 30000
+    match = salary_range.search(salary_str or "")
+    if not match:
         return None, None, None, None
-
-    annual_max_salary = None
-    min_max_pattern = r"\$(\d+(?:,\d+)?(?:\.\d+)?)([kK]?)\s*[-—–]\s*(?:\$)?(\d+(?:,\d+)?(?:\.\d+)?)([kK]?)"
-
-    def to_int(s):
-        return int(float(s.replace(",", "")))
-
-    def convert_hourly_to_annual(hourly_wage):
-        return hourly_wage * 2080
-
-    def convert_monthly_to_annual(monthly_wage):
-        return monthly_wage * 12
-
-    match = re.search(min_max_pattern, salary_str)
-
-    if match:
-        min_salary = to_int(match.group(1))
-        max_salary = to_int(match.group(3))
-        # Handle 'k' suffix for min and max salaries independently
-        if "k" in match.group(2).lower() or "k" in match.group(4).lower():
-            min_salary *= 1000
-            max_salary *= 1000
-
-        # Convert to annual if less than the hourly threshold
-        if min_salary < hourly_threshold:
-            interval = CompensationInterval.HOURLY.value
-            annual_min_salary = convert_hourly_to_annual(min_salary)
-            if max_salary < hourly_threshold:
-                annual_max_salary = convert_hourly_to_annual(max_salary)
-
-        elif min_salary < monthly_threshold:
-            interval = CompensationInterval.MONTHLY.value
-            annual_min_salary = convert_monthly_to_annual(min_salary)
-            if max_salary < monthly_threshold:
-                annual_max_salary = convert_monthly_to_annual(max_salary)
-
-        else:
-            interval = CompensationInterval.YEARLY.value
-            annual_min_salary = min_salary
-            annual_max_salary = max_salary
-
-        # Ensure salary range is within specified limits
-        if not annual_max_salary:
-            return None, None, None, None
-        if (
-            lower_limit <= annual_min_salary <= upper_limit
-            and lower_limit <= annual_max_salary <= upper_limit
-            and annual_min_salary < annual_max_salary
-        ):
-            if enforce_annual_salary:
-                return interval, annual_min_salary, annual_max_salary, "USD"
-            else:
-                return interval, min_salary, max_salary, "USD"
-    return None, None, None, None
-
-
-def extract_job_type(description: str):
-    if not description:
-        return []
-
-    keywords = {
-        JobType.FULL_TIME: r"full\s?time",
-        JobType.PART_TIME: r"part\s?time",
-        JobType.INTERNSHIP: r"internship",
-        JobType.CONTRACT: r"contract",
-    }
-
-    listing_types = []
-    for key, pattern in keywords.items():
-        if re.search(pattern, description, re.IGNORECASE):
-            listing_types.append(key)
-
-    return listing_types if listing_types else None
+    low, high = (int(float(match[i].replace(",", ""))) for i in (1, 3))
+    if match[2] or match[4]:
+        low, high = low * 1000, high * 1000
+    # the interval is guessed from the size of the lower amount
+    if low < hourly_threshold:
+        interval, below, factor = "hourly", hourly_threshold, 2080
+    elif low < monthly_threshold:
+        interval, below, factor = "monthly", monthly_threshold, 12
+    else:
+        interval, below, factor = "yearly", float("inf"), 1
+    annual_low, annual_high = low * factor, high * factor
+    if high >= below or not (
+        lower_limit <= annual_low < annual_high <= upper_limit
+    ):
+        return None, None, None, None
+    if enforce_annual_salary:
+        return "yearly", annual_low, annual_high, "USD"
+    return interval, low, high, "USD"
 
 
 def map_str_to_site(site_name: str) -> Site:
-    return Site[site_name.upper()]
-
-
-def get_enum_from_value(value_str):
-    for job_type in JobType:
-        if value_str in job_type.value:
-            return job_type
-    raise Exception(f"Invalid job type: {value_str}")
+    name = site_name.upper()
+    if name == "ZIPRECRUITER":
+        return Site.ZIP_RECRUITER
+    if name not in Site.__members__:
+        valid_sites = ", ".join(site.value for site in Site)
+        raise KeyError(
+            f"Invalid site name: '{site_name}'. Valid sites are: {valid_sites}"
+        )
+    return Site[name]
 
 
 def convert_to_annual(job_data: dict):
-    if job_data["interval"] == "hourly":
-        job_data["min_amount"] *= 2080
-        job_data["max_amount"] *= 2080
-    if job_data["interval"] == "monthly":
-        job_data["min_amount"] *= 12
-        job_data["max_amount"] *= 12
-    if job_data["interval"] == "weekly":
-        job_data["min_amount"] *= 52
-        job_data["max_amount"] *= 52
-    if job_data["interval"] == "daily":
-        job_data["min_amount"] *= 260
-        job_data["max_amount"] *= 260
+    factors = {"hourly": 2080, "daily": 260, "weekly": 52, "monthly": 12}
+    factor = factors[job_data["interval"]]
+    for amount in ("min_amount", "max_amount"):
+        if job_data[amount] is not None:
+            job_data[amount] = round(job_data[amount] * factor, 2)
     job_data["interval"] = "yearly"
 
 
@@ -353,7 +247,6 @@ desired_order = [
     "company_num_employees",
     "company_revenue",
     "company_description",
-    # naukri-specific fields
     "skills",
     "experience_range",
     "company_rating",

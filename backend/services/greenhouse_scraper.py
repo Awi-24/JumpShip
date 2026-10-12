@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 
 from backend.services.career_sources import get_by_ats
+from backend.services.text_match import matches_any
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,6 @@ _BASE_URL = "https://boards-api.greenhouse.io/v1/boards/{token}/jobs"
 _SUPPLEMENTAL_BOARDS: dict[str, dict] = {
     "anthropic_jobs": {"board_token": "anthropic", "company": "Anthropic"},
     "inter_carreiras": {"board_token": "inter", "company": "Banco Inter"},
-    "picpay_central_vagas": {"board_token": "picpay", "company": "PicPay"},
 }
 _HEADERS = {
     "User-Agent": (
@@ -86,17 +86,13 @@ async def _fetch_board(
             logger.warning("Greenhouse fetch failed (%s): %s", token, exc)
             return []
 
-    kw_lower = [k.lower() for k in keywords] if keywords else []
     results: list[dict] = []
 
     for job in data.get("jobs", []):
         if not isinstance(job, dict):
             continue
-        if kw_lower:
-            title = (job.get("title") or "").lower()
-            desc = _strip_html(job.get("content") or "").lower()
-            if not any(kw in title or kw in desc for kw in kw_lower):
-                continue
+        if keywords and not matches_any(keywords, job.get("title") or "", _strip_html(job.get("content") or "")):
+            continue
         results.append(_map_job(job, company, token))
 
     return results

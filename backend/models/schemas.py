@@ -52,6 +52,8 @@ class JobSearchRequest(LLMOverride):
     job_type: str = "fulltime"
     sites: list[str] = ["linkedin", "indeed", "glassdoor"]
     results_wanted: int = 20
+    hours_old: int | None = None          # only jobs posted within the last N hours
+    work_mode: str = "any"                # any | remote | hybrid | onsite
     resume_profile: ResumeProfile | None = None
 
 

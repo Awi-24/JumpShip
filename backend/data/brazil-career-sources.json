@@ -47,13 +47,8 @@
       "sectors": ["fintech", "credit"],
       "listing_url": "https://job-boards.greenhouse.io/creditas",
       "ats": "greenhouse",
-      "api": {
-        "provider": "greenhouse",
-        "board_token": "creditas",
-        "jobs_endpoint": "https://boards-api.greenhouse.io/v1/boards/creditas/jobs",
-        "docs_url": "https://developers.greenhouse.io/job-board.html"
-      },
-      "ingestion_notes": null
+      "api": null,
+      "ingestion_notes": "Board Greenhouse 'creditas' retorna 404; a pagina de carreiras agora usa Gupy."
     },
     {
       "id": "neon_lever",
@@ -231,12 +226,9 @@
       "name": "PicPay",
       "sectors": ["fintech", "payments"],
       "listing_url": "https://picpay.com/oportunidades-de-emprego-e-carreiras/central-de-vagas",
-      "ats": "greenhouse",
-      "api": {
-        "provider": "greenhouse",
-        "board_token": "picpay"
-      },
-      "ingestion_notes": "Usa Greenhouse (board token: picpay). Coberto por greenhouse_scraper via _SUPPLEMENTAL_BOARDS."
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Board Greenhouse 'picpay' retorna 404; a central de vagas migrou para Oracle Cloud HCM."
     },
     {
       "id": "loft_gupy",

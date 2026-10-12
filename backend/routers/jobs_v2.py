@@ -9,10 +9,9 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from backend.models.schemas import (
@@ -25,7 +24,9 @@ from backend.models.schemas import (
 )
 from backend.services.job_scraper_v2 import search_jobs
 from backend.services.llm_service import get_llm_service
-from backend.services.llm_client import LLMClient, get_local_sem, is_local_provider, needs_semaphore
+from backend.services.llm_client import (
+    LLMClient, clean_and_parse_json, get_local_sem, is_local_provider, needs_semaphore, _strip_fences,
+)
 from backend.services.web_search import search_company_info
 
 logger = logging.getLogger(__name__)
@@ -285,18 +286,27 @@ def _llm_from_request(req) -> LLMClient:
 
 
 @_jobs_router.post("/search", response_model=list[JobResult])
-async def search_jobs_endpoint(req: JobSearchRequest):
-    """Search for jobs using python-jobspy + extra sources and return structured results."""
+async def search_jobs_endpoint(req: JobSearchRequest, response: Response):
+    """Search for jobs using python-jobspy + extra sources and return structured results.
+
+    Per-source outcome is returned in the X-Source-Status header:
+    JSON {site: {"count": int, "error": str | null}} (ASCII-escaped).
+    """
     if not req.keywords:
         raise HTTPException(status_code=400, detail="At least one keyword is required.")
     try:
+        status: dict = {}
         results = await search_jobs(
             keywords=req.keywords,
             location=req.location,
             job_type=req.job_type,
             sites=req.sites,
             results_wanted=req.results_wanted,
+            hours_old=req.hours_old,
+            work_mode=req.work_mode,
+            status_out=status,
         )
+        response.headers["X-Source-Status"] = json.dumps(status)
         return [JobResult(**r) for r in results]
     except Exception as exc:
         logger.error("Job search failed: %s", exc)
@@ -399,30 +409,20 @@ async def _run_assessment(llm: LLMClient, profile, job, include_company_research
 
     user = _build_assess_user(profile, job, company_context)
 
-    raw_response = ""
-    try:
-        if needs_semaphore(llm.provider, llm._resolve_model()):
-            async with get_local_sem():
-                raw_response = await asyncio.to_thread(llm.complete, _ASSESS_SYSTEM, user)
-        else:
+    if needs_semaphore(llm.provider, llm._resolve_model()):
+        async with get_local_sem():
             raw_response = await asyncio.to_thread(llm.complete, _ASSESS_SYSTEM, user)
+    else:
+        raw_response = await asyncio.to_thread(llm.complete, _ASSESS_SYSTEM, user)
 
-        cleaned = _clean_json(raw_response)
-        data = json.loads(cleaned)
-        assessment = JobAssessment(**data)
-        assessment.resume_generation_triggered = (
-            assessment.match_score >= app_settings.resume_gen_threshold
-            and assessment.is_relevant
-        )
-        return assessment
-
-    except json.JSONDecodeError:
-        logger.error("LLM returned invalid JSON for assess: %s", raw_response[:400])
-        return JobAssessment(
-            match_score=50,
-            summary="Could not parse the assessment. Please try Re-assess.",
-            strong_points=[], gaps=[], career_suggestions=[], company_insights="",
-        )
+    # Unparseable output raises (ValueError): the batch endpoint reports it per item,
+    # the single endpoint returns 500 — never a fake score that would pollute ranking.
+    assessment = JobAssessment(**clean_and_parse_json(raw_response))
+    assessment.resume_generation_triggered = (
+        assessment.match_score >= app_settings.resume_gen_threshold
+        and assessment.is_relevant
+    )
+    return assessment
 
 
 @_jobs_router.post("/assess", response_model=JobAssessment)
@@ -485,8 +485,7 @@ Return ONLY valid JSON array, no explanation. Example: ["keyword1", "keyword2"]"
     try:
         import asyncio
         raw = await asyncio.to_thread(llm.complete, system, user)
-        cleaned = _clean_json(raw)
-        suggestions = json.loads(cleaned)
+        suggestions = json.loads(_strip_fences(raw))
         if isinstance(suggestions, list):
             input_lower = {k.lower() for k in req.keywords}
             suggestions = [s for s in suggestions if isinstance(s, str) and s.lower() not in input_lower]
@@ -525,23 +524,10 @@ Return ONLY valid JSON array. Example: ["palavra1", "palavra2"]"""
     try:
         import asyncio
         raw = await asyncio.to_thread(llm.complete, system, user)
-        cleaned = _clean_json(raw)
-        translations = json.loads(cleaned)
+        translations = json.loads(_strip_fences(raw))
         if isinstance(translations, list):
             return {"translations": [t for t in translations if isinstance(t, str)][:20]}
     except Exception as exc:
         logger.warning("Keyword translation failed: %s", exc)
 
     return {"translations": []}
-
-
-def _clean_json(text: str) -> str:
-    """Strip markdown fences and whitespace from an LLM JSON response."""
-    cleaned = text.strip()
-    if cleaned.startswith("```"):
-        cleaned = re.sub(r'^```[a-zA-Z]*\n?', '', cleaned)
-        cleaned = re.sub(r'\n?```\s*$', '', cleaned)
-        cleaned = cleaned.strip()
-    if cleaned.lower().startswith("json"):
-        cleaned = cleaned[4:].strip()
-    return cleaned

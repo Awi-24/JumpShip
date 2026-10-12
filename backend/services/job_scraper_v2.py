@@ -6,14 +6,18 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import re
 import time
 import json as _json
-from typing import Any
+from datetime import datetime, timedelta, timezone
+from typing import Any, NamedTuple
+
+from backend.services.text_match import fold
 
 logger = logging.getLogger(__name__)
 
-# Simple in-memory cache with TTL
-_search_cache: dict[str, tuple[float, list[dict]]] = {}
+# Simple in-memory cache with TTL: value = (timestamp, jobs, per-source status)
+_search_cache: dict[str, tuple[float, list[dict], dict]] = {}
 _CACHE_TTL = 900  # 15 minutes
 
 # Sites handled by JobSpy
@@ -25,10 +29,6 @@ _EXTRA_SITES = {"remoteok", "arbeitnow", "gupy", "programathor", "trampos", "gre
 # When the user searches "Remote" or a non-US location, we swap in a broad US fallback.
 _ZIPRECRUITER_US_FALLBACK = "United States"
 
-# Glassdoor is heavily protected; we silently add "google" as a parallel source
-# whenever glassdoor is selected so we always get some results.
-_GLASSDOOR_FALLBACK_SITE = "google"
-
 
 _US_STATES = {
     "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA",
@@ -36,17 +36,193 @@ _US_STATES = {
     "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT",
     "VA","WA","WV","WI","WY","DC",
 }
+# "City, ST" codes shared with Brazilian states ("Joinville, SC", "Belém, PA"): too ambiguous to call US.
+_US_STATES_AMBIGUOUS = {"AL", "MA", "MT", "MS", "PA", "SC"}
+_US_STATE_RE = re.compile(r",\s*([A-Z]{2})\b")
+
+
+# ── Location resolution ───────────────────────────────────────────────────────
+# Keys are JobSpy country names (valid `country_indeed` values); values are folded aliases.
+_COUNTRIES: dict[str, tuple[str, ...]] = {
+    "brazil": ("brasil", "brazil"),
+    "usa": ("united states", "usa", "us", "estados unidos"),
+    "canada": ("canada",),
+    "uk": ("united kingdom", "uk", "england", "scotland", "wales", "great britain"),
+    "germany": ("germany", "deutschland", "alemanha"),
+    "france": ("france",),
+    "spain": ("spain", "espana"),
+    "portugal": ("portugal",),
+    "netherlands": ("netherlands", "nederland", "holland"),
+    "ireland": ("ireland",),
+    "switzerland": ("switzerland", "schweiz", "suisse"),
+    "sweden": ("sweden", "sverige"),
+    "poland": ("poland", "polska"),
+    "mexico": ("mexico",),
+    "argentina": ("argentina",),
+    "colombia": ("colombia",),
+    "chile": ("chile",),
+    "australia": ("australia",),
+    "india": ("india",),
+    "japan": ("japan",),
+    "singapore": ("singapore",),
+    "italy": ("italy", "italia"),
+    "austria": ("austria",),
+    "belgium": ("belgium",),
+    "norway": ("norway",),
+    "denmark": ("denmark",),
+    "finland": ("finland",),
+    "israel": ("israel",),
+    "china": ("china",),
+    "peru": ("peru",),
+    "uruguay": ("uruguay",),
+    "venezuela": ("venezuela",),
+    "ecuador": ("ecuador",),
+    "costa rica": ("costa rica",),
+    "panama": ("panama",),
+    "new zealand": ("new zealand",),
+    "south africa": ("south africa",),
+    "turkey": ("turkey", "turkiye"),
+    "ukraine": ("ukraine",),
+    "romania": ("romania",),
+    "greece": ("greece",),
+    "hungary": ("hungary",),
+    "czech republic": ("czech republic", "czechia"),
+    "hong kong": ("hong kong",),
+    "indonesia": ("indonesia",),
+    "philippines": ("philippines",),
+    "vietnam": ("vietnam",),
+    "thailand": ("thailand",),
+    "malaysia": ("malaysia",),
+    "south korea": ("south korea",),
+    "united arab emirates": ("united arab emirates", "uae"),
+}
+# Only recognised in job locations (so "Salvador" is not mistaken for "El Salvador"); not JobSpy countries.
+_OTHER_COUNTRIES: dict[str, tuple[str, ...]] = {
+    "el salvador": ("el salvador", "san salvador"),
+    "paraguay": ("paraguay",),
+    "bolivia": ("bolivia",),
+}
+_CITIES: dict[str, tuple[str, ...]] = {
+    "brazil": (
+        "sao paulo", "rio de janeiro", "belo horizonte", "curitiba", "porto alegre", "brasilia",
+        "florianopolis", "salvador", "recife", "fortaleza", "campinas", "manaus", "goiania", "belem",
+        "natal", "maceio", "joao pessoa", "teresina", "campo grande", "aracaju", "macapa", "boa vista",
+        "palmas", "porto velho", "rio branco", "joinville", "blumenau", "londrina", "maringa",
+        "uberlandia", "sorocaba", "santos", "ribeirao preto", "sao jose dos campos", "niteroi",
+        "cuiaba", "sao luis", "osasco", "barueri",
+    ),
+    "usa": (
+        "new york", "san francisco", "seattle", "austin", "boston", "chicago", "los angeles", "miami",
+        "denver", "san jose", "atlanta", "dallas", "houston",
+    ),
+    "canada": ("toronto", "vancouver", "montreal", "ottawa", "calgary"),
+    "uk": ("london", "manchester", "edinburgh"),
+    "germany": ("berlin", "munich", "munchen", "hamburg", "frankfurt", "koln", "cologne", "stuttgart", "dusseldorf"),
+    "france": ("paris", "lyon", "toulouse"),
+    "spain": ("madrid", "barcelona", "valencia", "las palmas"),
+    "portugal": ("lisbon", "porto"),
+    "netherlands": ("amsterdam", "rotterdam"),
+    "ireland": ("dublin", "cork"),
+    "switzerland": ("zurich", "geneva", "basel"),
+    "sweden": ("stockholm", "gothenburg", "malmo"),
+    "poland": ("warsaw", "krakow", "wroclaw"),
+    "mexico": ("mexico city", "guadalajara", "monterrey"),
+    "argentina": ("buenos aires", "cordoba"),
+    "colombia": ("bogota", "medellin"),
+    "chile": ("santiago",),
+    "australia": ("sydney", "melbourne", "brisbane"),
+    "india": ("bengaluru", "bangalore", "mumbai", "hyderabad", "pune"),
+    "japan": ("tokyo", "osaka"),
+}
+_COUNTRY_DISPLAY = {"usa": "United States", "uk": "United Kingdom"}
+
+
+def _alt(words) -> str:
+    return "|".join(re.escape(w) for w in sorted(words, key=len, reverse=True))
+
+
+_COUNTRY_OF = {a: k for k, al in {**_COUNTRIES, **_OTHER_COUNTRIES}.items() for a in al}
+_CITY_OF = {c: k for k, cs in _CITIES.items() for c in cs}
+_COUNTRY_RE = re.compile(rf"(?<!\w)(?:{_alt(_COUNTRY_OF)})(?!\w)")
+_CITY_RE = re.compile(rf"(?<!\w)(?:{_alt(_CITY_OF)})(?!\w)")
+
+_REMOTE_LABELS = {"remote", "remoto", "anywhere", "worldwide", "global"}
+_HYBRID_LABELS = {"hybrid", "hibrido"}
+_REMOTE_WORDS = ("remote", "remoto", "home office", "anywhere", "distributed",
+                 "teletrabalho", "trabalho remoto", "wfh", "100% remoto", "fully remote")
+_HYBRID_WORDS = ("híbrido", "hibrido", "hybrid", "modelo híbrido", "home office/escritório")
+
+
+class ResolvedLocation(NamedTuple):
+    board_location: str   # string sent to the job boards ("" = none)
+    country_indeed: str   # JobSpy country name for Indeed/Glassdoor
+    is_remote: bool
+    hybrid: bool
+    country_key: str      # country used by the post-filter ("" = any)
+    plain_location: str = ""  # board_location without the appended country (Glassdoor rejects "City, Country")
+
+
+def _job_countries(loc: str) -> set[str]:
+    """Countries a location string points to (country names beat cities; 'City, ST' means US)."""
+    folded = fold(loc)
+    found = {_COUNTRY_OF[m] for m in _COUNTRY_RE.findall(folded)}
+    if not found:
+        found = {_CITY_OF[m] for m in _CITY_RE.findall(folded)}
+    if not found and any(
+        st in _US_STATES and st not in _US_STATES_AMBIGUOUS for st in _US_STATE_RE.findall(loc or "")
+    ):
+        found = {"usa"}
+    return found
+
 
 def _is_us_location(location: str) -> bool:
     """Return True when the location string looks like a US place."""
-    loc = location.upper()
-    if "UNITED STATES" in loc or "USA" in loc:
+    return "usa" in _job_countries(location)
+
+
+def resolve_location(label: str | None) -> ResolvedLocation:
+    """Turn a UI location label ("Brasil (Remoto)", "São Paulo", "Hybrid"...) or free text into board inputs."""
+    raw = (label or "").strip()
+    m = re.match(r"^(.*?)\s*\(([^)]*)\)\s*$", raw)
+    base_raw, qual = (m.group(1).strip(), fold(m.group(2))) if m else (raw, "")
+    base = fold(base_raw)
+    if base in _REMOTE_LABELS:
+        if qual and "remot" not in qual and "todo o pais" not in qual and "country" not in qual:
+            return resolve_location(m.group(2))._replace(is_remote=True)  # "Remote (Brazil)"
+        return ResolvedLocation("Remote", "usa", True, False, "", "Remote")
+    if base in _HYBRID_LABELS:
+        return ResolvedLocation("", "usa", False, True, "")
+
+    found = _job_countries(base_raw)
+    ck = next(iter(found)) if len(found) == 1 else ""
+    name = _COUNTRY_DISPLAY.get(ck, ck.title())
+    if base in _COUNTRY_OF:
+        board = name
+    elif base in _CITY_OF:
+        board = f"{base_raw}, {name}"
+    else:
+        board = base_raw
+    plain = name if base in _COUNTRY_OF else base_raw
+    return ResolvedLocation(board, ck if ck in _COUNTRIES else "usa", "remot" in qual, False, ck, plain)
+
+
+def _location_matches(job_loc: str, search: ResolvedLocation | str, job_is_remote: bool | None = None) -> bool:
+    """
+    Post-filter: check if a scraped job location is compatible with what the user searched.
+    Returns True if the job should be kept. Unknown job location -> keep.
+    """
+    if isinstance(search, str):
+        search = resolve_location(search)
+    jl = (job_loc or "").strip()
+    if not jl or jl.lower() in ("nan", "none"):
         return True
-    # "City, ST" pattern
-    parts = loc.split(",")
-    if len(parts) == 2 and parts[1].strip() in _US_STATES:
+    remote_job = job_is_remote if job_is_remote is not None else any(w in jl.lower() for w in _REMOTE_WORDS)
+    if search.is_remote and not remote_job:
+        return False
+    if not search.country_key:
         return True
-    return False
+    found = _job_countries(jl)
+    return not found or search.country_key in found
 
 
 # Lightweight static PT-BR equivalents for the most common tech search terms.
@@ -85,12 +261,8 @@ def _pt_keywords(keywords: list[str]) -> list[str]:
 
 
 def _normalize_text(s: str) -> str:
-    """Normalize a string for fuzzy comparison."""
-    import re
-    s = s.lower().strip()
-    s = re.sub(r'[^a-z0-9 ]', '', s)
-    s = re.sub(r'\s+', ' ', s)
-    return s
+    """Normalize a string for fuzzy comparison (accent-folded, keeps unicode word chars)."""
+    return re.sub(r"\s+", " ", re.sub(r"[^\w ]", "", fold(s))).strip()
 
 
 def _dedup_jobs(jobs: list[dict]) -> list[dict]:
@@ -105,71 +277,6 @@ def _dedup_jobs(jobs: list[dict]) -> list[dict]:
     return unique
 
 
-_BR_LOCATION_TERMS = {
-    "brasil", "brazil", "são paulo", "sao paulo", "rio de janeiro", "belo horizonte",
-    "curitiba", "porto alegre", "brasília", "brasilia", "fortaleza", "manaus",
-    "recife", "salvador", "campinas", "florianópolis", "florianopolis",
-    "goiânia", "goiania", "belém", "belem", "natal", "maceió", "maceio",
-    "joão pessoa", "joao pessoa", "teresina", "campo grande", "aracaju",
-    "macapá", "macapa", "boa vista", "palmas", "porto velho", "rio branco",
-    # abbreviation used in job boards
-    " br", ", br",
-}
-
-_BR_COUNTRY_EXCLUSIONS = {
-    "mexico", "méxico", "argentina", "colombia", "chile", "peru", "venezuela",
-    "spain", "españa", "portugal", "united states", "usa", "canada", "uk",
-    "germany", "france", "italy", "netherlands", "india", "china", "australia",
-}
-
-def _is_brazil_location(loc: str) -> bool:
-    """True if the location string matches a Brazilian city/country."""
-    l = loc.lower()
-    for term in _BR_LOCATION_TERMS:
-        if term in l:
-            return True
-    return False
-
-def _is_excluded_location(loc: str, target: str) -> bool:
-    """True if the job location clearly belongs to a country different from target."""
-    if not loc or loc.lower() in ("nan", "", "none", "remote", "remoto", "anywhere"):
-        return False  # remote jobs — keep
-    l = loc.lower()
-    for term in _BR_COUNTRY_EXCLUSIONS:
-        if term in l:
-            return True
-    return False
-
-def _location_matches(job_loc: str, search_loc: str) -> bool:
-    """
-    Post-filter: check if a scraped job location is compatible with what the user searched.
-    Returns True if the job should be kept.
-    """
-    if not search_loc:
-        return True
-    sl = search_loc.lower().strip()
-    jl = job_loc.lower().strip() if job_loc else ""
-
-    # Remote searches — keep all remote/hybrid jobs anywhere
-    if sl in ("remote", "remoto", "anywhere", "worldwide"):
-        return jl == "" or any(w in jl for w in ("remote", "remoto", "anywhere", "home office", "teletrabalho"))
-
-    # Brazil search — keep BR locations + remote jobs, exclude clear non-BR countries
-    br_search = any(t in sl for t in ("brasil", "brazil", "br"))
-    if br_search:
-        if not jl or jl in ("nan", "", "none"):
-            return True  # unknown location — keep
-        if any(w in jl for w in ("remote", "remoto", "anywhere", "home office", "worldwide", "teletrabalho")):
-            return True  # remote jobs are fine for any country search
-        if _is_brazil_location(jl):
-            return True
-        if _is_excluded_location(jl, sl):
-            return False
-        return True  # uncertain — keep rather than miss
-
-    return True  # no strict filtering for other locations
-
-
 def _extract_domain(url: str) -> str:
     try:
         from urllib.parse import urlparse
@@ -181,65 +288,130 @@ def _extract_domain(url: str) -> str:
     return ""
 
 
+def _infer_work_mode(location: str, description: str, raw_is_remote) -> tuple[bool | None, bool]:
+    """Remote/hybrid heuristic from the board flag + location string + description. -> (is_remote, hybrid)."""
+    location_str = str(location or "").lower()
+    desc_lower = str(description or "")[:500].lower()
+
+    if raw_is_remote is True or str(raw_is_remote).lower() == "true":
+        return True, False
+    if any(w in location_str for w in _REMOTE_WORDS):
+        return True, False
+    if any(w in location_str for w in _HYBRID_WORDS):
+        return None, True
+    if any(w in desc_lower for w in _REMOTE_WORDS):
+        return True, False
+    if any(w in desc_lower for w in _HYBRID_WORDS):
+        return None, True
+    return (False if location_str and location_str != "nan" else None), False
+
+
+def _enrich_extra(job: dict) -> None:
+    """Fill is_remote/tags for extra-source jobs (JobSpy rows get them in _search_jobspy)."""
+    explicit = job.get("is_remote")
+    tags = list(job.get("tags") or [])
+    if explicit is None and "hybrid" in tags:
+        is_remote, hybrid = None, True
+    elif explicit is not None:
+        is_remote, hybrid = explicit, False
+    else:
+        is_remote, hybrid = _infer_work_mode(job.get("location", ""), job.get("description", ""), None)
+    job["is_remote"] = is_remote
+    job["tags"] = list(dict.fromkeys(tags + _basic_tags(job, is_remote, hybrid)))
+
+
+def _work_mode_ok(job: dict, mode: str) -> bool:
+    if mode == "remote":
+        return job.get("is_remote") is True
+    if mode == "hybrid":
+        return "hybrid" in (job.get("tags") or [])
+    if mode == "onsite":
+        return job.get("is_remote") is False and "hybrid" not in (job.get("tags") or [])
+    return True
+
+
+def _within_hours(posted: str, hours_old: int | None) -> bool:
+    """False only when `posted` parses and is older than hours_old. Undated jobs are kept."""
+    posted = str(posted or "").strip()
+    if not hours_old or not posted:
+        return True
+    try:
+        dt = datetime.fromisoformat(posted.replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    if len(posted) <= 10:  # date only: count the whole day
+        dt += timedelta(days=1)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - dt).total_seconds() <= hours_old * 3600
+
+
 async def search_jobs(
     keywords: list[str],
     location: str = "Remote",
     job_type: str = "fulltime",
     sites: list[str] | None = None,
     results_wanted: int = 20,
+    hours_old: int | None = None,
+    work_mode: str = "any",
+    status_out: dict | None = None,
 ) -> list[dict[str, Any]]:
     """
-    Search for jobs using JobSpy (for major boards) and extra scrapers,
+    Search for jobs using JobSpy (one call per board) and extra scrapers,
     merge and return a deduplicated list.
-    """
-    # Check cache
-    cache_key = _json.dumps({"kw": sorted(keywords), "loc": location, "jt": job_type, "sites": sorted(sites or []), "n": results_wanted}, sort_keys=True)
-    if cache_key in _search_cache:
-        ts, cached = _search_cache[cache_key]
-        if time.time() - ts < _CACHE_TTL:
-            logger.info("Cache hit for search: %s", cache_key[:80])
-            return cached
 
+    If `status_out` is given it is filled with {site: {"count": int, "error": str | None}}
+    for every requested site.
+    """
     if sites is None:
         sites = ["indeed", "linkedin", "glassdoor"]
+    job_type = None if (job_type or "all").lower() in ("all", "") else job_type
+    work_mode = (work_mode or "any").lower().replace("-", "").replace("_", "")
 
-    jobspy_sites = [s for s in sites if s in _JOBSPY_SITES]
-    extra_sites = [s for s in sites if s in _EXTRA_SITES]
+    cache_key = _json.dumps({"kw": sorted(keywords), "loc": location, "jt": job_type, "sites": sorted(sites),
+                             "n": results_wanted, "h": hours_old, "wm": work_mode}, sort_keys=True)
+    if cache_key in _search_cache:
+        ts, cached, cached_status = _search_cache[cache_key]
+        if time.time() - ts < _CACHE_TTL:
+            logger.info("Cache hit for search: %s", cache_key[:80])
+            if status_out is not None:
+                status_out.update(cached_status)
+            return cached
 
-    # When Glassdoor is selected, also run Google Jobs in parallel as a fallback —
-    # Glassdoor's anti-bot measures frequently block results entirely.
-    if "glassdoor" in jobspy_sites and _GLASSDOOR_FALLBACK_SITE not in jobspy_sites:
-        jobspy_sites = list(jobspy_sites) + [_GLASSDOOR_FALLBACK_SITE]
+    resolved = resolve_location(location)
+    remote = resolved.is_remote or work_mode == "remote"
+    if remote and not resolved.is_remote:
+        resolved = resolved._replace(is_remote=True)
+    mode = work_mode if work_mode != "any" else ("remote" if resolved.is_remote else "hybrid" if resolved.hybrid else "any")
+    board_loc = resolved.board_location
 
-    tasks = []
-    if jobspy_sites:
-        # ZipRecruiter needs a US location — run it separately with the fallback if needed.
-        if "zip_recruiter" in jobspy_sites:
-            other_sites = [s for s in jobspy_sites if s != "zip_recruiter"]
-            if other_sites:
-                tasks.append(_search_jobspy(keywords, location, job_type, other_sites, results_wanted))
-            zr_location = location if _is_us_location(location) else _ZIPRECRUITER_US_FALLBACK
-            tasks.append(_search_jobspy(keywords, zr_location, job_type, ["zip_recruiter"], results_wanted))
-        else:
-            tasks.append(_search_jobspy(keywords, location, job_type, jobspy_sites, results_wanted))
+    named: list[tuple[str, Any]] = []
+    for site in sites:
+        if site in _JOBSPY_SITES:
+            site_loc = resolved.plain_location if site == "glassdoor" else board_loc
+            if site == "zip_recruiter":
+                site_loc = board_loc if _is_us_location(board_loc) else _ZIPRECRUITER_US_FALLBACK
+            named.append((site, _search_jobspy(
+                keywords, site_loc, job_type, [site], results_wanted,
+                country_indeed=resolved.country_indeed, is_remote=remote, hours_old=hours_old,
+            )))
+        elif site in _EXTRA_SITES:
+            # BR/JumpShip sources benefit from PT-BR keywords — translate on the fly
+            kws = _pt_keywords(keywords) if site in {"gupy", "programathor", "trampos", "greenhouse", "lever", "workday", "playwright"} else keywords
+            named.append((site, _search_extra(site, kws, board_loc, results_wanted, remote=remote)))
 
-    # BR/JumpShip sources benefit from PT-BR keywords — translate on the fly
-    _BR_AND_JUMPSHIP = {"gupy", "programathor", "trampos", "greenhouse", "lever", "workday", "playwright"}
-    br_sites = [s for s in extra_sites if s in _BR_AND_JUMPSHIP]
-    other_extra = [s for s in extra_sites if s not in _BR_AND_JUMPSHIP]
-    br_keywords = _pt_keywords(keywords)
-    for site in other_extra:
-        tasks.append(_search_extra(site, keywords, location, results_wanted))
-    for site in br_sites:
-        tasks.append(_search_extra(site, br_keywords, location, results_wanted))
-
-    results_nested = await asyncio.gather(*tasks, return_exceptions=True)
+    status: dict[str, dict] = {s: {"count": 0, "error": None} for s in sites}
+    for s in sites:
+        if s not in _JOBSPY_SITES and s not in _EXTRA_SITES:
+            status[s]["error"] = "unknown site"
+    results_nested = await asyncio.gather(*[c for _, c in named], return_exceptions=True)
 
     all_results: list[dict] = []
     seen_ids: set[str] = set()
-    for batch in results_nested:
-        if isinstance(batch, Exception):
-            logger.error("Job search batch failed: %s", batch)
+    for (site, _), batch in zip(named, results_nested):
+        if isinstance(batch, BaseException):
+            logger.error("Job search batch '%s' failed: %s", site, batch)
+            status[site]["error"] = f"{type(batch).__name__}: {str(batch)[:120]}"
             continue
         for job in batch:
             if job["id"] not in seen_ids:
@@ -247,25 +419,35 @@ async def search_jobs(
                 all_results.append(job)
 
     all_results = _dedup_jobs(all_results)
+    for j in all_results:
+        if j.get("site") in _EXTRA_SITES:
+            _enrich_extra(j)
 
-    # Post-filter by location (JobSpy doesn't guarantee country-level filtering).
-    # greenhouse/lever/playwright hardcode "Brasil" as location — bypass filter for them.
-    # workday returns real location strings (e.g. "Boadilla del Monte") — keep filtering it.
-    _JUMPSHIP_BYPASS = {"greenhouse", "lever", "playwright"}
+    # Post-filter by location (boards don't guarantee country-level filtering).
+    # Only playwright hardcodes "Brasil" as location, so it is exempt.
     before = len(all_results)
     all_results = [
         j for j in all_results
-        if j.get("site") in _JUMPSHIP_BYPASS or _location_matches(j.get("location", ""), location)
+        if j.get("site") == "playwright" or _location_matches(j.get("location", ""), resolved, j.get("is_remote"))
     ]
     if before != len(all_results):
         logger.info("Location filter '%s': kept %d/%d jobs", location, len(all_results), before)
 
-    # Store in cache
-    _search_cache[cache_key] = (time.time(), all_results)
-    # Evict old entries
+    all_results = [j for j in all_results if _work_mode_ok(j, mode)]
+    # JobSpy filters hours_old itself; the other sources get it here.
+    all_results = [j for j in all_results if j.get("site") not in _EXTRA_SITES or _within_hours(j.get("posted_date", ""), hours_old)]
+
+    for j in all_results:
+        if j.get("site") in status:
+            status[j["site"]]["count"] += 1
+    if status_out is not None:
+        status_out.update(status)
+
+    # Don't cache empty or partially failed searches — retry them next time.
+    if all_results and not any(v["error"] for v in status.values()):
+        _search_cache[cache_key] = (time.time(), all_results, status)
     now = time.time()
-    expired = [k for k, (ts, _) in _search_cache.items() if now - ts > _CACHE_TTL]
-    for k in expired:
+    for k in [k for k, (ts, _, _) in _search_cache.items() if now - ts > _CACHE_TTL]:
         del _search_cache[k]
 
     return all_results
@@ -274,9 +456,12 @@ async def search_jobs(
 async def _search_jobspy(
     keywords: list[str],
     location: str,
-    job_type: str,
+    job_type: str | None,
     sites: list[str],
     results_wanted: int,
+    country_indeed: str = "usa",
+    is_remote: bool = False,
+    hours_old: int | None = None,
 ) -> list[dict]:
     # Use OR between keywords so job boards return results matching ANY keyword,
     # not requiring ALL. Most boards (LinkedIn, Indeed, Glassdoor) support this.
@@ -296,11 +481,15 @@ async def _search_jobspy(
             scrape_jobs,
             site_name=sites,
             search_term=search_term,
-            location=location,
+            location=location or None,
             results_wanted=results_wanted,
             job_type=job_type,
-            linkedin_fetch_description=True,
+            country_indeed=country_indeed,
+            is_remote=is_remote,
+            hours_old=hours_old,
+            fetch_description="linkedin" in sites,
             description_format="markdown",
+            verbose=0,
         )
     except Exception as exc:
         logger.error("JobSpy scraping failed: %s", exc)
@@ -322,52 +511,37 @@ async def _search_jobspy(
         if description == "nan":
             description = ""
 
-        # Derive is_remote from jobspy field + location string + description keywords
-        raw_is_remote = row.get("is_remote")
-        location_str = str(row.get("location", "")).lower()
-        desc_lower = description[:500].lower()
-
-        _remote_words = ("remote", "remoto", "home office", "anywhere", "distributed",
-                         "teletrabalho", "trabalho remoto", "wfh", "100% remoto", "fully remote")
-        _hybrid_words = ("híbrido", "hibrido", "hybrid", "modelo híbrido", "home office/escritório")
-
-        if raw_is_remote is True or str(raw_is_remote).lower() == "true":
-            is_remote = True
-        elif any(w in location_str for w in _remote_words):
-            is_remote = True
-        elif any(w in location_str for w in _hybrid_words):
-            is_remote = None  # hybrid
-        elif any(w in desc_lower for w in _remote_words):
-            is_remote = True
-        elif any(w in desc_lower for w in _hybrid_words):
-            is_remote = None
-        else:
-            is_remote = False if location_str and location_str not in ("nan", "") else None
-
-        tags = _basic_tags(row, is_remote)
+        is_remote_job, hybrid = _infer_work_mode(row.get("location", ""), description, row.get("is_remote"))
+        tags = _basic_tags(row, is_remote_job, hybrid)
 
         results.append(
             {
                 "id": job_id,
-                "title": str(row.get("title", "")),
-                "company": str(row.get("company", "")),
+                "title": _cell(row.get("title")),
+                "company": _cell(row.get("company")),
                 "company_url": company_url,
-                "location": str(row.get("location", "")),
-                "job_type": str(row.get("job_type", "")),
+                "location": _cell(row.get("location")),
+                "job_type": _cell(row.get("job_type")),
                 "salary_range": _format_salary(row),
-                "posted_date": str(row.get("date_posted", "")),
+                "posted_date": _cell(row.get("date_posted")),
                 "description": description,
-                "url": str(row.get("job_url", "")),
-                "site": str(row.get("site", "")),
+                "url": _cell(row.get("job_url")),
+                "site": _cell(row.get("site")),
                 "match_score": None,
-                "is_remote": is_remote,
+                "is_remote": is_remote_job,
                 "tags": tags,
             }
         )
     return results
 
 
-async def _search_extra(site: str, keywords: list[str], location: str, results_wanted: int) -> list[dict]:
+def _cell(v) -> str:
+    """DataFrame cell → str; JobSpy 1.3 yields None/NaN for missing fields."""
+    s = "" if v is None else str(v)
+    return "" if s in ("nan", "None", "NaT") else s
+
+
+async def _search_extra(site: str, keywords: list[str], location: str, results_wanted: int, remote: bool = False) -> list[dict]:
     from backend.services.extra_sources import fetch_remoteok, fetch_arbeitnow
     from backend.services.br_sources import fetch_gupy, fetch_programathor, fetch_trampos
     if site == "remoteok":
@@ -375,7 +549,7 @@ async def _search_extra(site: str, keywords: list[str], location: str, results_w
     elif site == "arbeitnow":
         return await fetch_arbeitnow(keywords, results_wanted)
     elif site == "gupy":
-        return await fetch_gupy(keywords, location, results_wanted)
+        return await fetch_gupy(keywords, location, results_wanted, remote=remote)
     elif site == "programathor":
         return await fetch_programathor(keywords, results_wanted)
     elif site == "trampos":
@@ -395,7 +569,7 @@ async def _search_extra(site: str, keywords: list[str], location: str, results_w
     return []
 
 
-def _basic_tags(row, is_remote: bool | None) -> list[str]:
+def _basic_tags(row, is_remote: bool | None, hybrid: bool = False) -> list[str]:
     """Generate lightweight tags from raw job data (no LLM needed)."""
     tags: list[str] = []
 
@@ -403,7 +577,7 @@ def _basic_tags(row, is_remote: bool | None) -> list[str]:
     location_str = str(row.get("location", "")).lower()
     if is_remote is True:
         tags.append("remote")
-    elif any(w in location_str for w in ("híbrido", "hibrido", "hybrid")):
+    elif hybrid or any(w in location_str for w in ("híbrido", "hibrido", "hybrid")):
         tags.append("hybrid")
     elif is_remote is False and location_str not in ("nan", "", "none"):
         tags.append("on-site")

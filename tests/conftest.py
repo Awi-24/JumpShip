@@ -13,8 +13,8 @@ from unittest.mock import AsyncMock, MagicMock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # ── jobspy stub ──────────────────────────────────────────────────────────────
-# The real jobspy depends on tls_client which is not installed in the test
-# environment. Stub it out in sys.modules *before* any backend module imports
+# The real jobspy pulls in heavy network deps (curl_cffi) and would hit live boards.
+# Stub it out in sys.modules *before* any backend module imports
 # it, so all `from jobspy import scrape_jobs` calls get our MagicMock.
 _mock_jobspy = MagicMock()
 _mock_jobspy.scrape_jobs = MagicMock()

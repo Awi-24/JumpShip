@@ -17,15 +17,10 @@ class LLMService:
     """Thin Ollama wrapper used by health checks and the AI evaluator."""
 
     def __init__(self, provider: str = "ollama", model: str = "", **kwargs: Any):
-        import os
+        from backend.services.llm_client import ollama_base_url
         self.provider = provider
         self.model    = model
-        self.ollama_base_url = (
-            kwargs.get("ollama_base_url")
-            or os.getenv("OLLAMA_HOST")
-            or os.getenv("OLLAMA_BASE_URL")
-            or "http://localhost:11434"
-        )
+        self.ollama_base_url = kwargs.get("ollama_base_url") or ollama_base_url()
 
     async def complete(self, system_prompt: str, user_prompt: str) -> str:
         """Send a single completion via Ollama OpenAI-compat endpoint."""
@@ -70,5 +65,4 @@ def get_llm_service() -> LLMService:
     return LLMService(
         provider         = "ollama",
         model            = settings.llm_model,
-        ollama_base_url  = settings.ollama_base_url,
     )

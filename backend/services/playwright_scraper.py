@@ -16,6 +16,7 @@ import re
 from urllib.parse import urlparse
 
 from backend.services.career_sources import load_sources
+from backend.services.text_match import matches_any
 
 logger = logging.getLogger(__name__)
 
@@ -198,8 +199,6 @@ async def _container_title(el) -> str:
 async def _extract_jobs(page, source: dict, keywords: list[str]) -> list[dict]:
     company = source.get("name", "")
     base_url = source.get("_effective_url") or source["listing_url"]
-    kw_lower = [k.lower() for k in keywords] if keywords else []
-
     links: list[dict] = []
 
     for sel in _JOB_LINK_SELECTORS:
@@ -253,8 +252,8 @@ async def _extract_jobs(page, source: dict, keywords: list[str]) -> list[dict]:
             continue
         seen.add(url)
 
-        if kw_lower and title:
-            if not any(kw in title.lower() for kw in kw_lower):
+        if title:
+            if not matches_any(keywords, title):
                 continue
 
         if not title:

@@ -22,7 +22,7 @@ interface SearchProps {
   onNavigate: (page: 'tracker') => void;
 }
 
-const ALL_SITES = ['linkedin', 'indeed', 'glassdoor', 'zip_recruiter', 'remoteok', 'arbeitnow', 'gupy', 'programathor', 'trampos'];
+const ALL_SITES = ['linkedin', 'indeed', 'glassdoor', 'remoteok', 'arbeitnow', 'gupy', 'programathor', 'trampos'];
 const JUMPSHIP_SITES = ['greenhouse', 'lever', 'workday', 'playwright'];
 const JUMPSHIP_SITE_LABELS: Record<string, string> = {
   greenhouse: 'Greenhouse',
@@ -31,6 +31,19 @@ const JUMPSHIP_SITE_LABELS: Record<string, string> = {
   playwright: 'Career Pages',
 };
 const PAGE_SIZE = 20;
+const POSTED_OPTIONS = [
+  { value: 'any', label: 'Any time' },
+  { value: '24', label: 'Last 24 hours' },
+  { value: '72', label: 'Last 3 days' },
+  { value: '168', label: 'Last week' },
+  { value: '720', label: 'Last month' },
+];
+const WORK_MODE_OPTIONS = [
+  { value: 'any', label: 'Any' },
+  { value: 'remote', label: 'Remote' },
+  { value: 'hybrid', label: 'Hybrid' },
+  { value: 'onsite', label: 'On-site' },
+];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function parseSalary(s: string): number {
@@ -43,6 +56,16 @@ function parseDate(s: string): number {
   if (!s) return 0;
   const d = new Date(s);
   return isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
+// API key for the active provider (all providers, not just openai/anthropic/groq)
+function llmApiKeyFor(s: ReturnType<typeof useSettings>['settings']): string {
+  const keyMap: Record<string, string> = {
+    openai: s.openaiKey, anthropic: s.anthropicKey, groq: s.groqKey,
+    gemini: s.geminiKey, mistral: s.mistralKey, deepseek: s.deepseekKey,
+    huggingface: s.huggingfaceKey, openrouter: s.openrouterKey, cohere: s.cohereKey,
+  };
+  return keyMap[s.llmProvider] || '';
 }
 
 // ── Search History (localStorage) ────────────────────────────────────────────
@@ -133,6 +156,8 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const [keywords, setKeywords] = useState<string[]>(resumeCache?.keywords ?? []);
   const [location, setLocation] = useState(settings.defaultLocation);
   const [jobType, setJobType] = useState('all');
+  const [postedWithin, setPostedWithin] = useState('any');
+  const [workMode, setWorkMode] = useState<'any' | 'remote' | 'hybrid' | 'onsite'>('any');
   const [sortBy, setSortBy] = useState<SortOption>('match');
   const [newKeyword, setNewKeyword] = useState('');
   const [activeSites, setActiveSites] = useState<string[]>(
@@ -167,7 +192,8 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const [assessingIds, setAssessingIds] = useState<Set<string>>(new Set());
 
   const jobSearch = useJobSearch();
-  const jobs: JobResult[] = jobSearch.data || [];
+  const jobs: JobResult[] = useMemo(() => jobSearch.data?.jobs ?? [], [jobSearch.data]);
+  const sources = jobSearch.data?.sources ?? {};
 
   // Poll LLM health
   useEffect(() => {
@@ -189,10 +215,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const handleResumeUpload = useCallback(async (file: File) => {
     setResumeError(null);
     const s = settingsRef.current;
-    const apiKey =
-      s.llmProvider === 'openai'    ? s.openaiKey :
-      s.llmProvider === 'anthropic' ? s.anthropicKey :
-      s.llmProvider === 'groq'      ? s.groqKey : '';
+    const apiKey = llmApiKeyFor(s);
 
     let profile;
     try {
@@ -275,15 +298,10 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   // ── Build LLM body fields ──────────────────────────────────────────────────
   const getLlmFields = useCallback((featureModel?: string) => {
     const s = settingsRef.current;
-    const keyMap: Record<string, string> = {
-      openai: s.openaiKey, anthropic: s.anthropicKey, groq: s.groqKey,
-      gemini: s.geminiKey, mistral: s.mistralKey, deepseek: s.deepseekKey,
-      huggingface: s.huggingfaceKey, openrouter: s.openrouterKey, cohere: s.cohereKey,
-    };
     return {
       llm_provider: s.llmProvider,
       llm_model:    featureModel || s.llmModel || undefined,
-      llm_api_key:  keyMap[s.llmProvider] || undefined,
+      llm_api_key:  llmApiKeyFor(s) || undefined,
       llm_base_url: s.ollamaUrl || undefined,
     };
   }, []);
@@ -428,15 +446,14 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   // ── Search ─────────────────────────────────────────────────────────────────
   const handleSearch = () => {
     const s = settingsRef.current;
-    const apiKey =
-      s.llmProvider === 'openai'    ? s.openaiKey :
-      s.llmProvider === 'anthropic' ? s.anthropicKey :
-      s.llmProvider === 'groq'      ? s.groqKey : '';
+    const apiKey = llmApiKeyFor(s);
 
     jobSearch.mutate({
       keywords,
       location,
-      job_type: jobType === 'all' ? 'fulltime' : jobType,
+      job_type: jobType,
+      hours_old: postedWithin === 'any' ? null : Number(postedWithin),
+      work_mode: workMode,
       sites: activeSites.length > 0 ? activeSites : ['linkedin', 'indeed'],
       results_wanted: resultsWanted,
       resume_profile: resumeProfile,
@@ -534,7 +551,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const restoreSearch = (entry: SearchHistoryEntry) => {
     setKeywords(entry.keywords);
     setLocation(entry.location);
-    setActiveSites(entry.sites);
+    setActiveSites(entry.sites.filter(x => ALL_SITES.includes(x) || JUMPSHIP_SITES.includes(x)));
   };
 
   // ── Sorting + relevance filter ──────────────────────────────────────────────
@@ -571,10 +588,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const llmConfig = {
     provider: settings.llmProvider,
     model: settings.llmModel,
-    apiKey:
-      settings.llmProvider === 'openai'    ? settings.openaiKey :
-      settings.llmProvider === 'anthropic' ? settings.anthropicKey :
-      settings.llmProvider === 'groq'      ? settings.groqKey : '',
+    apiKey: llmApiKeyFor(settings),
     baseUrl: settings.ollamaUrl,
   };
 
@@ -809,6 +823,22 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
               />
             </div>
 
+            {/* Posted within */}
+            <div className="filter-group" style={{ marginTop: 14 }}>
+              <div className="filter-label">Posted within</div>
+              <CustomSelect value={postedWithin} onChange={setPostedWithin} options={POSTED_OPTIONS} />
+            </div>
+
+            {/* Work mode */}
+            <div className="filter-group" style={{ marginTop: 14 }}>
+              <div className="filter-label">Work mode</div>
+              <CustomSelect
+                value={workMode}
+                onChange={v => setWorkMode(v as typeof workMode)}
+                options={WORK_MODE_OPTIONS}
+              />
+            </div>
+
             {/* Job Boards */}
             <div className="filter-group" style={{ marginTop: 14 }}>
               <div className="filter-label">Job Boards</div>
@@ -930,6 +960,11 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
             <div className="empty-state">
               <div className="empty-icon"><Rocket size={36} strokeWidth={1.2} /></div>
               <div className="empty-title">Ready to launch your search</div>
+              {jobSearch.isError && (
+                <div style={{ color: '#f87171', fontSize: 13, marginBottom: 8 }}>
+                  <AlertTriangle size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />{jobSearch.error.message}
+                </div>
+              )}
               <div className="empty-sub">
                 {resumeProfile
                   ? 'Keywords extracted. Hit Search to find matching jobs.'
@@ -942,6 +977,18 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <div className="results-title">Results</div>
                   <div className="results-count">{sortedJobs.length} jobs</div>
+                  {Object.entries(sources).map(([site, st]) =>
+                    st.error || st.count === 0 ? (
+                      <span
+                        key={site}
+                        className="filter-pill"
+                        title={`${site}: ${st.error ?? '0 results'}`}
+                        style={st.error ? { color: '#f87171', borderColor: 'rgba(248,113,113,0.4)' } : { color: 'var(--text-muted)' }}
+                      >
+                        {site}: {st.error ? (st.error.length > 40 ? st.error.slice(0, 40) + '…' : st.error) : 0}
+                      </span>
+                    ) : null
+                  )}
                   {filteredCount > 0 && (
                     <button
                       className={`filter-pill${showHidden ? ' active' : ''}`}

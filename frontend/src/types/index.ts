@@ -19,6 +19,8 @@ export interface JobSearchRequest {
   keywords: string[];
   location: string;
   job_type: string;
+  hours_old?: number | null;
+  work_mode?: 'any' | 'remote' | 'hybrid' | 'onsite';
   sites: string[];
   results_wanted: number;
   resume_profile?: ResumeProfile | null;
@@ -26,6 +28,13 @@ export interface JobSearchRequest {
   llm_model?: string;
   llm_api_key?: string;
   llm_base_url?: string;
+}
+
+export type SourceStatus = Record<string, { count: number; error: string | null }>;
+
+export interface JobSearchResponse {
+  jobs: JobResult[];
+  sources: SourceStatus;
 }
 
 export interface JobResult {

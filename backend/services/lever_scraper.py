@@ -15,6 +15,7 @@ from typing import Any
 import httpx
 
 from backend.services.career_sources import get_by_ats
+from backend.services.text_match import matches_any
 
 logger = logging.getLogger(__name__)
 
@@ -85,17 +86,13 @@ async def _fetch_board(
         logger.warning("Lever unexpected response shape for %s", site)
         return []
 
-    kw_lower = [k.lower() for k in keywords] if keywords else []
     results: list[dict] = []
 
     for posting in postings:
         if not isinstance(posting, dict):
             continue
-        if kw_lower:
-            title = (posting.get("text") or "").lower()
-            desc = (posting.get("descriptionPlain") or "").lower()
-            if not any(kw in title or kw in desc for kw in kw_lower):
-                continue
+        if not matches_any(keywords, posting.get("text") or "", posting.get("descriptionPlain") or ""):
+            continue
         results.append(_map_posting(posting, company, site))
 
     return results
