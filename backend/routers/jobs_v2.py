@@ -14,6 +14,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
+from backend.prompts import load, render
 from backend.models.schemas import (
     JobSearchRequest,
     JobResult,
@@ -313,80 +314,26 @@ async def search_jobs_endpoint(req: JobSearchRequest, response: Response):
         raise HTTPException(status_code=500, detail=f"Search failed: {exc}")
 
 
-_ASSESS_SYSTEM = """\
-You are a blunt, experienced Technical Recruiter. Your value is calibrated accuracy — not encouragement.
-Candidates use your assessment to decide whether to apply or move on. Inflated scores waste their time.
-
-SCORING RULES (enforce strictly — do not round to comfortable numbers):
-  90-100 = near-perfect; candidate would likely pass every round as-is
-  70-89  = strong fit, minor gaps
-  50-69  = borderline; notable gaps — name them plainly
-  0-49   = significant mismatch — be specific about what's missing
-  0      = always when is_relevant is FALSE
-
-HIRE RECOMMENDATION (mandatory — commit to a position):
-  strong_yes = 85+ with no blocking gaps
-  yes        = 70-84
-  borderline = 50-69
-  no         = 30-49
-  strong_no  = below 30 OR blocking disqualifier (wrong field, required clearance/visa not held)
-
-FIELD RULES:
-- is_relevant: FALSE only if categorically different profession. Tangential roles = TRUE. Low score ≠ irrelevant.
-- summary: First sentence MUST be the verdict ("This is a strong match." / "This is a weak match — candidate lacks X and Y."). \
-  Then 1-2 sentences of specifics. No hedging, no softening.
-- strong_points: Cite specific evidence from both resume AND job description. No generic praise ("team player", "fast learner").
-- gaps: List every material gap plainly. Phrase "could benefit from" is banned. State gaps directly. If no gaps, say so.
-- career_suggestions: Concrete, actionable. Not "consider improving soft skills" or "continue learning."
-- company_insights: Use provided web intelligence first. If none, use training knowledge. \
-  If unknown: "Limited public data on this company." Never fabricate specifics.
-- income_range: Disclosed = exact value + "(disclosed)". Not disclosed = market estimate + "(estimated)". Never blank.
-- job_tags: 3-8 lowercase tags describing the JOB: tech stack, domain, seniority, work mode. 1-2 words each.
-
-ANTI-PATTERNS (these will invalidate your assessment):
-- Using "transferable skills" without naming which skill transfers and exactly how
-- Giving 70+ to a candidate missing a stated core requirement
-- Softening a gap with "while the candidate doesn't have X, they have Y"
-- Scores ending in 0 or 5 when evidence doesn't support a round number
-- Any sentence that begins with "While" to pivot away from a negative
-
-CRITICAL: Return ONLY valid JSON — no markdown, no explanation, no trailing text."""
+_ASSESS_SYSTEM = load("assess_system")
 
 
 def _build_assess_user(profile, job, company_context: str) -> str:
-    return f"""\
-CANDIDATE PROFILE:
-Name: {profile.name or "Unknown"}
-Current Title: {profile.title}
-Experience: {profile.experience_years} year(s) of professional experience
-Core Skills: {', '.join(profile.skills[:20]) if profile.skills else 'Not specified'}
-Domains: {', '.join(profile.domains) if profile.domains else 'Not specified'}
-Resume Extract: {profile.raw_text[:1500] if profile.raw_text else 'Not available'}
-
-TARGET JOB:
-Title: {job.title}
-Company: {job.company}
-Location: {job.location}
-Salary (from job post): {job.salary_range if job.salary_range else 'NOT DISCLOSED — estimate from market data'}
-Source: {job.site}
-Description (first 2500 chars):
-{job.description[:2500] if job.description else 'No description available.'}
-{company_context}
-Assess the candidate's fit and return JSON matching this schema exactly:
-{{
-  "is_relevant": <true or false — false ONLY if the job is from a completely different professional field>,
-  "match_score": <integer 0-100>,
-  "hire_recommendation": "<strong_yes|yes|borderline|no|strong_no>",
-  "summary": "<verdict in first sentence, then 1-2 sentences of specifics — no hedging>",
-  "strong_points": ["<specific strength citing evidence from resume AND job description>", ...],
-  "gaps": ["<specific gap stated plainly — no softening phrases>", ...],
-  "career_suggestions": ["<concrete actionable suggestion>", ...],
-  "company_insights": "<company culture, reputation, growth stage — or 'Limited public data on this company.'>",
-  "income_range": "<salary — use job's disclosed value with '(disclosed)' or estimate with '(estimated)'>",
-  "job_tags": ["<3-8 short tags describing the job: tech stack items, domain, seniority, work mode>"],
-  "keywords_matched": ["<skill or keyword present in both resume and job description>"],
-  "keywords_missing": ["<skill or keyword required by job but absent from resume>"]
-}}"""
+    return render(
+        "assess_user",
+        name=profile.name or "Unknown",
+        title=profile.title,
+        experience_years=profile.experience_years,
+        skills=', '.join(profile.skills[:20]) if profile.skills else 'Not specified',
+        domains=', '.join(profile.domains) if profile.domains else 'Not specified',
+        resume_extract=profile.raw_text[:1500] if profile.raw_text else 'Not available',
+        job_title=job.title,
+        company=job.company,
+        location=job.location,
+        salary=job.salary_range if job.salary_range else 'NOT DISCLOSED — estimate from market data',
+        site=job.site,
+        description=job.description[:2500] if job.description else 'No description available.',
+        company_context=company_context,
+    )
 
 
 async def _run_assessment(llm: LLMClient, profile, job, include_company_research: bool) -> JobAssessment:
@@ -402,8 +349,10 @@ async def _run_assessment(llm: LLMClient, profile, job, include_company_research
             logger.debug("Company web search failed (non-fatal): %s", exc)
 
     company_context = (
-        f"\nCOMPANY INTELLIGENCE (sourced from the web — use this to enrich your assessment):\n"
-        f"{company_info or 'No external data found. Use your training knowledge about this company if available.'}\n"
+        "\n" + render(
+            "assess_company_context",
+            company_info=company_info or 'No external data found. Use your training knowledge about this company if available.',
+        ) + "\n"
         if include_company_research else ""
     )
 
@@ -475,12 +424,8 @@ async def suggest_keywords(req: SynonymRequest):
 
     llm = _llm_from_request(req)
 
-    system = "You are a job search assistant. Given a list of skills/keywords, suggest related search terms that would help find more relevant job postings. Include synonyms, related technologies, and common job title variations."
-    user = f"""Given these job search keywords: {', '.join(req.keywords)}
-
-Return a JSON array of 5-10 additional related keywords/phrases that would help find more relevant jobs.
-Only include genuinely useful terms — no duplicates of the input.
-Return ONLY valid JSON array, no explanation. Example: ["keyword1", "keyword2"]"""
+    system = load("suggest_keywords_system")
+    user = render("suggest_keywords_user", keywords=', '.join(req.keywords))
 
     try:
         import asyncio
@@ -515,11 +460,8 @@ async def translate_keywords(req: TranslateRequest):
     lang_map = {"pt": "Portuguese", "en": "English", "de": "German", "es": "Spanish", "fr": "French"}
     lang_name = lang_map.get(req.target_language, req.target_language)
 
-    system = "You are a multilingual job search assistant."
-    user = f"""Translate these job search keywords to {lang_name}: {', '.join(req.keywords)}
-
-Return a JSON array of translated keywords, preserving technical terms that don't need translation.
-Return ONLY valid JSON array. Example: ["palavra1", "palavra2"]"""
+    system = load("translate_keywords_system")
+    user = render("translate_keywords_user", language=lang_name, keywords=', '.join(req.keywords))
 
     try:
         import asyncio

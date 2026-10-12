@@ -1,6 +1,8 @@
 """
 Unit tests for location resolution, keyword matching and result post-filters.
 """
+import logging
+
 import pytest
 from unittest.mock import AsyncMock, patch
 
@@ -125,3 +127,38 @@ class TestSearchStatus:
         kw = m.call_args_list[0].kwargs
         assert kw["country_indeed"] == "brazil" and m.call_args_list[0].args[2] is None  # "all" -> no job type
         assert not js._search_cache  # errored search is not cached
+
+
+class TestBoardLogCapture:
+    @staticmethod
+    def _record(level, msg):
+        return logging.LogRecord("JobSpy:LinkedIn", level, __file__, 1, msg, None, None)
+
+    def test_prefers_error_and_skips_ignored_option_notices(self):
+        cap = js._BoardLogCapture()
+        for rec in (self._record(logging.WARNING, "LinkedIn: job_type isn't supported, ignoring it"),
+                    self._record(logging.WARNING, "skipping job: x"),
+                    self._record(logging.ERROR, "LinkedIn response status code 429")):
+            cap.handle(rec)
+        assert cap.first_error() == "LinkedIn response status code 429"
+
+    def test_empty_when_nothing_logged(self):
+        assert js._BoardLogCapture().first_error() is None
+
+    @pytest.mark.asyncio
+    async def test_swallowed_jobspy_error_reaches_status(self):
+        import pandas as pd
+
+        def fake_scrape(site_name, **kw):
+            if site_name == ["linkedin"]:
+                logging.getLogger("JobSpy:LinkedIn").error("LinkedIn response status code 429")
+            return pd.DataFrame()
+
+        js._search_cache.clear()
+        status = {}
+        with patch("jobspy.scrape_jobs", side_effect=fake_scrape):
+            res = await search_jobs(["zzz-logcapture"], "São Paulo", "all", ["linkedin", "indeed"], 5, status_out=status)
+        assert res == []
+        assert status["linkedin"] == {"count": 0, "error": "LinkedIn response status code 429"}
+        assert status["indeed"] == {"count": 0, "error": None}  # no cross-talk between board loggers
+        assert not logging.getLogger("JobSpy:LinkedIn").handlers[1:]  # temporary handler removed

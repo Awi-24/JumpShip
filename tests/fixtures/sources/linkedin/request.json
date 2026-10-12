@@ -1,0 +1,126 @@
+{
+  "board": "linkedin",
+  "captured": "2026-10-12",
+  "frozen_now": "2026-10-12T00:55:00+00:00",
+  "jobspy": "vendored jobspy/ (1.3.0), jobspy/linkedin/__init__.py",
+  "call": {
+    "keywords": [
+      "python"
+    ],
+    "job_type": "fulltime",
+    "results_wanted": 5,
+    "country_indeed": "brazil",
+    "is_remote": false,
+    "hours_old": null,
+    "location": "São Paulo, Brazil",
+    "fetch_description": true
+  },
+  "session": {
+    "library": "requests",
+    "tls_impersonation": false,
+    "cookies": "cleared before every request (clear_cookies=True)"
+  },
+  "requests": [
+    {
+      "name": "search",
+      "method": "GET",
+      "url": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search",
+      "query": {
+        "keywords": "python",
+        "location": "São Paulo, Brazil",
+        "distance": 50,
+        "start": 0
+      },
+      "full_url_sent": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=python&location=S%C3%A3o+Paulo%2C+Brazil&distance=50&start=0",
+      "headers": {
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "Connection": "keep-alive",
+        "accept-language": "en-US,en;q=0.9"
+      },
+      "status": 200,
+      "response_file": "search_page.html"
+    },
+    {
+      "name": "job_detail",
+      "method": "GET",
+      "url": "https://www.linkedin.com/jobs/view/4471462183",
+      "query": {},
+      "headers": {
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "Connection": "keep-alive",
+        "accept-language": "en-US,en;q=0.9"
+      },
+      "status": 200,
+      "response_file": "job_4471462183.html",
+      "final_url": "https://www.linkedin.com/jobs/view/4471462183"
+    },
+    {
+      "name": "job_detail",
+      "method": "GET",
+      "url": "https://www.linkedin.com/jobs/view/4476835159",
+      "query": {},
+      "headers": {
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "Connection": "keep-alive",
+        "accept-language": "en-US,en;q=0.9"
+      },
+      "status": 200,
+      "response_file": "job_4476835159.html",
+      "final_url": "https://www.linkedin.com/jobs/view/4476835159"
+    },
+    {
+      "name": "job_detail",
+      "method": "GET",
+      "url": "https://www.linkedin.com/jobs/view/4464689809",
+      "query": {},
+      "headers": {
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "Connection": "keep-alive",
+        "accept-language": "en-US,en;q=0.9"
+      },
+      "status": 200,
+      "response_file": "job_4464689809.html",
+      "final_url": "https://www.linkedin.com/jobs/view/4464689809"
+    },
+    {
+      "name": "job_detail",
+      "method": "GET",
+      "url": "https://www.linkedin.com/jobs/view/4450669993",
+      "query": {},
+      "headers": {
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "Connection": "keep-alive",
+        "accept-language": "en-US,en;q=0.9"
+      },
+      "status": 200,
+      "response_file": "job_4450669993.html",
+      "final_url": "https://www.linkedin.com/jobs/view/4450669993"
+    },
+    {
+      "name": "job_detail",
+      "method": "GET",
+      "url": "https://www.linkedin.com/jobs/view/4466150322",
+      "query": {},
+      "headers": {
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "Connection": "keep-alive",
+        "accept-language": "en-US,en;q=0.9"
+      },
+      "status": 200,
+      "response_file": "job_4466150322.html",
+      "final_url": "https://www.linkedin.com/jobs/view/4466150322"
+    }
+  ]
+}

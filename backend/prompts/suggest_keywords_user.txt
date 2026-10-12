@@ -1,0 +1,5 @@
+Given these job search keywords: {keywords}
+
+Return a JSON array of 5-10 additional related keywords/phrases that would help find more relevant jobs.
+Only include genuinely useful terms — no duplicates of the input.
+Return ONLY valid JSON array, no explanation. Example: ["keyword1", "keyword2"]

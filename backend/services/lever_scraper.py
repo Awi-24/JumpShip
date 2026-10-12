@@ -82,6 +82,11 @@ async def _fetch_board(
             logger.warning("Lever fetch failed (%s): %s", site, exc)
             return []
 
+    return parse_lever(postings, keywords, company, site)
+
+
+def parse_lever(postings: list, keywords: list[str], company: str, site: str) -> list[dict]:
+    """Normalize one board's decoded Postings API JSON (a list) into job dicts."""
     if not isinstance(postings, list):
         logger.warning("Lever unexpected response shape for %s", site)
         return []

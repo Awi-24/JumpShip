@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import pathlib
 import re
 import time
 import json as _json
@@ -22,6 +23,9 @@ _CACHE_TTL = 900  # 15 minutes
 
 # Sites handled by JobSpy
 _JOBSPY_SITES = {"linkedin", "indeed", "glassdoor", "zip_recruiter", "bayt", "google"}
+# JobSpy logs board failures (429 "blocked", non-200, bad payload) instead of raising; these are its logger names.
+_JOBSPY_LOGGERS = {"linkedin": "LinkedIn", "indeed": "Indeed", "glassdoor": "Glassdoor",
+                   "zip_recruiter": "ZipRecruiter", "google": "Google", "bayt": "Bayt"}
 # Sites handled by our extra scrapers
 _EXTRA_SITES = {"remoteok", "arbeitnow", "gupy", "programathor", "trampos", "greenhouse", "lever", "workday", "playwright"}
 
@@ -30,111 +34,23 @@ _EXTRA_SITES = {"remoteok", "arbeitnow", "gupy", "programathor", "trampos", "gre
 _ZIPRECRUITER_US_FALLBACK = "United States"
 
 
-_US_STATES = {
-    "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA",
-    "KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
-    "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT",
-    "VA","WA","WV","WI","WY","DC",
-}
+# Location/work-mode tables live in backend/data/*.json so the Rust port reads the same files.
+_DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
+_LOC = _json.loads((_DATA_DIR / "locations.json").read_text(encoding="utf-8"))
+
+_US_STATES = set(_LOC["us_states"])
 # "City, ST" codes shared with Brazilian states ("Joinville, SC", "Belém, PA"): too ambiguous to call US.
-_US_STATES_AMBIGUOUS = {"AL", "MA", "MT", "MS", "PA", "SC"}
+_US_STATES_AMBIGUOUS = set(_LOC["us_states_ambiguous"])
 _US_STATE_RE = re.compile(r",\s*([A-Z]{2})\b")
 
 
 # ── Location resolution ───────────────────────────────────────────────────────
 # Keys are JobSpy country names (valid `country_indeed` values); values are folded aliases.
-_COUNTRIES: dict[str, tuple[str, ...]] = {
-    "brazil": ("brasil", "brazil"),
-    "usa": ("united states", "usa", "us", "estados unidos"),
-    "canada": ("canada",),
-    "uk": ("united kingdom", "uk", "england", "scotland", "wales", "great britain"),
-    "germany": ("germany", "deutschland", "alemanha"),
-    "france": ("france",),
-    "spain": ("spain", "espana"),
-    "portugal": ("portugal",),
-    "netherlands": ("netherlands", "nederland", "holland"),
-    "ireland": ("ireland",),
-    "switzerland": ("switzerland", "schweiz", "suisse"),
-    "sweden": ("sweden", "sverige"),
-    "poland": ("poland", "polska"),
-    "mexico": ("mexico",),
-    "argentina": ("argentina",),
-    "colombia": ("colombia",),
-    "chile": ("chile",),
-    "australia": ("australia",),
-    "india": ("india",),
-    "japan": ("japan",),
-    "singapore": ("singapore",),
-    "italy": ("italy", "italia"),
-    "austria": ("austria",),
-    "belgium": ("belgium",),
-    "norway": ("norway",),
-    "denmark": ("denmark",),
-    "finland": ("finland",),
-    "israel": ("israel",),
-    "china": ("china",),
-    "peru": ("peru",),
-    "uruguay": ("uruguay",),
-    "venezuela": ("venezuela",),
-    "ecuador": ("ecuador",),
-    "costa rica": ("costa rica",),
-    "panama": ("panama",),
-    "new zealand": ("new zealand",),
-    "south africa": ("south africa",),
-    "turkey": ("turkey", "turkiye"),
-    "ukraine": ("ukraine",),
-    "romania": ("romania",),
-    "greece": ("greece",),
-    "hungary": ("hungary",),
-    "czech republic": ("czech republic", "czechia"),
-    "hong kong": ("hong kong",),
-    "indonesia": ("indonesia",),
-    "philippines": ("philippines",),
-    "vietnam": ("vietnam",),
-    "thailand": ("thailand",),
-    "malaysia": ("malaysia",),
-    "south korea": ("south korea",),
-    "united arab emirates": ("united arab emirates", "uae"),
-}
+_COUNTRIES: dict[str, tuple[str, ...]] = {k: tuple(v) for k, v in _LOC["countries"].items()}
 # Only recognised in job locations (so "Salvador" is not mistaken for "El Salvador"); not JobSpy countries.
-_OTHER_COUNTRIES: dict[str, tuple[str, ...]] = {
-    "el salvador": ("el salvador", "san salvador"),
-    "paraguay": ("paraguay",),
-    "bolivia": ("bolivia",),
-}
-_CITIES: dict[str, tuple[str, ...]] = {
-    "brazil": (
-        "sao paulo", "rio de janeiro", "belo horizonte", "curitiba", "porto alegre", "brasilia",
-        "florianopolis", "salvador", "recife", "fortaleza", "campinas", "manaus", "goiania", "belem",
-        "natal", "maceio", "joao pessoa", "teresina", "campo grande", "aracaju", "macapa", "boa vista",
-        "palmas", "porto velho", "rio branco", "joinville", "blumenau", "londrina", "maringa",
-        "uberlandia", "sorocaba", "santos", "ribeirao preto", "sao jose dos campos", "niteroi",
-        "cuiaba", "sao luis", "osasco", "barueri",
-    ),
-    "usa": (
-        "new york", "san francisco", "seattle", "austin", "boston", "chicago", "los angeles", "miami",
-        "denver", "san jose", "atlanta", "dallas", "houston",
-    ),
-    "canada": ("toronto", "vancouver", "montreal", "ottawa", "calgary"),
-    "uk": ("london", "manchester", "edinburgh"),
-    "germany": ("berlin", "munich", "munchen", "hamburg", "frankfurt", "koln", "cologne", "stuttgart", "dusseldorf"),
-    "france": ("paris", "lyon", "toulouse"),
-    "spain": ("madrid", "barcelona", "valencia", "las palmas"),
-    "portugal": ("lisbon", "porto"),
-    "netherlands": ("amsterdam", "rotterdam"),
-    "ireland": ("dublin", "cork"),
-    "switzerland": ("zurich", "geneva", "basel"),
-    "sweden": ("stockholm", "gothenburg", "malmo"),
-    "poland": ("warsaw", "krakow", "wroclaw"),
-    "mexico": ("mexico city", "guadalajara", "monterrey"),
-    "argentina": ("buenos aires", "cordoba"),
-    "colombia": ("bogota", "medellin"),
-    "chile": ("santiago",),
-    "australia": ("sydney", "melbourne", "brisbane"),
-    "india": ("bengaluru", "bangalore", "mumbai", "hyderabad", "pune"),
-    "japan": ("tokyo", "osaka"),
-}
-_COUNTRY_DISPLAY = {"usa": "United States", "uk": "United Kingdom"}
+_OTHER_COUNTRIES: dict[str, tuple[str, ...]] = {k: tuple(v) for k, v in _LOC["other_countries"].items()}
+_CITIES: dict[str, tuple[str, ...]] = {k: tuple(v) for k, v in _LOC["cities"].items()}
+_COUNTRY_DISPLAY = _LOC["country_display"]
 
 
 def _alt(words) -> str:
@@ -146,11 +62,27 @@ _CITY_OF = {c: k for k, cs in _CITIES.items() for c in cs}
 _COUNTRY_RE = re.compile(rf"(?<!\w)(?:{_alt(_COUNTRY_OF)})(?!\w)")
 _CITY_RE = re.compile(rf"(?<!\w)(?:{_alt(_CITY_OF)})(?!\w)")
 
-_REMOTE_LABELS = {"remote", "remoto", "anywhere", "worldwide", "global"}
-_HYBRID_LABELS = {"hybrid", "hibrido"}
-_REMOTE_WORDS = ("remote", "remoto", "home office", "anywhere", "distributed",
-                 "teletrabalho", "trabalho remoto", "wfh", "100% remoto", "fully remote")
-_HYBRID_WORDS = ("híbrido", "hibrido", "hybrid", "modelo híbrido", "home office/escritório")
+_REMOTE_LABELS = set(_LOC["remote_labels"])
+_HYBRID_LABELS = set(_LOC["hybrid_labels"])
+_REMOTE_WORDS = tuple(_LOC["remote_words"])
+_HYBRID_WORDS = tuple(_LOC["hybrid_words"])
+
+
+class _BoardLogCapture(logging.Handler):
+    """Collects WARNING+ records of one JobSpy board logger while a scrape runs."""
+
+    def __init__(self):
+        super().__init__(logging.WARNING)
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+    def first_error(self) -> str | None:
+        """First ERROR message, else first WARNING that is not a harmless 'option ignored' notice."""
+        msgs = [(r.levelno >= logging.ERROR, r.getMessage()) for r in self.records
+                if "isn't supported" not in r.getMessage()]
+        return next((m for is_err, m in msgs if is_err), msgs[0][1] if msgs else None)
 
 
 class ResolvedLocation(NamedTuple):
@@ -227,28 +159,8 @@ def _location_matches(job_loc: str, search: ResolvedLocation | str, job_is_remot
 
 # Lightweight static PT-BR equivalents for the most common tech search terms.
 # Only covers terms that Brazilian job boards index in Portuguese.
-_EN_TO_PT: dict[str, str] = {
-    "software engineer": "engenheiro de software",
-    "software developer": "desenvolvedor de software",
-    "backend": "backend",
-    "frontend": "frontend",
-    "full stack": "full stack",
-    "data engineer": "engenheiro de dados",
-    "data scientist": "cientista de dados",
-    "machine learning": "aprendizado de máquina",
-    "product manager": "gerente de produto",
-    "devops": "devops",
-    "cloud": "nuvem",
-    "mobile": "mobile",
-    "android": "android",
-    "ios": "ios",
-    "qa": "qa",
-    "quality assurance": "garantia de qualidade",
-    "security": "segurança",
-    "designer": "designer",
-    "ux": "ux",
-    "analyst": "analista",
-}
+_EN_TO_PT: dict[str, str] = _json.loads((_DATA_DIR / "keywords_pt.json").read_text(encoding="utf-8"))["en_to_pt"]
+
 
 def _pt_keywords(keywords: list[str]) -> list[str]:
     """Return keywords enriched with PT-BR equivalents for Brazilian job boards."""
@@ -386,6 +298,7 @@ async def search_jobs(
     board_loc = resolved.board_location
 
     named: list[tuple[str, Any]] = []
+    board_errors: dict[str, str] = {}  # site -> message JobSpy logged instead of raising
     for site in sites:
         if site in _JOBSPY_SITES:
             site_loc = resolved.plain_location if site == "glassdoor" else board_loc
@@ -394,6 +307,7 @@ async def search_jobs(
             named.append((site, _search_jobspy(
                 keywords, site_loc, job_type, [site], results_wanted,
                 country_indeed=resolved.country_indeed, is_remote=remote, hours_old=hours_old,
+                board_errors=board_errors,
             )))
         elif site in _EXTRA_SITES:
             # BR/JumpShip sources benefit from PT-BR keywords — translate on the fly
@@ -409,6 +323,8 @@ async def search_jobs(
     all_results: list[dict] = []
     seen_ids: set[str] = set()
     for (site, _), batch in zip(named, results_nested):
+        if site in board_errors and not isinstance(batch, BaseException):
+            status[site]["error"] = board_errors[site][:200]
         if isinstance(batch, BaseException):
             logger.error("Job search batch '%s' failed: %s", site, batch)
             status[site]["error"] = f"{type(batch).__name__}: {str(batch)[:120]}"
@@ -462,6 +378,7 @@ async def _search_jobspy(
     country_indeed: str = "usa",
     is_remote: bool = False,
     hours_old: int | None = None,
+    board_errors: dict[str, str] | None = None,
 ) -> list[dict]:
     # Use OR between keywords so job boards return results matching ANY keyword,
     # not requiring ALL. Most boards (LinkedIn, Indeed, Glassdoor) support this.
@@ -475,6 +392,10 @@ async def _search_jobspy(
 
     logger.info("JobSpy search_term: %s", search_term)
 
+    capture = _BoardLogCapture()
+    board_loggers = [logging.getLogger(f"JobSpy:{_JOBSPY_LOGGERS[x]}") for x in sites if x in _JOBSPY_LOGGERS]
+    for lg in board_loggers:  # one logger per board, so concurrent board calls don't see each other's records
+        lg.addHandler(capture)
     try:
         from jobspy import scrape_jobs
         df = await asyncio.to_thread(
@@ -494,6 +415,11 @@ async def _search_jobspy(
     except Exception as exc:
         logger.error("JobSpy scraping failed: %s", exc)
         raise
+    finally:
+        for lg in board_loggers:
+            lg.removeHandler(capture)
+    if board_errors is not None and (msg := capture.first_error()):
+        board_errors[sites[0]] = msg
 
     results = []
     for _, row in df.iterrows():

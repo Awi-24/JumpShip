@@ -18,6 +18,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Optional
 
+from backend.prompts import load, render
+
 # ── Concurrency control ────────────────────────────────────────────────────────
 # Local providers (Ollama / LM Studio) run one inference at a time on the GPU.
 # Cloud-relay models (Ollama *-cloud suffix) bypass the semaphore — inference is remote.
@@ -354,13 +356,9 @@ class LLMClient:
         try:
             return clean_and_parse_json(raw)
         except ValueError:
-            repair_prompt = (
-                "The following text should be valid JSON but isn't. "
-                "Return ONLY the corrected JSON with no extra text:\n\n" + raw[:2000]
-            )
             raw2 = self.complete(
-                "You are a JSON repair assistant. Output only valid JSON.",
-                repair_prompt,
+                load("json_repair_system"),
+                render("json_repair_user", raw=raw[:2000]),
                 json_schema=None,
             )
             return clean_and_parse_json(raw2)

@@ -1,0 +1,4 @@
+<additional_candidate_info>
+{extra_context}
+(Incorporate where relevant and supported by the resume above.)
+</additional_candidate_info>

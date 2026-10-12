@@ -63,7 +63,7 @@ async def _fetch_board(
     api_url = f"https://{hostname}/wday/cxs/{tenant}/{site}/jobs"
     # One request per keyword (Workday ANDs the words of a single searchText); merge by externalPath.
     terms = [k.strip() for k in (keywords or [])[:_MAX_TERMS] if k and k.strip()] or [""]
-    postings: dict[str, dict] = {}
+    payloads: list[dict] = []
 
     async with sem:
         for term in terms:
@@ -82,14 +82,27 @@ async def _fetch_board(
                     logger.warning("Workday board unreachable (%s): HTTP %s", site, r.status_code)
                     break
                 r.raise_for_status()
-                for posting in r.json().get("jobPostings", []):
-                    if isinstance(posting, dict):
-                        key = posting.get("externalPath") or posting.get("title") or ""
-                        postings.setdefault(key, posting)
+                payloads.append(r.json())
             except Exception as exc:
                 logger.warning("Workday fetch failed (%s, '%s'): %s", site, term, exc)
 
-    company = source.get("name", tenant)
+    return parse_workday(payloads, keywords, hostname, tenant, source.get("name", tenant))
+
+
+def parse_workday(
+    payload: dict | list[dict], keywords: list[str] | None, hostname: str, tenant: str, company: str,
+) -> list[dict]:
+    """Normalize Workday CXS /jobs JSON ({"jobPostings": [...]}; one or several responses) into job dicts.
+
+    No local keyword filter: the server already matched `searchText`.
+    """
+    postings: dict[str, dict] = {}
+    for data in [payload] if isinstance(payload, dict) else payload:
+        for posting in data.get("jobPostings", []):
+            if isinstance(posting, dict):
+                key = posting.get("externalPath") or posting.get("title") or ""
+                postings.setdefault(key, posting)
+
     results: list[dict] = []
 
     for posting in postings.values():

@@ -157,18 +157,19 @@ interface PortalMenuProps {
 }
 
 function PortalMenu({ open, anchorRef, align = 'left', onClose, children }: PortalMenuProps) {
-  const [pos, setPos] = useState<{ top: number; left: number; right?: number } | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    if (!open || !anchorRef.current) { setPos(null); return; }
-    const r = anchorRef.current.getBoundingClientRect();
-    setPos(
-      align === 'right'
-        ? { top: r.bottom + 4, left: 0, right: window.innerWidth - r.right }
-        : { top: r.bottom + 4, left: r.left }
-    );
-  }, [open, align, anchorRef]);
+  // Position from the anchor's rect when the menu node mounts (ref callbacks run at commit,
+  // before paint) — avoids measuring during render or setting state in an effect.
+  const place = useCallback((el: HTMLDivElement | null) => {
+    menuRef.current = el;
+    const anchor = anchorRef.current;
+    if (!el || !anchor) return;
+    const r = anchor.getBoundingClientRect();
+    el.style.top = `${r.bottom + 4}px`;
+    if (align === 'right') el.style.right = `${window.innerWidth - r.right}px`;
+    else el.style.left = `${r.left}px`;
+  }, [anchorRef, align]);
 
   useEffect(() => {
     if (!open) return;
@@ -189,17 +190,9 @@ function PortalMenu({ open, anchorRef, align = 'left', onClose, children }: Port
     };
   }, [open, onClose, anchorRef]);
 
-  if (!open || !pos) return null;
+  if (!open) return null;
   return createPortal(
-    <div
-      ref={menuRef}
-      className="portal-menu"
-      style={{
-        position: 'fixed',
-        top: pos.top,
-        ...(align === 'right' ? { right: pos.right } : { left: pos.left }),
-      }}
-    >
+    <div ref={place} className="portal-menu" style={{ position: 'fixed' }}>
       {children}
     </div>,
     document.body,

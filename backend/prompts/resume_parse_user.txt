@@ -1,0 +1,4 @@
+Parse this resume. Return ONLY the JSON object, nothing else.
+
+RESUME:
+{text}

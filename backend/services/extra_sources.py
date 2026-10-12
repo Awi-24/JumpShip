@@ -40,7 +40,6 @@ _HEADERS = {
 
 async def fetch_remoteok(keywords: list[str], results_wanted: int = 20) -> list[dict]:
     """Fetch remote-only jobs from RemoteOK's public API."""
-    results: list[dict] = []
     try:
         async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
             r = await client.get("https://remoteok.com/api", headers=_HEADERS, follow_redirects=True)
@@ -49,7 +48,12 @@ async def fetch_remoteok(keywords: list[str], results_wanted: int = 20) -> list[
     except Exception as exc:
         logger.warning("RemoteOK fetch failed: %s", exc)
         raise
+    return parse_remoteok(jobs, keywords, results_wanted)
 
+
+def parse_remoteok(jobs: list, keywords: list[str], results_wanted: int = 20) -> list[dict]:
+    """Normalize RemoteOK's decoded /api JSON (list; element 0 is a legal notice) into job dicts."""
+    results: list[dict] = []
     for job in jobs:
         if not isinstance(job, dict) or not job.get("id"):
             continue
@@ -87,13 +91,12 @@ async def fetch_remoteok(keywords: list[str], results_wanted: int = 20) -> list[
         if len(results) >= results_wanted:
             break
 
-    logger.info("RemoteOK: fetched %d jobs matching %s", len(results), keywords)
+    logger.info("RemoteOK: parsed %d jobs matching %s", len(results), keywords)
     return results
 
 
 async def fetch_arbeitnow(keywords: list[str], results_wanted: int = 20) -> list[dict]:
     """Fetch jobs from Arbeitnow's public API (EU-focused, remote-friendly)."""
-    results: list[dict] = []
     search_term = (" ".join(keywords[:4])).strip()
 
     try:
@@ -121,7 +124,12 @@ async def fetch_arbeitnow(keywords: list[str], results_wanted: int = 20) -> list
     except Exception as exc:
         logger.warning("Arbeitnow fetch failed: %s", exc)
         raise
+    return parse_arbeitnow(data, keywords, results_wanted)
 
+
+def parse_arbeitnow(data: dict, keywords: list[str], results_wanted: int = 20) -> list[dict]:
+    """Normalize Arbeitnow's decoded job-board-api JSON ({"data": [...]}) into job dicts."""
+    results: list[dict] = []
     for job in data.get("data", []):
         tags = " ".join(job.get("tags") or [])
         if not matches_any(keywords, job.get("title") or "", tags, job.get("description") or ""):
@@ -159,5 +167,5 @@ async def fetch_arbeitnow(keywords: list[str], results_wanted: int = 20) -> list
         if len(results) >= results_wanted:
             break
 
-    logger.info("Arbeitnow: fetched %d jobs matching %s", len(results), keywords)
+    logger.info("Arbeitnow: parsed %d jobs matching %s", len(results), keywords)
     return results

@@ -138,7 +138,6 @@ export interface ProfileResponse {
   salary_min?: number | null;
   salary_max?: number | null;
   salary_currency?: string | null;
-  linkedin_email?: string | null;
   custom_answers?: Record<string, unknown> | null;
   extra_info?: string | null;
 }

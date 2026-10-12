@@ -1,0 +1,19 @@
+Assess this resume against the job description below.
+
+## RESUME
+{resume}
+
+## JOB DESCRIPTION
+{job_description}
+Job Title: {job_title} at {company_name}
+
+Return EXACTLY this JSON structure (no extra keys, no markdown):
+{{
+  "score": <integer 0-100>,
+  "summary": "<2-3 sentence fit summary — specific, not generic>",
+  "strengths": ["<strength backed by evidence from resume>"],
+  "gaps": ["<specific gap or missing requirement>"],
+  "suggestions": ["<actionable step to bridge the gap>"],
+  "keywords_matched": ["<keyword found in both resume and job>"],
+  "keywords_missing": ["<keyword required by job but absent from resume>"]
+}}

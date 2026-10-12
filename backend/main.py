@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.database import engine, Base
 from backend.config import settings
 from backend.models.schemas import HealthResponse
+from backend.prompts import load
 from backend.services.llm_service import get_llm_service
 
 # Legacy routers
@@ -137,7 +138,7 @@ async def health_llm():
 
     try:
         response = await asyncio.wait_for(
-            llm.complete("You are helpful.", "Reply with exactly: OK"),
+            llm.complete(load("health_check_system"), load("health_check_user")),
             timeout=120,
         )
         return {

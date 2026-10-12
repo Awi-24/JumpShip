@@ -1,0 +1,59 @@
+[
+  {
+    "id": "trampos_5c56850a",
+    "title": "Supervisor(a) de Dados - Mídia",
+    "company": "Grupo WE",
+    "company_url": "https://trampos.co/grupo-we",
+    "location": "São Paulo, SP",
+    "job_type": "fulltime",
+    "salary_range": "R$ 10.000 a R$ 12.000",
+    "posted_date": "2026-09-25",
+    "description": "Análise e Gestão de Dados",
+    "url": "https://trampos.co/oportunidades/774598",
+    "site": "trampos",
+    "match_score": null
+  },
+  {
+    "id": "trampos_9140b3ca",
+    "title": "Desenvolvedor(a) Full Stack",
+    "company": "Visie Padrões Web",
+    "company_url": "https://trampos.co/visie",
+    "location": "Remoto, Brasil",
+    "job_type": "fulltime",
+    "salary_range": "NÃO DIVULGADA",
+    "posted_date": "2026-10-09",
+    "description": "Tecnologia da Informação",
+    "url": "https://trampos.co/oportunidades/774797",
+    "site": "trampos",
+    "match_score": null,
+    "is_remote": true
+  },
+  {
+    "id": "trampos_78219f8e",
+    "title": "Analista de BI ",
+    "company": "Grupo WE",
+    "company_url": "https://trampos.co/grupo-we",
+    "location": "São Paulo, SP",
+    "job_type": "fulltime",
+    "salary_range": "R$ 4.000 a R$ 5.000",
+    "posted_date": "2026-10-05",
+    "description": "Análise e Gestão de Dados",
+    "url": "https://trampos.co/oportunidades/774702",
+    "site": "trampos",
+    "match_score": null
+  },
+  {
+    "id": "trampos_be7661fa",
+    "title": "Analista de BI ",
+    "company": "Grupo WE",
+    "company_url": "https://trampos.co/grupo-we",
+    "location": "São Paulo, SP",
+    "job_type": "fulltime",
+    "salary_range": "NÃO DIVULGADA",
+    "posted_date": "2026-09-20",
+    "description": "Análise e Gestão de Dados",
+    "url": "https://trampos.co/oportunidades/774588",
+    "site": "trampos",
+    "match_score": null
+  }
+]

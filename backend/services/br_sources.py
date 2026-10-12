@@ -58,8 +58,18 @@ def _terms(keywords: list[str], fallback: str = "") -> list[str]:
 # ── Gupy ──────────────────────────────────────────────────────────────────────
 
 
-async def _gupy_query(client: httpx.AsyncClient, term: str, remote: bool) -> list[dict]:
-    """One portal.gupy.io search page (12 items; the page has no working pagination param)."""
+def extract_gupy_next_data(html: str) -> dict:
+    """Return props.pageProps of the __NEXT_DATA__ JSON embedded in a portal.gupy.io search page."""
+    m = _GUPY_NEXT_DATA.search(html)
+    return json.loads(m.group(1))["props"]["pageProps"]
+
+
+def _gupy_rows(page_props: dict) -> list:
+    return page_props["initialJobList"]["data"] or []
+
+
+async def _gupy_query(client: httpx.AsyncClient, term: str, remote: bool) -> dict:
+    """One portal.gupy.io search page (12 items; the page has no working pagination param) -> pageProps."""
     url = _GUPY_SEARCH_URL.format(term=quote(term[:200], safe=""))
     if remote:
         url += "&workplaceTypes[]=remote"
@@ -67,14 +77,14 @@ async def _gupy_query(client: httpx.AsyncClient, term: str, remote: bool) -> lis
         try:
             r = await client.get(url, headers=_HTML_HEADERS)
             r.raise_for_status()
-            m = _GUPY_NEXT_DATA.search(r.text)
-            data = json.loads(m.group(1))
-            return data["props"]["pageProps"]["initialJobList"]["data"] or []
+            page_props = extract_gupy_next_data(r.text)
+            _gupy_rows(page_props)  # shape check: retry when the page came back without a job list
+            return page_props
         except Exception:
             if attempt == 2:
                 raise
             await asyncio.sleep(1.5)
-    return []
+    return {}
 
 
 async def fetch_gupy(
@@ -84,21 +94,29 @@ async def fetch_gupy(
     remote: bool = False,
 ) -> list[dict]:
     """Fetch jobs from the Gupy job portal: one sequential query per keyword, deduped by id."""
-    rows: dict[str, dict] = {}
+    pages: list[dict] = []
     last_exc: Exception | None = None
     async with httpx.AsyncClient(timeout=18, follow_redirects=True) as client:
         for i, term in enumerate(_terms(keywords, "desenvolvedor")):
             if i:
                 await asyncio.sleep(_GUPY_SPACING)
             try:
-                for job in await _gupy_query(client, term, remote):
-                    if isinstance(job, dict) and job.get("id") is not None:
-                        rows.setdefault(str(job["id"]), job)
+                pages.append(await _gupy_query(client, term, remote))
             except Exception as exc:
                 logger.warning("Gupy query '%s' failed: %s", term, exc)
                 last_exc = exc
-    if not rows and last_exc:
+    if last_exc and not any(_gupy_rows(pp) for pp in pages):
         raise last_exc
+    return parse_gupy(pages, keywords, results_wanted)
+
+
+def parse_gupy(page_props: dict | list[dict], keywords: list[str], results_wanted: int = 20) -> list[dict]:
+    """Normalize Gupy pageProps (one page, or the pages of several keyword queries) into job dicts."""
+    rows: dict[str, dict] = {}
+    for pp in [page_props] if isinstance(page_props, dict) else page_props:
+        for job in _gupy_rows(pp):
+            if isinstance(job, dict) and job.get("id") is not None:
+                rows.setdefault(str(job["id"]), job)
 
     results: list[dict] = []
     for jid, job in rows.items():
@@ -151,14 +169,15 @@ async def fetch_gupy(
         if len(results) >= results_wanted:
             break
 
-    logger.info("Gupy: fetched %d jobs for %s", len(results), keywords)
+    logger.info("Gupy: parsed %d jobs for %s", len(results), keywords)
     return results
 
 
 # ── Programathor ──────────────────────────────────────────────────────────────
 
 
-def _parse_programathor_page(html: str) -> list[dict]:
+def parse_programathor_listing(html: str) -> list[dict]:
+    """Raw cards of one /jobs listing page (unfiltered)."""
     soup = BeautifulSoup(html, "html.parser")
     seen: set[str] = set()
     out: list[dict] = []
@@ -209,9 +228,8 @@ async def fetch_programathor(
     results_wanted: int = 20,
 ) -> list[dict]:
     """Scrape Programathor /jobs listings (paginated)."""
-    results: list[dict] = []
     max_pages = min(15, max(3, results_wanted // 8 + 3))
-    collected: list[dict] = []
+    pages: list[str] = []
 
     try:
         async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
@@ -220,15 +238,24 @@ async def fetch_programathor(
                 params = {"page": page} if page > 1 else {}
                 r = await client.get(url, params=params, headers=_HTML_HEADERS)
                 r.raise_for_status()
-                batch = _parse_programathor_page(r.text)
+                batch = parse_programathor_listing(r.text)
                 if not batch:
                     break
-                collected.extend(batch)
+                pages.append(r.text)
                 if len(batch) < 5:
                     break
     except Exception as exc:
         logger.warning("Programathor fetch failed: %s", exc)
         raise
+    return parse_programathor(pages, keywords, results_wanted)
+
+
+def parse_programathor(html: str | list[str], keywords: list[str], results_wanted: int = 20) -> list[dict]:
+    """Normalize Programathor listing HTML (one page, or several concatenated in order) into job dicts."""
+    results: list[dict] = []
+    collected: list[dict] = []
+    for page_html in [html] if isinstance(html, str) else html:
+        collected.extend(parse_programathor_listing(page_html))
 
     for job in collected:
         title = job.get("title") or ""
@@ -257,7 +284,7 @@ async def fetch_programathor(
         if len(results) >= results_wanted:
             break
 
-    logger.info("Programathor: fetched %d jobs (from %d listings)", len(results), len(collected))
+    logger.info("Programathor: parsed %d jobs (from %d listings)", len(results), len(collected))
     return results
 
 
@@ -272,21 +299,29 @@ async def fetch_trampos(
     results_wanted: int = 20,
 ) -> list[dict]:
     """Fetch jobs from Trampos' v2 search endpoint: one query per keyword, deduped by id."""
-    rows: dict[str, dict] = {}
+    payloads: list[dict] = []
     last_exc: Exception | None = None
     async with httpx.AsyncClient(timeout=18, follow_redirects=True) as client:
         for term in _terms(keywords, "desenvolvedor"):
             try:
                 r = await client.get(_TRAMPOS_API, params={"tr": term}, headers=_JSON_HEADERS)
                 r.raise_for_status()
-                for job in r.json().get("opportunities") or []:
-                    if isinstance(job, dict) and job.get("id") is not None:
-                        rows.setdefault(str(job["id"]), job)
+                payloads.append(r.json())
             except Exception as exc:
                 logger.warning("Trampos query '%s' failed: %s", term, exc)
                 last_exc = exc
-    if not rows and last_exc:
+    if last_exc and not any(d.get("opportunities") for d in payloads):
         raise last_exc
+    return parse_trampos(payloads, keywords, results_wanted)
+
+
+def parse_trampos(payload: dict | list[dict], keywords: list[str] | None = None, results_wanted: int = 20) -> list[dict]:
+    """Normalize Trampos v2 search JSON ({"opportunities": [...]}; one or several responses) into job dicts."""
+    rows: dict[str, dict] = {}
+    for data in [payload] if isinstance(payload, dict) else payload:
+        for job in data.get("opportunities") or []:
+            if isinstance(job, dict) and job.get("id") is not None:
+                rows.setdefault(str(job["id"]), job)
 
     results: list[dict] = []
     for jid, job in rows.items():
@@ -323,5 +358,5 @@ async def fetch_trampos(
         if len(results) >= results_wanted:
             break
 
-    logger.info("Trampos: fetched %d jobs for %s", len(results), keywords)
+    logger.info("Trampos: parsed %d jobs for %s", len(results), keywords)
     return results

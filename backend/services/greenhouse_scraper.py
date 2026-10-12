@@ -86,6 +86,11 @@ async def _fetch_board(
             logger.warning("Greenhouse fetch failed (%s): %s", token, exc)
             return []
 
+    return parse_greenhouse(data, keywords, company, token)
+
+
+def parse_greenhouse(data: dict, keywords: list[str], company: str, token: str) -> list[dict]:
+    """Normalize one board's decoded Job Board API JSON ({"jobs": [...]}) into job dicts."""
     results: list[dict] = []
 
     for job in data.get("jobs", []):

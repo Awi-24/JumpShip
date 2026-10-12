@@ -1,6 +1,6 @@
 # Plan: JumpShip Desktop App (Tauri + PyInstaller)
 
-> **Status:** BACKLOG (per DEC-20260427-04). Not in active sprint.
+> **Status:** ARCHIVED — superseded by [rust-migration/PLAN.md](./rust-migration/PLAN.md) (DEC-20261011-02).
 
 **Last updated:** 2026-04-26
 **Target platform:** Windows (macOS/Linux future)

@@ -1,0 +1,24 @@
+{
+  "en_to_pt": {
+    "software engineer": "engenheiro de software",
+    "software developer": "desenvolvedor de software",
+    "backend": "backend",
+    "frontend": "frontend",
+    "full stack": "full stack",
+    "data engineer": "engenheiro de dados",
+    "data scientist": "cientista de dados",
+    "machine learning": "aprendizado de máquina",
+    "product manager": "gerente de produto",
+    "devops": "devops",
+    "cloud": "nuvem",
+    "mobile": "mobile",
+    "android": "android",
+    "ios": "ios",
+    "qa": "qa",
+    "quality assurance": "garantia de qualidade",
+    "security": "segurança",
+    "designer": "designer",
+    "ux": "ux",
+    "analyst": "analista"
+  }
+}

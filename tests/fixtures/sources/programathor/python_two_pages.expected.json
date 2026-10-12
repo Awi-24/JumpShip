@@ -1,0 +1,58 @@
+[
+  {
+    "id": "pt_c47baf96",
+    "title": "Engenheiro de Automação IA Sênior",
+    "company": "RDC VIAGENS",
+    "company_url": "",
+    "location": "São Caetano do Sul/SP  (Híbrido)",
+    "job_type": "fulltime",
+    "salary_range": "",
+    "posted_date": "",
+    "description": "C# CI/CD kubernetes .NET SQL Python LangChain",
+    "url": "https://programathor.com.br/jobs/33756-engenheiro-de-automacao-ia-senior",
+    "site": "programathor",
+    "match_score": null
+  },
+  {
+    "id": "pt_e2077382",
+    "title": "Desenvolvedor Back-End Senior (AI Engineer)",
+    "company": "LOLDESIGN Soluções Digitais LTDA",
+    "company_url": "",
+    "location": "Remoto",
+    "job_type": "fulltime",
+    "salary_range": "",
+    "posted_date": "",
+    "description": "API Flask Git Kafka LangChain RabbitMQ Python",
+    "url": "https://programathor.com.br/jobs/33685-desenvolvedor-back-end-senior-ai-engineer",
+    "site": "programathor",
+    "match_score": null
+  },
+  {
+    "id": "pt_1c585400",
+    "title": "Engenheiro(a) DevOps / SRE Senior",
+    "company": "Viradev",
+    "company_url": "",
+    "location": "Remoto",
+    "job_type": "fulltime",
+    "salary_range": "",
+    "posted_date": "",
+    "description": "AWS EC2 (Elastic Compute Cloud) AWS S3 DevOps Docker Linux Python",
+    "url": "https://programathor.com.br/jobs/33845-engenheiro-a-devops-sre-senior",
+    "site": "programathor",
+    "match_score": null
+  },
+  {
+    "id": "pt_71730a56",
+    "title": "Gerente de Engenharia Sênior",
+    "company": "FLYTTR DO BRASIL",
+    "company_url": "",
+    "location": "Remoto",
+    "job_type": "fulltime",
+    "salary_range": "",
+    "posted_date": "",
+    "description": "Django JavaScript Matlab PostgreSQL Python",
+    "url": "https://programathor.com.br/jobs/33814-gerente-de-engenharia-senior",
+    "site": "programathor",
+    "match_score": null
+  }
+]
