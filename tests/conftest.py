@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 _TMP_DIR = tempfile.mkdtemp(prefix="jumpship-tests-")
 atexit.register(shutil.rmtree, _TMP_DIR, ignore_errors=True)
 os.environ["DATABASE_URL"] = f"sqlite:///{_TMP_DIR}/test.db".replace("\\", "/")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
 os.environ["RESUME_OUTPUT_DIR"] = os.path.join(_TMP_DIR, "generated_resumes")
 
 # ── jobspy stub ──────────────────────────────────────────────────────────────
