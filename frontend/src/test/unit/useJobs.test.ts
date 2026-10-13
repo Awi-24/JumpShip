@@ -14,9 +14,9 @@ describe('X-Source-Status parsing', () => {
 
   it('searchJobs returns jobs + sources', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('[]', {
-      headers: { 'X-Source-Status': '{"gupy":{"count":0,"error":null}}' },
+      headers: { 'X-Source-Status': '{"gupy":{"count":0,"error":null}}', 'X-Dismissed-Count': '2' },
     })));
-    expect(await searchJobs(req)).toEqual({ jobs: [], sources: { gupy: { count: 0, error: null } } });
+    expect(await searchJobs(req)).toEqual({ jobs: [], sources: { gupy: { count: 0, error: null } }, dismissed: 2 });
   });
 
   it('surfaces backend detail on error', async () => {

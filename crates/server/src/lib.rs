@@ -11,6 +11,7 @@ pub mod llm;
 pub mod models;
 pub mod profile;
 pub mod resume;
+pub mod store;
 pub mod tailor;
 pub mod web_search;
 
@@ -41,7 +42,10 @@ pub fn app(cfg: Config, db: db::Db) -> Router {
         .allow_credentials(true)
         .allow_methods(AllowMethods::mirror_request())
         .allow_headers(AllowHeaders::mirror_request())
-        .expose_headers([HeaderName::from_static("x-source-status")]);
+        .expose_headers([
+            HeaderName::from_static("x-source-status"),
+            HeaderName::from_static("x-dismissed-count"),
+        ]);
     let state = AppState {
         secrets: Arc::new(db::Secrets::new(&cfg.secret_key)),
         cfg: Arc::new(cfg),
@@ -56,6 +60,7 @@ pub fn app(cfg: Config, db: db::Db) -> Router {
         .merge(interview::routes())
         .merge(resume::routes())
         .merge(tailor::routes())
+        .merge(store::routes())
         .with_state(state)
         .layer(cors)
 }

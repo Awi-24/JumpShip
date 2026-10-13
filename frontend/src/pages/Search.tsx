@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   User, Settings2, Search as SearchIcon, Bookmark, Rocket,
-  Eye, X, AlertTriangle, Globe, FileDown, FileText,
+  Eye, EyeOff, X, AlertTriangle, Globe, FileDown, FileText,
 } from 'lucide-react';
 import ResumeUpload from '../components/ResumeUpload';
 import JobCard from '../components/JobCard';
@@ -192,6 +192,9 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const [assessingIds, setAssessingIds] = useState<Set<string>>(new Set());
 
   const jobSearch = useJobSearch();
+  // Dismissed this session (the backend drops them from later searches); filtered at display time so the
+  // auto-assess effect keyed on `jobs` doesn't restart.
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const jobs: JobResult[] = useMemo(() => jobSearch.data?.jobs ?? [], [jobSearch.data]);
   const sources = jobSearch.data?.sources ?? {};
 
@@ -307,8 +310,8 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   }, []);
 
   // ── Auto-assess all jobs ──────────────────────────────────────────────────
-  const assessSingle = useCallback(async (job: JobResult, profile: ResumeProfile) => {
-    const body = { job, resume_profile: profile, ...getLlmFields(settingsRef.current.evaluatorLlmModel) };
+  const assessSingle = useCallback(async (job: JobResult, profile: ResumeProfile, refresh = false) => {
+    const body = { job, resume_profile: profile, refresh, ...getLlmFields(settingsRef.current.evaluatorLlmModel) };
     setAssessingIds(prev => new Set(prev).add(job.id));
 
     const MAX_RETRIES = 2;
@@ -440,7 +443,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const handleReassess = useCallback((job: JobResult) => {
     if (!resumeProfile) return;
     setAssessments(prev => { const n = { ...prev }; delete n[job.id]; return n; });
-    assessSingle(job, resumeProfile);
+    assessSingle(job, resumeProfile, true);
   }, [resumeProfile, assessSingle]);
 
   // ── Search ─────────────────────────────────────────────────────────────────
@@ -547,6 +550,21 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     } catch { /* silent — tracker page will show nothing changed */ }
   }, [assessments, savedUrls]);
 
+  const handleDismiss = useCallback((job: JobResult) => {
+    setDismissedIds(prev => new Set(prev).add(job.id));
+    fetch('/api/jobs/dismiss', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: job.id, url: job.url }),
+    }).catch(() => { /* still hidden for this session */ });
+  }, []);
+
+  const restoreDismissed = async () => {
+    try { await fetch('/api/jobs/dismissed', { method: 'DELETE' }); } catch { /* search again anyway */ }
+    setDismissedIds(new Set());
+    handleSearch();
+  };
+
   // ── Restore search from history ────────────────────────────────────────────
   const restoreSearch = (entry: SearchHistoryEntry) => {
     setKeywords(entry.keywords);
@@ -558,7 +576,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const sortedJobs = useMemo(() => {
     const visible = jobs.filter(j => {
       const a = assessments[j.id];
-      return !a || a.is_relevant !== false;
+      return !dismissedIds.has(j.id) && (!a || a.is_relevant !== false);
     });
 
     // Rust backend: annual-USD salaries (comparable across currencies / periods); else the first number in the text.
@@ -574,7 +592,8 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
       if (sortBy === 'salary') return salary(b) - salary(a);
       return 0;
     });
-  }, [jobs, sortBy, assessments]);
+  }, [jobs, sortBy, assessments, dismissedIds]);
+  const dismissedCount = (jobSearch.data?.dismissed ?? 0) + dismissedIds.size;
 
   // Paginated view
   const paginatedJobs = sortedJobs.slice(0, visibleCount);
@@ -992,6 +1011,15 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                       </span>
                     ) : null
                   )}
+                  {dismissedCount > 0 && (
+                    <button
+                      className="filter-pill"
+                      title="Jobs you dismissed stay out of new searches"
+                      onClick={restoreDismissed}
+                    >
+                      <EyeOff size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />{dismissedCount} dismissed · restore
+                    </button>
+                  )}
                   {filteredCount > 0 && (
                     <button
                       className={`filter-pill${showHidden ? ' active' : ''}`}
@@ -1040,6 +1068,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                     onReassess={() => handleReassess(job)}
                     isSaved={savedUrls.has(job.url || job.id)}
                     onSave={() => handleSaveToTracker(job)}
+                    onDismiss={() => handleDismiss(job)}
                   />
                 ))}
               </div>

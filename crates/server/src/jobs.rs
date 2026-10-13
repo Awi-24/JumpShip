@@ -111,11 +111,13 @@ async fn search_jobs(
         work_mode: req.work_mode,
     };
     let (jobs, status) = search::search(&st.http, &q).await;
+    let (jobs, dismissed) = crate::store::record(&st.db, jobs).map_err(crate::profile::db_err)?;
     let mut headers = HeaderMap::new();
     headers.insert(
         "X-Source-Status",
         HeaderValue::from_str(&status_header(&status)).unwrap(),
     );
+    headers.insert("X-Dismissed-Count", dismissed.into());
     // JobResult always carries is_remote / tags.
     let jobs = jobs
         .into_iter()
@@ -188,6 +190,9 @@ struct AssessRequest {
     resume_profile: ResumeProfile,
     #[serde(default = "yes")]
     include_company_research: bool,
+    /// Re-assess: skip the cached answer (the new one replaces it).
+    #[serde(default)]
+    refresh: bool,
     #[serde(flatten)]
     llm: Override,
 }
@@ -258,6 +263,12 @@ fn company_context(research: bool, info: &str) -> String {
 /// prompt or switching model re-assesses. ponytail: the company research text is left out (web results drift).
 fn cache_key(llm: &LlmClient, p: &ResumeProfile, job: &Job, research: bool) -> String {
     use sha2::Digest;
+    // Per-search flags, not job content.
+    let job = Job {
+        is_new: None,
+        match_score: None,
+        ..job.clone()
+    };
     let key = json!([
         llm.provider,
         llm.model,
@@ -280,16 +291,20 @@ async fn run_assessment(
     p: &ResumeProfile,
     job: &Job,
     research: bool,
+    refresh: bool,
 ) -> Result<JobAssessment, String> {
     let key = cache_key(llm, p, job, research);
-    let cached = st
-        .db
-        .conn()
-        .query_row("SELECT assessment FROM assessment_cache WHERE key = ?1", [&key], |r| {
-            r.get::<_, String>(0)
+    let cached = (!refresh)
+        .then(|| {
+            st.db
+                .conn()
+                .query_row("SELECT assessment FROM assessment_cache WHERE key = ?1", [&key], |r| {
+                    r.get::<_, String>(0)
+                })
+                .ok()
+                .and_then(|s| serde_json::from_str::<JobAssessment>(&s).ok())
         })
-        .ok()
-        .and_then(|s| serde_json::from_str::<JobAssessment>(&s).ok());
+        .flatten();
     let mut a = match cached {
         Some(a) => a,
         None => {
@@ -326,13 +341,20 @@ async fn run_assessment(
 
 async fn assess(State(st): State<AppState>, Body(req): Body<AssessRequest>) -> ApiResult<Json<JobAssessment>> {
     let llm = LlmClient::from_override(&st.cfg, &req.llm);
-    run_assessment(&st, &llm, &req.resume_profile, &req.job, req.include_company_research)
-        .await
-        .map(Json)
-        .map_err(|e| {
-            tracing::error!("Assessment endpoint error: {e}");
-            ApiError::new(500, format!("Assessment failed: {e}"))
-        })
+    run_assessment(
+        &st,
+        &llm,
+        &req.resume_profile,
+        &req.job,
+        req.include_company_research,
+        req.refresh,
+    )
+    .await
+    .map(Json)
+    .map_err(|e| {
+        tracing::error!("Assessment endpoint error: {e}");
+        ApiError::new(500, format!("Assessment failed: {e}"))
+    })
 }
 
 #[derive(Serialize)]
@@ -345,7 +367,7 @@ struct BatchItem {
 async fn assess_batch(State(st): State<AppState>, Body(req): Body<BatchRequest>) -> Json<Vec<BatchItem>> {
     let llm = LlmClient::from_override(&st.cfg, &req.llm);
     let items = join_all(req.jobs.iter().map(|job| async {
-        let r = run_assessment(&st, &llm, &req.resume_profile, job, req.include_company_research).await;
+        let r = run_assessment(&st, &llm, &req.resume_profile, job, req.include_company_research, false).await;
         if let Err(e) = &r {
             tracing::warn!("Batch assess failed for job {}: {e}", job.id);
         }
@@ -598,11 +620,26 @@ mod tests {
         };
         let p = ResumeProfile::default();
         for _ in 0..2 {
-            let a = run_assessment(&st, &client("m1"), &p, &job, false).await.unwrap();
+            let a = run_assessment(&st, &client("m1"), &p, &job, false, false)
+                .await
+                .unwrap();
             assert_eq!(a.match_score, 81);
         }
         assert_eq!(calls.load(Ordering::SeqCst), 1);
-        run_assessment(&st, &client("m2"), &p, &job, false).await.unwrap();
+        run_assessment(&st, &client("m2"), &p, &job, false, false)
+            .await
+            .unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 2);
+        // "Re-assess" asks again; a later "new" flag on the same job still hits the cache.
+        run_assessment(&st, &client("m1"), &p, &job, false, true).await.unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 3);
+        let flagged = Job {
+            is_new: Some(true),
+            ..job.clone()
+        };
+        run_assessment(&st, &client("m1"), &p, &flagged, false, false)
+            .await
+            .unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 3);
     }
 }

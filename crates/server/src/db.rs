@@ -22,7 +22,8 @@ const MIGRATIONS: &[(&str, &str, &str)] = &[
 ];
 
 /// Rust-only tables; the Python backend never reads them.
-const RUST_DDL: &str = "CREATE TABLE IF NOT EXISTS assessment_cache     (key TEXT PRIMARY KEY, assessment JSON NOT NULL, created_at DATETIME NOT NULL);";
+const RUST_DDL: &str = "CREATE TABLE IF NOT EXISTS assessment_cache     (key TEXT PRIMARY KEY, assessment JSON NOT NULL, created_at DATETIME NOT NULL);
+    CREATE TABLE IF NOT EXISTS job_store (key TEXT PRIMARY KEY, first_seen DATETIME NOT NULL,     last_seen DATETIME NOT NULL, dismissed BOOLEAN NOT NULL DEFAULT 0);";
 
 impl Db {
     /// `DATABASE_URL` (`sqlite:///./jobspy_ui.db`, `sqlite:////abs/path.db`, or a plain path).

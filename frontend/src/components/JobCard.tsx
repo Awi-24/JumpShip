@@ -2,7 +2,7 @@ import { useState } from 'react';
 import DOMPurify from 'dompurify';
 import {
   Banknote, AlertTriangle, Bookmark,
-  FileText, Bot, Check, Sparkles, Tag, Globe, ChevronDown,
+  FileText, Bot, Check, Sparkles, Tag, Globe, ChevronDown, EyeOff,
 } from 'lucide-react';
 import ScoreRing from './ScoreRing';
 import type { JobResult, JobAssessment, ResumeProfile, LLMConfig } from '../types';
@@ -17,6 +17,7 @@ interface JobCardProps {
   onReassess?: () => void;
   isSaved?: boolean;
   onSave?: () => void;
+  onDismiss?: () => void;
 }
 
 /** Lightweight markdown → HTML (no external dep needed). */
@@ -60,6 +61,7 @@ export default function JobCard({
   onReassess,
   isSaved,
   onSave,
+  onDismiss,
 }: JobCardProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -119,6 +121,7 @@ export default function JobCard({
           <div className="job-title">{job.title}</div>
           <div className="job-company">{job.company} · {job.location}</div>
           <div className="job-tags">
+            {job.is_new && <span className="tag tag-new">New</span>}
             {/* Work mode — from backend is_remote */}
             {workStyle.cls && <span className={`tag tag-workmode ${workStyle.cls}`}>{workStyle.label}</span>}
             {/* Seniority / contract from scraper */}
@@ -433,6 +436,19 @@ export default function JobCard({
               >
                 <Bookmark size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
                 {isSaved ? 'Saved to Tracker' : 'Save to Tracker'}
+              </button>
+            )}
+
+            {onDismiss && (
+              <button
+                className="apply-btn"
+                aria-label={`Dismiss ${job.title}`}
+                title="Hide this job now and in later searches"
+                style={{ background: 'transparent', border: '1px solid var(--border-bright)', color: 'var(--text-muted)' }}
+                onClick={onDismiss}
+              >
+                <EyeOff size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                Dismiss
               </button>
             )}
           </div>

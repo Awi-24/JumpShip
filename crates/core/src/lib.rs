@@ -29,6 +29,9 @@ pub struct Job {
     /// `salary_range` as annual USD (search results only; for sorting, never shown).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub salary_annual_usd: Option<f64>,
+    /// Not seen in an earlier search (job store; search results only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_new: Option<bool>,
 }
 
 /// NFKD, drop combining marks, casefold, collapse whitespace.

@@ -22,7 +22,11 @@ export async function searchJobs(request: JobSearchRequest): Promise<JobSearchRe
     try { detail = (await res.json())?.detail; } catch { /* non-JSON body */ }
     throw new Error(typeof detail === 'string' && detail ? detail : 'Failed to search jobs');
   }
-  return { jobs: await res.json(), sources: parseSourceStatus(res.headers.get('X-Source-Status')) };
+  return {
+    jobs: await res.json(),
+    sources: parseSourceStatus(res.headers.get('X-Source-Status')),
+    dismissed: Number(res.headers.get('X-Dismissed-Count')) || 0,
+  };
 }
 
 export function useJobSearch(): UseMutationResult<JobSearchResponse, Error, JobSearchRequest> {

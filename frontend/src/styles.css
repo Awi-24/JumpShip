@@ -1366,6 +1366,7 @@ html[data-theme="light"] .app-shell:hover .grid-overlay {
 .tag.tag-llm { color: #38bdf8; border-color: rgba(56,189,248,0.25); background: rgba(56,189,248,0.07); }
 /* Source platform */
 .tag.tag-source { color: var(--text-muted); border-color: var(--border); background: transparent; font-size: 10px; opacity: 0.7; }
+.tag.tag-new { color: var(--gold); border-color: var(--gold); background: transparent; font-weight: 700; }
 /* Posted date */
 .tag.tag-date { color: var(--text-muted); border-color: transparent; background: transparent; font-size: 10px; padding-left: 0; }
 

@@ -35,6 +35,8 @@ export type SourceStatus = Record<string, { count: number; error: string | null 
 export interface JobSearchResponse {
   jobs: JobResult[];
   sources: SourceStatus;
+  /** Rust backend: jobs left out because the user dismissed them earlier. */
+  dismissed: number;
 }
 
 export interface JobResult {
@@ -47,6 +49,8 @@ export interface JobResult {
   salary_range: string;
   /** Rust backend only: salary_range normalized to annual USD (sorting). */
   salary_annual_usd?: number | null;
+  /** Rust backend: not seen in an earlier search. */
+  is_new?: boolean;
   posted_date: string;
   description: string;
   url: string;
