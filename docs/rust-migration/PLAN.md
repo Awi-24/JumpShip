@@ -1,9 +1,10 @@
 # Plan: JumpShip → native Rust desktop app
 
-> **Status:** ACTIVE — phase 1 done (Glassdoor live transport pending) · code: [`/crates`](../../crates) · Decision: `DEC-20261011-02`
+> **Status:** ACTIVE — phases 1–2 done (Glassdoor live transport and the career-page scraper pending) · code: [`/crates`](../../crates) · Decision: `DEC-20261011-02`
 > Supersedes [`../desktop-app-plan.md`](../desktop-app-plan.md) (Tauri + PyInstaller wrapper).
 
-**Last updated:** 2026-10-12
+**Last updated:** 2026-10-13
+**Run it:** `cargo run -p jumpship-server` (127.0.0.1:8000, the Vite proxy target; reads the same `.env` and `jobspy_ui.db`)
 **Toolchain on dev box:** rustc/cargo 1.96 ✅
 
 ---
@@ -73,7 +74,7 @@ Rule while both backends exist: change these artifacts, not code-embedded copies
 |---|---|---|
 | 0 | **Prep** (done 2026-10-11) | Sources fixed & live-verified; parsers pure; golden fixtures; prompts/data extracted; specs written |
 | 1 | ✅ **Core + sources** (done 2026-10-12: 29/29 golden + 3/3 JobSpy replays; live results identical to Python for 10 sources; Glassdoor needs a Chrome-TLS client + cookie jar, see §7) — workspace, `jumpship-core`, `jumpship-sources` (Gupy, Trampos, Greenhouse, Lever, Workday, RemoteOK, Arbeitnow, Programathor first; then Indeed GraphQL, LinkedIn guest, Glassdoor) | All `cases.json` golden tests pass in `cargo test`; live smoke matches Python counts ±noise |
-| 2 | **Server parity** — axum with the endpoints marked *used* in API.md; store; LLM | React app works against axum with no frontend changes; side-by-side request diff on search/assess/resume parse |
+| 2 | ✅ **Server parity** (done 2026-10-13: all 23 UI operations; React ran unchanged against it; see §8) — axum with the endpoints marked *used* in API.md; store; LLM | React app works against axum with no frontend changes; side-by-side request diff on search/assess/resume parse |
 | 3 | **Desktop** — Tauri v2 shell spawns server on random port, injects base URL; installer (MSI/NSIS) | Clean install on a fresh Windows VM; no Python on the machine |
 | 4 | **New capabilities** (deferred from Python, see §5) | Each behind its own acceptance test |
 | 5 | Optional: Tauri commands/events for search streaming, drop localhost server | — |
@@ -117,3 +118,23 @@ Port order inside phase 1 follows value × simplicity: JSON APIs first, HTML sec
 - Job descriptions must stay byte-identical to JobSpy's (BeautifulSoup `html.parser` + `prettify` + markdownify):
   `crates/sources/src/soup.rs` ports all three. Tables / `<dl>` aren't ported yet (absent from descriptions so far).
 - Scraping must respect each site's ToS/robots (see `ingestion_notes` in the source registry).
+
+## 8. Phase 2 notes (as built)
+
+- **Layout**: `crates/server` holds config, LLM client, SQLite store, résumé parse/PDF as modules (one consumer today;
+  split into `jumpship-llm` / `-store` / `-resume` crates when the Tauri shell needs them directly). Search
+  orchestration (`search_jobs`) lives in `crates/sources/src/search.rs`.
+- **Parity evidence**: live search 46/46 jobs identical to Python (ids, order, every field); the `test_prompts.py`
+  hashes reproduced for assess, keywords, interview, report, tailored résumé, compaction and résumé parse; on copies of
+  the real DB, 4 reads + 15 write steps give the same status and body as FastAPI; Fernet tokens readable both ways;
+  pdf-extract vs pdfminer: same word and line counts (unmapped glyphs: `(cid:N)` vs U+FFFD).
+- **PDF engine** (§6.4, recommended option): the installed Edge / Chrome / Chromium in `--headless --print-to-pdf`
+  mode with a throwaway profile (`JUMPSHIP_BROWSER` overrides discovery). No CDP crate; same HTML/CSS template,
+  `lopdf` page count, same compaction / font-scale loop. Docker mode would need a Chromium in the image.
+- **Deliberate behaviour changes**: `llm_base_url` only for ollama/lmstudio (also fixed in Python: the UI sends its
+  Ollama URL with every request); the local-LLM semaphore guards every call (Python: only some routes); Gemini via
+  REST with default `gemini-2.5-flash`; Hugging Face via `router.huggingface.co`; lax-typed LLM JSON (null fields →
+  defaults) instead of a 500.
+- **Not ported yet**: `playwright` career-page scraper (reports an error in `X-Source-Status`; phase 4 CDP/XHR
+  rewrite); board errors after partial results are only logged; legacy / unused routers (API.md list).
+
