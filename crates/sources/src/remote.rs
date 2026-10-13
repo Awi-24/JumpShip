@@ -24,7 +24,7 @@ async fn get_json(client: &reqwest::Client, url: &str, query: &[(&str, &str)]) -
 }
 
 /// Board job type → the app's `fulltime` / `parttime` / `contract` / `internship` / `temporary`.
-fn job_type(raw: &str) -> String {
+pub(crate) fn job_type(raw: &str) -> String {
     let t: String = raw.to_lowercase().chars().filter(char::is_ascii_alphanumeric).collect();
     match t.as_str() {
         "fulltime" | "parttime" | "internship" | "temporary" | "contract" => t,
@@ -57,7 +57,7 @@ fn joined(v: Option<&Value>, sep: &str) -> String {
 }
 
 /// Collapse `"Argentina,  Canada,  UK"` → `"Argentina, Canada, UK"`; empty → `Remote`.
-fn place(raw: &str) -> String {
+pub(crate) fn place(raw: &str) -> String {
     let parts: Vec<&str> = raw.split(',').map(str::trim).filter(|p| !p.is_empty()).collect();
     if parts.is_empty() {
         "Remote".into()

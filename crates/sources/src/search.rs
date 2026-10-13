@@ -12,7 +12,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::jobspy::{LOCATIONS, REMOTE_WORDS, SearchInput, basic_tags, infer_work_mode, title_case};
-use crate::{ats, br, extra, jobspy, remote, salary};
+use crate::{ats, br, companies, extra, jobspy, remote, salary};
 
 const JOBSPY_SITES: &[&str] = &["linkedin", "indeed", "glassdoor"];
 const EXTRA_SITES: &[&str] = &[
@@ -27,6 +27,9 @@ const EXTRA_SITES: &[&str] = &[
     "greenhouse",
     "lever",
     "workday",
+    "amazon",
+    "ashby",
+    "smartrecruiters",
     "playwright",
 ];
 /// Sources that index Portuguese titles: the keywords get PT-BR equivalents appended.
@@ -362,9 +365,11 @@ fn run_site(
     site: &str,
     q: &Query,
     input: SearchInput,
-    remote: bool,
+    resolved: &Resolved,
 ) -> BoxFuture<'static, SiteResult> {
     let c = client.clone();
+    let remote = resolved.is_remote;
+    let (country, resolved) = (resolved.country_key.clone(), resolved.clone());
     let n = q.results_wanted;
     let kws = if PT_SITES.contains(&site) {
         pt_keywords(&q.keywords)
@@ -387,6 +392,14 @@ fn run_site(
         "greenhouse" => async move { Ok(ats::fetch_greenhouse(&c, &kws, n).await) }.boxed(),
         "lever" => async move { Ok(ats::fetch_lever(&c, &kws, n).await) }.boxed(),
         "workday" => async move { Ok(ats::fetch_workday(&c, &kws, n).await) }.boxed(),
+        "amazon" => async move { companies::fetch_amazon(&c, &kws, n, &country).await.map_err(err) }.boxed(),
+        "ashby" => async move { Ok(companies::fetch_ashby(&c, &kws, n, &resolved).await) }.boxed(),
+        "smartrecruiters" => async move {
+            companies::fetch_smartrecruiters(&c, &kws, n, &country)
+                .await
+                .map_err(err)
+        }
+        .boxed(),
         // ponytail: the headless career-page scraper is rewritten on CDP in phase 4 (PLAN §5).
         _ => async { Err("career-page scraper not available in the Rust build yet".to_string()) }.boxed(),
     }
@@ -444,7 +457,7 @@ fn plan(client: &reqwest::Client, q: &Query) -> Plan {
             is_remote: remote,
             hours_old: q.hours_old,
         };
-        futs.push((site.clone(), run_site(client, site, q, input, remote)));
+        futs.push((site.clone(), run_site(client, site, q, input, &resolved)));
     }
     Plan {
         key,

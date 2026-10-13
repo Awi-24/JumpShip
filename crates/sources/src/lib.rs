@@ -3,6 +3,7 @@
 
 pub mod ats;
 pub mod br;
+pub mod companies;
 pub mod extra;
 pub mod jobspy;
 pub mod polite;

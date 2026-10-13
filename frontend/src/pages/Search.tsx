@@ -23,11 +23,14 @@ interface SearchProps {
 }
 
 const ALL_SITES = ['linkedin', 'indeed', 'glassdoor', 'remoteok', 'arbeitnow', 'remotive', 'himalayas', 'jobicy', 'gupy', 'programathor', 'trampos'];
-const JUMPSHIP_SITES = ['greenhouse', 'lever', 'workday', 'playwright'];
+const JUMPSHIP_SITES = ['greenhouse', 'lever', 'workday', 'smartrecruiters', 'ashby', 'amazon', 'playwright'];
 const JUMPSHIP_SITE_LABELS: Record<string, string> = {
   greenhouse: 'Greenhouse',
   lever: 'Lever',
   workday: 'Workday',
+  smartrecruiters: 'SmartRecruiters',
+  ashby: 'Ashby',
+  amazon: 'Amazon',
   playwright: 'Career Pages',
 };
 const PAGE_SIZE = 20;
