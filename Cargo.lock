@@ -831,6 +831,7 @@ name = "jumpship-sources"
 version = "0.1.0"
 dependencies = [
  "futures",
+ "html5ever",
  "htmlize",
  "jumpship-core",
  "md5",

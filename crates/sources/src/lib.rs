@@ -4,6 +4,8 @@
 pub mod ats;
 pub mod br;
 pub mod extra;
+pub mod jobspy;
+pub mod soup;
 
 use serde_json::Value;
 
@@ -62,9 +64,14 @@ fn prefix(s: &str, n: usize) -> String {
     s.chars().take(n).collect()
 }
 
+/// `hashlib.md5(s.encode()).hexdigest()`.
+fn md5_hex(s: &str) -> String {
+    format!("{:x}", md5::compute(s))
+}
+
 /// `hashlib.md5(s.encode()).hexdigest()[:8]`.
 fn md5_8(s: &str) -> String {
-    format!("{:x}", md5::compute(s))[..8].to_string()
+    md5_hex(s)[..8].to_string()
 }
 
 /// Python `int(v)` for JSON numbers / numeric strings (0 when not convertible).

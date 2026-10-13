@@ -142,10 +142,10 @@ pub fn parse_gupy(pages: &[Value], keywords: &[String], results_wanted: usize) -
             _ => "fulltime",
         };
         let (is_remote, tags) = match wp.as_str() {
-            "remote" => (Some(Some(true)), vec![]),
-            "hybrid" => (Some(None), vec!["hybrid".to_string()]),
-            "" => (None, vec![]),
-            _ => (Some(Some(false)), vec![]),
+            "remote" => (Some(Some(true)), None),
+            "hybrid" => (Some(None), Some(vec!["hybrid".to_string()])),
+            "" => (None, None),
+            _ => (Some(Some(false)), None),
         };
         results.push(Job {
             id: format!("gupy_{}", md5_8(&jid)),
@@ -378,11 +378,11 @@ pub fn parse_trampos(payloads: &[Value], results_wanted: usize) -> Vec<Job> {
             _ => "fulltime",
         };
         let (is_remote, tags) = if home_office {
-            (Some(Some(true)), vec![])
+            (Some(Some(true)), None)
         } else if get(job, "hybrid").is_some() {
-            (Some(None), vec!["hybrid".to_string()])
+            (Some(None), Some(vec!["hybrid".to_string()]))
         } else {
-            (None, vec![])
+            (None, None)
         };
         results.push(Job {
             id: format!("trampos_{}", md5_8(&jid)),

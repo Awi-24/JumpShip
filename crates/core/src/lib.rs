@@ -22,8 +22,9 @@ pub struct Job {
     /// Absent = unknown, `Some(None)` = hybrid (serialized as null), `Some(Some(b))` = remote or on-site.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_remote: Option<Option<bool>>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub tags: Vec<String>,
+    /// Absent for sources that don't tag (JobSpy rows always carry the list, even empty).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
 }
 
 /// NFKD, drop combining marks, casefold, collapse whitespace.

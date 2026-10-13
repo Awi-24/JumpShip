@@ -1,6 +1,6 @@
 # Plan: JumpShip → native Rust desktop app
 
-> **Status:** ACTIVE — phase 1 in progress (8/11 sources ported) · code: [`/crates`](../../crates) · Decision: `DEC-20261011-02`
+> **Status:** ACTIVE — phase 1 done (Glassdoor live transport pending) · code: [`/crates`](../../crates) · Decision: `DEC-20261011-02`
 > Supersedes [`../desktop-app-plan.md`](../desktop-app-plan.md) (Tauri + PyInstaller wrapper).
 
 **Last updated:** 2026-10-12
@@ -72,7 +72,7 @@ Rule while both backends exist: change these artifacts, not code-embedded copies
 | # | Phase | Exit criteria |
 |---|---|---|
 | 0 | **Prep** (done 2026-10-11) | Sources fixed & live-verified; parsers pure; golden fixtures; prompts/data extracted; specs written |
-| 1 | **Core + sources** (8 JSON/HTML sources done 2026-10-12: 29/29 golden, live counts identical to Python) — workspace, `jumpship-core`, `jumpship-sources` (Gupy, Trampos, Greenhouse, Lever, Workday, RemoteOK, Arbeitnow, Programathor first; then Indeed GraphQL, LinkedIn guest, Glassdoor) | All `cases.json` golden tests pass in `cargo test`; live smoke matches Python counts ±noise |
+| 1 | ✅ **Core + sources** (done 2026-10-12: 29/29 golden + 3/3 JobSpy replays; live results identical to Python for 10 sources; Glassdoor needs a Chrome-TLS client + cookie jar, see §7) — workspace, `jumpship-core`, `jumpship-sources` (Gupy, Trampos, Greenhouse, Lever, Workday, RemoteOK, Arbeitnow, Programathor first; then Indeed GraphQL, LinkedIn guest, Glassdoor) | All `cases.json` golden tests pass in `cargo test`; live smoke matches Python counts ±noise |
 | 2 | **Server parity** — axum with the endpoints marked *used* in API.md; store; LLM | React app works against axum with no frontend changes; side-by-side request diff on search/assess/resume parse |
 | 3 | **Desktop** — Tauri v2 shell spawns server on random port, injects base URL; installer (MSI/NSIS) | Clean install on a fresh Windows VM; no Python on the machine |
 | 4 | **New capabilities** (deferred from Python, see §5) | Each behind its own acceptance test |
@@ -111,5 +111,9 @@ Port order inside phase 1 follows value × simplicity: JSON APIs first, HTML sec
 
 - LinkedIn guest API, Indeed GraphQL and Glassdoor GraphQL are undocumented and change; JobSpy absorbs
   that today. Mitigation: fixtures + `request.json` per board, canary health check, keep adapters thin.
-- TLS-impersonation crates are niche; if `wreq` stalls, Glassdoor can fall back to the CDP browser.
+- TLS-impersonation crates are niche; if `wreq` stalls, Glassdoor can fall back to the CDP browser. Status 2026-10-12:
+  `wreq` is 6.0.0-rc and builds BoringSSL (needs cmake + NASM/clang); plain reqwest gets Cloudflare 403. Request
+  building and parsing are ported and replay-tested (`crates/sources/src/jobspy/glassdoor.rs`); only the transport is open.
+- Job descriptions must stay byte-identical to JobSpy's (BeautifulSoup `html.parser` + `prettify` + markdownify):
+  `crates/sources/src/soup.rs` ports all three. Tables / `<dl>` aren't ported yet (absent from descriptions so far).
 - Scraping must respect each site's ToS/robots (see `ingestion_notes` in the source registry).

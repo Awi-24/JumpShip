@@ -423,12 +423,12 @@ async def _search_jobspy(
 
     results = []
     for _, row in df.iterrows():
+        # _cell(): pandas 3 stores a missing string cell as NaN, which is truthy.
         job_id = hashlib.md5(
-            f"{row.get('title', '')}-{row.get('company', '')}-{row.get('job_url', '')}".encode()
+            f"{_cell(row.get('title'))}-{_cell(row.get('company'))}-{_cell(row.get('job_url'))}".encode()
         ).hexdigest()[:12]
 
-        raw_company_url = row.get("company_url_direct") or row.get("company_url") or ""
-        company_url = str(raw_company_url) if raw_company_url and str(raw_company_url) != "nan" else ""
+        company_url = _cell(row.get("company_url_direct")) or _cell(row.get("company_url"))
         if company_url and not company_url.startswith("http"):
             base = _extract_domain(str(row.get("job_url", "")))
             company_url = base + company_url if base else ""

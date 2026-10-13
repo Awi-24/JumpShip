@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 futures = "0.3.34"
+html5ever = "0.39"
 htmlize = { version = "1.1.0", features = ["unescape"] }
 jumpship-core = { path = "../core" }
 md5 = "0.8.1"
