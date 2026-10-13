@@ -1,0 +1,8 @@
+[package]
+name = "jumpship-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+unicode-normalization = "0.1.25"

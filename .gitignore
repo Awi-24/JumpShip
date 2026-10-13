@@ -73,3 +73,6 @@ generated_resumes/
 
 # Test coverage
 frontend/coverage/
+
+# Rust
+/target

@@ -1,9 +1,9 @@
 # Plan: JumpShip → native Rust desktop app
 
-> **Status:** ACTIVE (prep complete, port not started) · Decision: `DEC-20261011-02`
+> **Status:** ACTIVE — phase 1 in progress (8/11 sources ported) · code: [`/crates`](../../crates) · Decision: `DEC-20261011-02`
 > Supersedes [`../desktop-app-plan.md`](../desktop-app-plan.md) (Tauri + PyInstaller wrapper).
 
-**Last updated:** 2026-10-11
+**Last updated:** 2026-10-12
 **Toolchain on dev box:** rustc/cargo 1.96 ✅
 
 ---
@@ -72,7 +72,7 @@ Rule while both backends exist: change these artifacts, not code-embedded copies
 | # | Phase | Exit criteria |
 |---|---|---|
 | 0 | **Prep** (done 2026-10-11) | Sources fixed & live-verified; parsers pure; golden fixtures; prompts/data extracted; specs written |
-| 1 | **Core + sources** — workspace, `jumpship-core`, `jumpship-sources` (Gupy, Trampos, Greenhouse, Lever, Workday, RemoteOK, Arbeitnow, Programathor first; then Indeed GraphQL, LinkedIn guest, Glassdoor) | All `cases.json` golden tests pass in `cargo test`; live smoke matches Python counts ±noise |
+| 1 | **Core + sources** (8 JSON/HTML sources done 2026-10-12: 29/29 golden, live counts identical to Python) — workspace, `jumpship-core`, `jumpship-sources` (Gupy, Trampos, Greenhouse, Lever, Workday, RemoteOK, Arbeitnow, Programathor first; then Indeed GraphQL, LinkedIn guest, Glassdoor) | All `cases.json` golden tests pass in `cargo test`; live smoke matches Python counts ±noise |
 | 2 | **Server parity** — axum with the endpoints marked *used* in API.md; store; LLM | React app works against axum with no frontend changes; side-by-side request diff on search/assess/resume parse |
 | 3 | **Desktop** — Tauri v2 shell spawns server on random port, injects base URL; installer (MSI/NSIS) | Clean install on a fresh Windows VM; no Python on the machine |
 | 4 | **New capabilities** (deferred from Python, see §5) | Each behind its own acceptance test |
