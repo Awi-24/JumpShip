@@ -12,6 +12,7 @@ fernet = { version = "0.2.2", default-features = false, features = ["rustcrypto"
 futures = "0.3.34"
 jumpship-core = { path = "../core" }
 jumpship-sources = { path = "../sources" }
+lopdf = { version = "0.42", default-features = false }
 pbkdf2 = { version = "0.13.0", default-features = false, features = ["hmac"] }
 pdf-extract = "0.12.1"
 regex = "1.13.1"

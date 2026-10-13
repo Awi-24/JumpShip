@@ -1241,6 +1241,7 @@ dependencies = [
  "futures",
  "jumpship-core",
  "jumpship-sources",
+ "lopdf",
  "pbkdf2",
  "pdf-extract",
  "regex",

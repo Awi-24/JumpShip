@@ -240,6 +240,52 @@ pub fn parse(html: &str) -> Element {
     b.stack.pop().unwrap()
 }
 
+// ── bs4 str(tag) / decode_contents() (default "minimal" formatter) ─────────────────────────────
+
+/// bs4 `str(tag)`: attributes sorted, `&<>` escaped in text (`"` too in attributes), script/style text raw.
+pub fn decode(e: &Element) -> String {
+    let mut out = String::new();
+    write_element(e, &mut out);
+    out
+}
+
+/// bs4 `tag.decode_contents()`.
+pub fn decode_contents(e: &Element) -> String {
+    let mut out = String::new();
+    write_children(e, &mut out);
+    out
+}
+
+fn write_children(e: &Element, out: &mut String) {
+    let raw = matches!(e.name.as_str(), "script" | "style");
+    for c in &e.children {
+        match c {
+            Node::Text(t) if raw => out.push_str(t),
+            Node::Text(t) => out.push_str(&escape(t, false)),
+            Node::Comment(c) => out.push_str(&format!("<!--{c}-->")),
+            Node::Doctype(d) => out.push_str(&format!("<!DOCTYPE {d}>")),
+            Node::Element(e) => write_element(e, out),
+        }
+    }
+}
+
+fn write_element(e: &Element, out: &mut String) {
+    let mut attrs: Vec<&(String, String)> = e.attrs.iter().collect();
+    attrs.sort();
+    out.push('<');
+    out.push_str(&e.name);
+    for (k, v) in attrs {
+        out.push_str(&format!(" {k}=\"{}\"", escape(v, true)));
+    }
+    if e.children.is_empty() && VOID.contains(&e.name.as_str()) {
+        out.push_str("/>");
+        return;
+    }
+    out.push('>');
+    write_children(e, out);
+    out.push_str(&format!("</{}>", e.name));
+}
+
 // ── bs4 Tag.prettify(formatter="html") ───────────────────────────────────────────────────────────
 
 fn escape(s: &str, quote: bool) -> String {

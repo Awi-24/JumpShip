@@ -11,6 +11,7 @@ pub mod llm;
 pub mod models;
 pub mod profile;
 pub mod resume;
+pub mod tailor;
 pub mod web_search;
 
 use std::sync::Arc;
@@ -54,6 +55,7 @@ pub fn app(cfg: Config, db: db::Db) -> Router {
         .merge(applications::routes())
         .merge(interview::routes())
         .merge(resume::routes())
+        .merge(tailor::routes())
         .with_state(state)
         .layer(cors)
 }
