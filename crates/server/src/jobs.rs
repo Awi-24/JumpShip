@@ -254,6 +254,26 @@ fn company_context(research: bool, info: &str) -> String {
     format!("\n{}\n", render("assess_company_context", &[("company_info", info)]))
 }
 
+/// Assessment-cache key (PLAN §5): everything that shapes the answer, prompt templates included, so editing a
+/// prompt or switching model re-assesses. ponytail: the company research text is left out (web results drift).
+fn cache_key(llm: &LlmClient, p: &ResumeProfile, job: &Job, research: bool) -> String {
+    use sha2::Digest;
+    let key = json!([
+        llm.provider,
+        llm.model,
+        research,
+        load("assess_system"),
+        load("assess_user"),
+        load("assess_company_context"),
+        job,
+        p
+    ]);
+    sha2::Sha256::digest(key.to_string().as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
 async fn run_assessment(
     st: &AppState,
     llm: &LlmClient,
@@ -261,23 +281,45 @@ async fn run_assessment(
     job: &Job,
     research: bool,
 ) -> Result<JobAssessment, String> {
-    let info = if research && !job.company.is_empty() {
-        web_search::company_info(&st.http, &job.company, &job.title).await
-    } else {
-        String::new()
+    let key = cache_key(llm, p, job, research);
+    let cached = st
+        .db
+        .conn()
+        .query_row("SELECT assessment FROM assessment_cache WHERE key = ?1", [&key], |r| {
+            r.get::<_, String>(0)
+        })
+        .ok()
+        .and_then(|s| serde_json::from_str::<JobAssessment>(&s).ok());
+    let mut a = match cached {
+        Some(a) => a,
+        None => {
+            let info = if research && !job.company.is_empty() {
+                web_search::company_info(&st.http, &job.company, &job.title).await
+            } else {
+                String::new()
+            };
+            let company_context = company_context(research, &info);
+            let raw = llm
+                .complete(
+                    &st.http,
+                    load("assess_system"),
+                    &assess_user(p, job, &company_context),
+                    None,
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            // Unparseable output is an error, never a fake score that would pollute the ranking.
+            let a = assessment_from(parse_json(&raw).map_err(|e| e.to_string())?)?;
+            let stored = st.db.conn().execute(
+                "INSERT OR REPLACE INTO assessment_cache (key, assessment, created_at) VALUES (?1, ?2, ?3)",
+                (&key, serde_json::to_string(&a).unwrap(), crate::db::utcnow()),
+            );
+            if let Err(e) = stored {
+                tracing::warn!("assessment cache write failed: {e}");
+            }
+            a
+        }
     };
-    let company_context = company_context(research, &info);
-    let raw = llm
-        .complete(
-            &st.http,
-            load("assess_system"),
-            &assess_user(p, job, &company_context),
-            None,
-        )
-        .await
-        .map_err(|e| e.to_string())?;
-    // Unparseable output is an error, never a fake score that would pollute the ranking.
-    let mut a = assessment_from(parse_json(&raw).map_err(|e| e.to_string())?)?;
     a.resume_generation_triggered = a.match_score >= st.cfg.resume_gen_threshold && a.is_relevant;
     Ok(a)
 }
@@ -508,5 +550,59 @@ mod tests {
         for (i, (got, want)) in cases.iter().enumerate() {
             assert_eq!(got, want, "case {i}");
         }
+    }
+
+    /// Acceptance (PLAN §5 assessment cache): the same job + résumé + model hits the LLM once; another model re-asks.
+    #[tokio::test]
+    async fn assessment_cache_skips_llm() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counter = calls.clone();
+        let stub = axum::Router::new().route(
+            "/v1/chat/completions",
+            post(move || {
+                counter.fetch_add(1, Ordering::SeqCst);
+                async {
+                    let content = r#"{"match_score": 81, "summary": "ok", "is_relevant": true}"#;
+                    Json(json!({"choices": [{"message": {"content": content}}]}))
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, stub).await });
+
+        let st = AppState {
+            cfg: Arc::new(crate::config::Config::from_env()),
+            http: reqwest::Client::new(),
+            db: Arc::new(crate::db::Db::memory()),
+            secrets: Arc::new(crate::db::Secrets::new("test")),
+        };
+        let client = |model: &str| {
+            LlmClient::from_override(
+                &st.cfg,
+                &Override {
+                    llm_provider: Some("lmstudio".into()),
+                    llm_model: Some(model.into()),
+                    llm_api_key: None,
+                    llm_base_url: Some(base.clone()),
+                },
+            )
+        };
+        let job = Job {
+            id: "j1".into(),
+            title: "Rust Developer".into(),
+            ..Default::default()
+        };
+        let p = ResumeProfile::default();
+        for _ in 0..2 {
+            let a = run_assessment(&st, &client("m1"), &p, &job, false).await.unwrap();
+            assert_eq!(a.match_score, 81);
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        run_assessment(&st, &client("m2"), &p, &job, false).await.unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
 }

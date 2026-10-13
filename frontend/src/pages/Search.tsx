@@ -22,7 +22,7 @@ interface SearchProps {
   onNavigate: (page: 'tracker') => void;
 }
 
-const ALL_SITES = ['linkedin', 'indeed', 'glassdoor', 'remoteok', 'arbeitnow', 'gupy', 'programathor', 'trampos'];
+const ALL_SITES = ['linkedin', 'indeed', 'glassdoor', 'remoteok', 'arbeitnow', 'remotive', 'himalayas', 'jobicy', 'gupy', 'programathor', 'trampos'];
 const JUMPSHIP_SITES = ['greenhouse', 'lever', 'workday', 'playwright'];
 const JUMPSHIP_SITE_LABELS: Record<string, string> = {
   greenhouse: 'Greenhouse',

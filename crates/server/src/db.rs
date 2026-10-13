@@ -21,6 +21,9 @@ const MIGRATIONS: &[(&str, &str, &str)] = &[
     ("analyses", "keywords_missing", "JSON"),
 ];
 
+/// Rust-only tables; the Python backend never reads them.
+const RUST_DDL: &str = "CREATE TABLE IF NOT EXISTS assessment_cache     (key TEXT PRIMARY KEY, assessment JSON NOT NULL, created_at DATETIME NOT NULL);";
+
 impl Db {
     /// `DATABASE_URL` (`sqlite:///./jobspy_ui.db`, `sqlite:////abs/path.db`, or a plain path).
     pub fn open(url: &str) -> rusqlite::Result<Db> {
@@ -38,6 +41,7 @@ impl Db {
             .replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ")
             .replace("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS ");
         conn.execute_batch(&ddl)?;
+        conn.execute_batch(RUST_DDL)?;
         for (table, col, ty) in MIGRATIONS {
             let has: bool = conn.query_row(
                 &format!("SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = ?1"),

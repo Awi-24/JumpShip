@@ -12,12 +12,15 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::jobspy::{LOCATIONS, REMOTE_WORDS, SearchInput, basic_tags, infer_work_mode, title_case};
-use crate::{ats, br, extra, jobspy};
+use crate::{ats, br, extra, jobspy, remote};
 
 const JOBSPY_SITES: &[&str] = &["linkedin", "indeed", "glassdoor"];
 const EXTRA_SITES: &[&str] = &[
     "remoteok",
     "arbeitnow",
+    "remotive",
+    "himalayas",
+    "jobicy",
     "gupy",
     "programathor",
     "trampos",
@@ -373,6 +376,9 @@ fn run_site(
         "glassdoor" => async move { jobspy::glassdoor::fetch_glassdoor(&c, &input).await.map_err(err) }.boxed(),
         "remoteok" => async move { extra::fetch_remoteok(&c, &kws, n).await.map_err(err) }.boxed(),
         "arbeitnow" => async move { extra::fetch_arbeitnow(&c, &kws, n).await.map_err(err) }.boxed(),
+        "remotive" => async move { remote::fetch_remotive(&c, &kws, n).await.map_err(err) }.boxed(),
+        "himalayas" => async move { remote::fetch_himalayas(&c, &kws, n).await.map_err(err) }.boxed(),
+        "jobicy" => async move { remote::fetch_jobicy(&c, &kws, n).await.map_err(err) }.boxed(),
         "gupy" => async move { br::fetch_gupy(&c, &kws, n, remote).await.map_err(err) }.boxed(),
         "programathor" => async move { br::fetch_programathor(&c, &kws, n).await.map_err(err) }.boxed(),
         "trampos" => async move { br::fetch_trampos(&c, &kws, n).await.map_err(err) }.boxed(),

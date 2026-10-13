@@ -5,6 +5,7 @@ pub mod ats;
 pub mod br;
 pub mod extra;
 pub mod jobspy;
+pub mod remote;
 pub mod search;
 pub mod soup;
 
