@@ -31,6 +31,8 @@ enum How {
         slug: &'static str,
         empresa: &'static str,
     },
+    /// Inhire tenant (`<tenant>.inhire.app/vagas`): the whole board, filtered here.
+    Inhire(&'static str),
     /// Rendered page; `{q}` is replaced by one keyword (one render per keyword, up to 2).
     Page(&'static str),
 }
@@ -40,6 +42,15 @@ use How::*;
 /// JBS (Gupy source), OpenAI (Ashby source), Amazon (Amazon source).
 // ponytail: verified by hand 2026-10-13; sites change — move to the registry with a health check if this rots.
 const PAGES: &[(&str, &str, How)] = &[
+    // Inhire has no tenant directory: these answered `X-Tenant` on 2026-10-13 (ZENVIA, Creditas, EBANX had 0 jobs).
+    ("inhire_db1", "DB1 Group", Inhire("db1")),
+    ("inhire_intera", "Intera", Inhire("intera")),
+    ("inhire_olist", "Olist", Inhire("olist")),
+    ("inhire_cora", "Cora", Inhire("cora")),
+    ("inhire_contaazul", "Conta Azul", Inhire("contaazul")),
+    ("inhire_zenvia", "ZENVIA", Inhire("zenvia")),
+    ("inhire_creditas", "Creditas", Inhire("creditas")),
+    ("inhire_ebanx", "EBANX", Inhire("ebanx")),
     (
         "stone_jornada",
         "Stone",
@@ -318,6 +329,42 @@ pub fn parse_empregare(data: &Value, src_id: &str, company: &str, slug: &str) ->
         .collect()
 }
 
+async fn inhire(client: &reqwest::Client, tenant: &str) -> Result<Value, Error> {
+    Ok(crate::polite::send(
+        client
+            .get("https://api.inhire.app/job-posts/public/pages")
+            .header("Accept", ACCEPT_JSON)
+            .header("X-Tenant", tenant)
+            .timeout(Duration::from_secs(20)),
+    )
+    .await?
+    .error_for_status()?
+    .json()
+    .await?)
+}
+
+pub fn parse_inhire(data: &Value, src_id: &str, company: &str, tenant: &str) -> Vec<Job> {
+    let company = get(data, "tenantName").map_or_else(|| company.to_string(), pystr);
+    data["jobsPage"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|v| v["status"] == "published")
+        .map(|v| {
+            let url = format!("https://{tenant}.inhire.app/vagas/{}", s(v, "jobId"));
+            let mut j = job(
+                src_id,
+                &company,
+                s(v, "displayName").trim().to_string(),
+                url,
+                s(v, "location"),
+            );
+            work_mode(&mut j, &s(v, "workplaceType"));
+            j
+        })
+        .collect()
+}
+
 // ── Rendered pages ──────────────────────────────────────────────────────────────────────────────
 
 /// `career_links.js` output → jobs: titled links only, one per URL and per title.
@@ -404,6 +451,15 @@ pub async fn fetch_career_pages(
                 }
             }
             Page(url) => pages.push((id, company, url.to_string())),
+            Inhire(tenant) => api.push(
+                async move {
+                    let r = inhire(client, tenant)
+                        .await
+                        .map(|v| parse_inhire(&v, id, company, tenant));
+                    (id.to_string(), r.map_err(|e| e.to_string()))
+                }
+                .boxed(),
+            ),
             _ => {
                 for t in terms.clone() {
                     api.push(
@@ -418,7 +474,7 @@ pub async fn fetch_career_pages(
                                 Empregare { slug, empresa } => empregare(client, slug, empresa, &t)
                                     .await
                                     .map(|v| parse_empregare(&v, id, company, slug)),
-                                Workday(_) | Page(_) => unreachable!(),
+                                Workday(_) | Inhire(_) | Page(_) => unreachable!(),
                             };
                             (id.to_string(), r.map_err(|e| e.to_string()))
                         }
@@ -540,6 +596,18 @@ mod tests {
         let j = &parse_empregare(&e, "stellantis_empregare_br", "Stellantis", "stellantis")[0];
         assert_eq!(j.url, "https://stellantis.empregare.com/pt-br/vaga-operador_164983");
         assert_eq!((j.location.as_str(), j.is_remote), ("Betim, MG, BR", Some(Some(false))));
+        let i = json!({"tenantName": "DB1 Group", "jobsPage": [
+            {"displayName": " Analista Júnior ", "jobId": "8301be91", "status": "published", "workplaceType": "On-site",
+             "location": "Maringá, PR, BR"},
+            {"displayName": "Draft", "jobId": "x", "status": "draft"}]});
+        let jobs = parse_inhire(&i, "inhire_db1", "DB1", "db1");
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].url, "https://db1.inhire.app/vagas/8301be91");
+        assert_eq!(
+            (jobs[0].title.as_str(), jobs[0].company.as_str()),
+            ("Analista Júnior", "DB1 Group")
+        );
+        assert_eq!(jobs[0].is_remote, Some(Some(false)));
     }
 
     #[test]
