@@ -1,7 +1,8 @@
 //! `backend/routers/jobs_v2.py` job endpoints: search, assess, assess-batch, suggest / translate keywords.
 
 use axum::extract::State;
-use axum::http::{HeaderMap, HeaderValue};
+use axum::http::{HeaderMap, HeaderValue, header};
+use axum::response::{IntoResponse, Response};
 use axum::{Json, Router, routing::post};
 use futures::future::join_all;
 use jumpship_core::Job;
@@ -17,6 +18,7 @@ use crate::web_search;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/jobs/search", post(search_jobs))
+        .route("/api/jobs/search/stream", post(search_stream))
         .route("/api/jobs/assess", post(assess))
         .route("/api/jobs/assess-batch", post(assess_batch))
         .route("/api/jobs/suggest-keywords", post(suggest_keywords))
@@ -94,14 +96,11 @@ pub fn status_header(status: &Status) -> String {
     out
 }
 
-async fn search_jobs(
-    State(st): State<AppState>,
-    Body(req): Body<SearchRequest>,
-) -> ApiResult<(HeaderMap, Json<Vec<Job>>)> {
+fn query(req: SearchRequest) -> ApiResult<Query> {
     if req.keywords.is_empty() {
         return Err(ApiError::new(400, "At least one keyword is required."));
     }
-    let q = Query {
+    Ok(Query {
         keywords: req.keywords,
         location: req.location,
         job_type: req.job_type,
@@ -109,7 +108,21 @@ async fn search_jobs(
         results_wanted: req.results_wanted,
         hours_old: req.hours_old,
         work_mode: req.work_mode,
-    };
+    })
+}
+
+/// JobResult always carries is_remote / tags.
+fn result_shape(mut j: Job) -> Job {
+    j.is_remote.get_or_insert(None);
+    j.tags.get_or_insert_with(Vec::new);
+    j
+}
+
+async fn search_jobs(
+    State(st): State<AppState>,
+    Body(req): Body<SearchRequest>,
+) -> ApiResult<(HeaderMap, Json<Vec<Job>>)> {
+    let q = query(req)?;
     let (jobs, status) = search::search(&st.http, &q).await;
     let (jobs, dismissed) = crate::store::record(&st.db, jobs).map_err(crate::profile::db_err)?;
     let mut headers = HeaderMap::new();
@@ -118,16 +131,41 @@ async fn search_jobs(
         HeaderValue::from_str(&status_header(&status)).unwrap(),
     );
     headers.insert("X-Dismissed-Count", dismissed.into());
-    // JobResult always carries is_remote / tags.
-    let jobs = jobs
-        .into_iter()
-        .map(|mut j| {
-            j.is_remote.get_or_insert(None);
-            j.tags.get_or_insert_with(Vec::new);
-            j
+    Ok((headers, Json(jobs.into_iter().map(result_shape).collect())))
+}
+
+/// Streaming search (PLAN §5): NDJSON, one `{"site", "jobs", "status"}` line per site as it finishes, then
+/// `{"done": true, "dismissed": n}`. Same request body and job shape as `/api/jobs/search`.
+async fn search_stream(State(st): State<AppState>, Body(req): Body<SearchRequest>) -> ApiResult<Response> {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use futures::StreamExt;
+
+    let q = query(req)?;
+    let db = st.db.clone();
+    let dismissed = Arc::new(AtomicUsize::new(0));
+    let total = dismissed.clone();
+    let body = search::search_stream(&st.http, &q)
+        .map(move |mut b| {
+            match crate::store::record(&db, std::mem::take(&mut b.jobs)) {
+                Ok((jobs, n)) => {
+                    dismissed.fetch_add(n, Ordering::Relaxed);
+                    b.jobs = jobs.into_iter().map(result_shape).collect();
+                }
+                Err(e) => tracing::error!("job store: {e}"),
+            }
+            serde_json::to_string(&b).unwrap()
         })
-        .collect();
-    Ok((headers, Json(jobs)))
+        .chain(futures::stream::once(async move {
+            json!({"done": true, "dismissed": total.load(Ordering::Relaxed)}).to_string()
+        }))
+        .map(|line| Ok::<_, std::convert::Infallible>(format!("{line}\n")));
+    Ok((
+        [(header::CONTENT_TYPE, "application/x-ndjson")],
+        axum::body::Body::from_stream(body),
+    )
+        .into_response())
 }
 
 // ── Assessment ──────────────────────────────────────────────────────────────────────────────────

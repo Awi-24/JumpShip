@@ -264,12 +264,14 @@ fn normalize(s: &str) -> String {
     kept.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+fn dedup_key(j: &Job) -> String {
+    format!("{}|{}", normalize(&j.title), normalize(&j.company))
+}
+
 /// `_dedup_jobs`: first job per normalized title + company.
 pub fn dedup(jobs: Vec<Job>) -> Vec<Job> {
     let mut seen = HashSet::new();
-    jobs.into_iter()
-        .filter(|j| seen.insert(format!("{}|{}", normalize(&j.title), normalize(&j.company))))
-        .collect()
+    jobs.into_iter().filter(|j| seen.insert(dedup_key(j))).collect()
 }
 
 /// `_enrich_extra`: is_remote + tags for extra-source jobs.
@@ -390,8 +392,15 @@ fn run_site(
     }
 }
 
-/// `search_jobs`: jobs + per-site status (`{"count", "error"}` for every requested site).
-pub async fn search(client: &reqwest::Client, q: &Query) -> (Vec<Job>, Status) {
+/// What a search runs: one future per known site, status pre-filled (unknown sites already failed).
+struct Plan {
+    key: String,
+    status: Status,
+    futs: Vec<(String, BoxFuture<'static, SiteResult>)>,
+    merger: Merger,
+}
+
+fn plan(client: &reqwest::Client, q: &Query) -> Plan {
     let job_type = Some(q.job_type.to_lowercase()).filter(|t| !t.is_empty() && t != "all");
     let work_mode = q.work_mode.to_lowercase().replace(['-', '_'], "");
     let work_mode = if work_mode.is_empty() {
@@ -399,14 +408,7 @@ pub async fn search(client: &reqwest::Client, q: &Query) -> (Vec<Job>, Status) {
     } else {
         work_mode
     };
-
     let key = cache_key(q, job_type.as_deref(), &work_mode);
-    if let Some((ts, jobs, status)) = CACHE.lock().unwrap().get(&key)
-        && ts.elapsed() < CACHE_TTL
-    {
-        tracing::info!("Cache hit for search: {}", &key[..key.len().min(80)]);
-        return (jobs.clone(), status.clone());
-    }
 
     let mut resolved = resolve_location(&q.location);
     if work_mode == "remote" {
@@ -417,10 +419,11 @@ pub async fn search(client: &reqwest::Client, q: &Query) -> (Vec<Job>, Status) {
         "any" if resolved.is_remote => "remote",
         "any" if resolved.hybrid => "hybrid",
         m => m,
-    };
+    }
+    .to_string();
 
     let mut status: Status = q.sites.iter().map(|s| (s.clone(), SiteStatus::default())).collect();
-    let mut named = Vec::new();
+    let mut futs = Vec::new();
     for site in &q.sites {
         let known = JOBSPY_SITES.contains(&site.as_str()) || EXTRA_SITES.contains(&site.as_str());
         if !known {
@@ -441,50 +444,180 @@ pub async fn search(client: &reqwest::Client, q: &Query) -> (Vec<Job>, Status) {
             is_remote: remote,
             hours_old: q.hours_old,
         };
-        named.push((site.clone(), run_site(client, site, q, input, remote)));
+        futs.push((site.clone(), run_site(client, site, q, input, remote)));
     }
-    let (sites, futs): (Vec<_>, Vec<_>) = named.into_iter().unzip();
-    let batches = join_all(futs).await;
+    Plan {
+        key,
+        status,
+        futs,
+        merger: Merger {
+            resolved,
+            mode,
+            hours_old: q.hours_old,
+            now: chrono::Utc::now(),
+            ids: HashSet::new(),
+            keys: HashSet::new(),
+        },
+    }
+}
 
-    let mut all = Vec::new();
-    let mut seen_ids = HashSet::new();
-    for (site, batch) in sites.iter().zip(batches) {
-        match batch {
-            Ok(jobs) => all.extend(jobs.into_iter().filter(|j| seen_ids.insert(j.id.clone()))),
-            Err(e) => {
-                tracing::error!("Job search batch '{site}' failed: {e}");
-                status.iter_mut().find(|(s, _)| s == site).unwrap().1.error = Some(crate::prefix(&e, 200));
-            }
-        }
-    }
-    let mut all = dedup(all);
-    for j in all.iter_mut() {
-        if EXTRA_SITES.contains(&j.site.as_str()) {
-            enrich(j);
-        }
-        j.salary_annual_usd = salary::annual_usd(&j.salary_range);
-    }
-    let now = chrono::Utc::now();
-    let all: Vec<Job> = all
-        .into_iter()
-        .filter(|j| j.site == "playwright" || location_matches(&j.location, &resolved, j.is_remote.flatten()))
-        .filter(|j| work_mode_ok(j, mode))
-        // JobSpy boards filter hours_old themselves.
-        .filter(|j| !EXTRA_SITES.contains(&j.site.as_str()) || within_hours(&j.posted_date, q.hours_old, now))
-        .collect();
+/// Cross-site merge: the first job per id and per title + company wins (in the order batches are added), then
+/// extra-source enrichment, salary normalization and the location / work-mode / age post-filters.
+struct Merger {
+    resolved: Resolved,
+    mode: String,
+    hours_old: Option<u32>,
+    now: chrono::DateTime<chrono::Utc>,
+    ids: HashSet<String>,
+    keys: HashSet<String>,
+}
 
-    for j in &all {
+impl Merger {
+    fn add(&mut self, jobs: Vec<Job>) -> Vec<Job> {
+        let fresh: Vec<Job> = jobs
+            .into_iter()
+            .filter(|j| self.ids.insert(j.id.clone()))
+            .filter(|j| self.keys.insert(dedup_key(j)))
+            .collect();
+        fresh
+            .into_iter()
+            .map(|mut j| {
+                if EXTRA_SITES.contains(&j.site.as_str()) {
+                    enrich(&mut j);
+                }
+                j.salary_annual_usd = salary::annual_usd(&j.salary_range);
+                j
+            })
+            .filter(|j| j.site == "playwright" || location_matches(&j.location, &self.resolved, j.is_remote.flatten()))
+            .filter(|j| work_mode_ok(j, &self.mode))
+            // JobSpy boards filter hours_old themselves.
+            .filter(|j| {
+                !EXTRA_SITES.contains(&j.site.as_str()) || within_hours(&j.posted_date, self.hours_old, self.now)
+            })
+            .collect()
+    }
+}
+
+fn count(status: &mut Status, jobs: &[Job]) {
+    for j in jobs {
         if let Some((_, st)) = status.iter_mut().find(|(s, _)| *s == j.site) {
             st.count += 1;
         }
     }
+}
+
+fn fail(status: &mut Status, site: &str, e: &str) {
+    tracing::error!("Job search batch '{site}' failed: {e}");
+    status.iter_mut().find(|(s, _)| s == site).unwrap().1.error = Some(crate::prefix(e, 200));
+}
+
+fn cached(key: &str) -> Option<(Vec<Job>, Status)> {
+    let cache = CACHE.lock().unwrap();
+    let (_, jobs, status) = cache.get(key).filter(|(ts, ..)| ts.elapsed() < CACHE_TTL)?;
+    tracing::info!("Cache hit for search: {}", &key[..key.len().min(80)]);
+    Some((jobs.clone(), status.clone()))
+}
+
+fn remember(key: String, jobs: &[Job], status: &Status) {
     let mut cache = CACHE.lock().unwrap();
     // Don't cache empty or partially failed searches: retry them next time.
-    if !all.is_empty() && status.iter().all(|(_, s)| s.error.is_none()) {
-        cache.insert(key, (Instant::now(), all.clone(), status.clone()));
+    if !jobs.is_empty() && status.iter().all(|(_, s)| s.error.is_none()) {
+        cache.insert(key, (Instant::now(), jobs.to_vec(), status.clone()));
     }
     cache.retain(|_, (ts, _, _)| ts.elapsed() < CACHE_TTL);
+}
+
+/// `search_jobs`: jobs + per-site status (`{"count", "error"}` for every requested site). Sites merge in
+/// request order, so the result doesn't depend on which board answers first.
+pub async fn search(client: &reqwest::Client, q: &Query) -> (Vec<Job>, Status) {
+    let Plan {
+        key,
+        mut status,
+        futs,
+        mut merger,
+    } = plan(client, q);
+    if let Some(hit) = cached(&key) {
+        return hit;
+    }
+    let (sites, futs): (Vec<_>, Vec<_>) = futs.into_iter().unzip();
+    let mut all = Vec::new();
+    for (site, batch) in sites.iter().zip(join_all(futs).await) {
+        match batch {
+            Ok(jobs) => all.extend(merger.add(jobs)),
+            Err(e) => fail(&mut status, site, &e),
+        }
+    }
+    count(&mut status, &all);
+    remember(key, &all, &status);
     (all, status)
+}
+
+/// One site's share of a streamed search.
+#[derive(Debug, Clone, Serialize)]
+pub struct Batch {
+    pub site: String,
+    pub jobs: Vec<Job>,
+    pub status: SiteStatus,
+}
+
+/// `search`, but each site is yielded as soon as it finishes (merged in completion order; PLAN §5 streaming).
+/// The full result is cached like `search`'s, and a cache hit replays one batch per site.
+pub fn search_stream(client: &reqwest::Client, q: &Query) -> futures::stream::BoxStream<'static, Batch> {
+    use futures::stream::{self, FuturesUnordered, StreamExt};
+
+    let Plan {
+        key,
+        status,
+        futs,
+        mut merger,
+    } = plan(client, q);
+    if let Some((jobs, status)) = cached(&key) {
+        let batches: Vec<Batch> = status
+            .into_iter()
+            .map(|(site, st)| Batch {
+                jobs: jobs.iter().filter(|j| j.site == site).cloned().collect(),
+                site,
+                status: st,
+            })
+            .collect();
+        return stream::iter(batches).boxed();
+    }
+    let early: Vec<Batch> = status
+        .iter()
+        .filter(|(_, st)| st.error.is_some())
+        .map(|(site, st)| Batch {
+            site: site.clone(),
+            jobs: vec![],
+            status: st.clone(),
+        })
+        .collect();
+    let acc = std::sync::Arc::new(Mutex::new((Vec::<Job>::new(), status)));
+    let done = acc.clone();
+    let running: FuturesUnordered<_> = futs
+        .into_iter()
+        .map(|(site, fut)| fut.map(move |r| (site, r)))
+        .collect();
+    let live = running.map(move |(site, r)| {
+        let mut acc = acc.lock().unwrap();
+        let (all, status) = &mut *acc;
+        let jobs = match r {
+            Ok(jobs) => merger.add(jobs),
+            Err(e) => {
+                fail(status, &site, &e);
+                vec![]
+            }
+        };
+        count(status, &jobs);
+        all.extend(jobs.iter().cloned());
+        let st = status.iter().find(|(s, _)| *s == site).unwrap().1.clone();
+        Batch { site, jobs, status: st }
+    });
+    let finish = stream::once(async move {
+        let (all, status) = &*done.lock().unwrap();
+        remember(key, all, status);
+    })
+    .filter_map(|_| async { None });
+    stream::iter(early).chain(live).chain(finish).boxed()
 }
 
 #[cfg(test)]

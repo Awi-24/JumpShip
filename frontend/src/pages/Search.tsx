@@ -15,7 +15,7 @@ import { useResumeParse } from '../hooks/useResume';
 import { useJobSearch } from '../hooks/useJobs';
 import { useSettings } from '../hooks/useSettings';
 import { useResumeCache } from '../hooks/useResumeCache';
-import type { ResumeProfile, JobResult, JobAssessment, SortOption, ProfileResponse } from '../types';
+import type { ResumeProfile, JobResult, JobAssessment, JobSearchResponse, SortOption, ProfileResponse } from '../types';
 
 interface SearchProps {
   onBack: () => void;
@@ -191,12 +191,15 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const [assessments, setAssessments] = useState<Record<string, JobAssessment>>({});
   const [assessingIds, setAssessingIds] = useState<Set<string>>(new Set());
 
-  const jobSearch = useJobSearch();
+  // Streamed boards so far (Rust backend); `jobSearch.data` takes over once the stream ends.
+  const [partial, setPartial] = useState<JobSearchResponse | null>(null);
+  const jobSearch = useJobSearch(setPartial);
   // Dismissed this session (the backend drops them from later searches); filtered at display time so the
   // auto-assess effect keyed on `jobs` doesn't restart.
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
-  const jobs: JobResult[] = useMemo(() => jobSearch.data?.jobs ?? [], [jobSearch.data]);
-  const sources = jobSearch.data?.sources ?? {};
+  const current = jobSearch.data ?? (jobSearch.isPending ? partial : null);
+  const jobs: JobResult[] = useMemo(() => current?.jobs ?? [], [current]);
+  const sources = current?.sources ?? {};
 
   // Poll LLM health
   useEffect(() => {
@@ -351,11 +354,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
 
   // ── Batch assess (cloud providers — parallel, one round-trip) ─────────────
   const assessBatch = useCallback(async (jobList: JobResult[], profile: ResumeProfile) => {
-    if (!jobList.length) {
-      setAssessingIds(new Set());
-      return;
-    }
-    setAssessingIds(new Set(jobList.map(j => j.id)));
+    if (!jobList.length) return;
     const batchFallback: JobAssessment = {
       match_score: 0,
       summary: 'Assessment could not be completed for this listing.',
@@ -404,39 +403,63 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
       });
     }
     finally {
-      setAssessingIds(new Set());
+      setAssessingIds(prev => {
+        const next = new Set(prev);
+        for (const j of jobList) next.delete(j.id);
+        return next;
+      });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getLlmFields]);
 
-  // Trigger auto-assessment whenever jobs load and a resume exists
+  // Auto-assessment: every job is queued once per search, as soon as its board answers (streaming), so the
+  // slowest board no longer holds up the LLM. A new search or résumé starts over.
+  const requestedRef = useRef<Set<string>>(new Set());
+  const queueRef = useRef<JobResult[]>([]);
+  const workersRef = useRef(0);
+  const profileRef = useRef(resumeProfile);
+  useEffect(() => { profileRef.current = resumeProfile; }, [resumeProfile]);
+
+  const resetAssessments = useCallback(() => {
+    requestedRef.current = new Set();
+    queueRef.current = [];
+    setAssessments({});
+    setAssessingIds(new Set());
+  }, []);
+
+  // Local LLM: at most ASSESS_CONCURRENCY in flight (the backend semaphore also guards the GPU).
+  const pump = useCallback(() => {
+    const profile = profileRef.current;
+    while (profile && workersRef.current < ASSESS_CONCURRENCY && queueRef.current.length) {
+      const job = queueRef.current.shift()!;
+      workersRef.current++;
+      assessSingle(job, profile).finally(() => {
+        workersRef.current--;
+        pump();
+      });
+    }
+  }, [ASSESS_CONCURRENCY, assessSingle]);
+
+  useEffect(() => { resetAssessments(); }, [resumeProfile, resetAssessments]);
+
   const jobIds = jobs.map(j => j.id).join(',');
   useEffect(() => {
-    if (!resumeProfile || !jobs.length) return;
-    setAssessments({});
-    const pending = [...jobs];
-    // Mark every job as in-flight immediately so the search loader stays up without a gap
-    setAssessingIds(new Set(pending.map(j => j.id)));
-
-    const s = settingsRef.current;
-    const isCloud = !LOCAL_PROVIDERS.has(s.llmProvider || 'ollama');
-
-    if (isCloud) {
-      // Cloud: fire all in parallel via batch endpoint
-      assessBatch(jobs, resumeProfile);
-      return;
+    if (!resumeProfile) return;
+    const fresh = jobs.filter(j => !requestedRef.current.has(j.id));
+    if (!fresh.length) return;
+    for (const j of fresh) requestedRef.current.add(j.id);
+    // Mark them in flight right away so the search loader stays up without a gap
+    setAssessingIds(prev => {
+      const next = new Set(prev);
+      for (const j of fresh) next.add(j.id);
+      return next;
+    });
+    if (!LOCAL_PROVIDERS.has(settingsRef.current.llmProvider || 'ollama')) {
+      assessBatch(fresh, resumeProfile); // cloud: one parallel round-trip per board
+    } else {
+      queueRef.current.push(...fresh);
+      pump();
     }
-
-    // Local: sequential batches with backend semaphore preventing GPU contention
-    let cancelled = false;
-    (async () => {
-      for (let i = 0; i < pending.length; i += ASSESS_CONCURRENCY) {
-        if (cancelled) break;
-        const batch = pending.slice(i, i + ASSESS_CONCURRENCY);
-        await Promise.allSettled(batch.map(job => assessSingle(job, resumeProfile)));
-      }
-    })();
-    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobIds, resumeProfile]);
 
@@ -450,6 +473,8 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const handleSearch = () => {
     const s = settingsRef.current;
     const apiKey = llmApiKeyFor(s);
+    setPartial(null);
+    resetAssessments();
 
     jobSearch.mutate({
       keywords,
@@ -614,7 +639,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     baseUrl: settings.ollamaUrl,
   };
 
-  const assessedCount = Object.keys(assessments).length;
+  const assessedCount = jobs.filter(j => assessments[j.id]).length;
   const assessingCount = assessingIds.size;
 
   const totalJobCount = jobs.length;
@@ -622,7 +647,9 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     Boolean(resumeProfile) &&
     totalJobCount > 0 &&
     (assessingCount > 0 || assessedCount < totalJobCount);
-  const searchPipelineBusy = jobSearch.isPending || awaitingAllAssessments;
+  // Without a résumé, streamed boards show up as they arrive; with one, the list waits for the scores.
+  const searchPipelineBusy = (jobSearch.isPending && (Boolean(resumeProfile) || jobs.length === 0)) || awaitingAllAssessments;
+  const boardsDone = Object.keys(sources).length;
 
   return (
     <div className="search-page">
@@ -969,16 +996,18 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
             <>
               <div className="results-header">
                 <div className="results-title">
-                  {jobSearch.isPending ? 'Searching job boards…' : 'Evaluating your fit…'}
+                  {jobSearch.isPending
+                    ? `Searching job boards… ${boardsDone ? `${boardsDone}/${activeSites.length} boards · ${jobs.length} jobs` : ''}`
+                    : 'Evaluating your fit…'}
                 </div>
               </div>
               <AssessmentLoader
-                fetching={jobSearch.isPending}
-                total={jobSearch.isPending ? Math.max(resultsWanted, 1) : totalJobCount}
+                fetching={jobSearch.isPending && jobs.length === 0}
+                total={jobs.length === 0 ? Math.max(resultsWanted, 1) : totalJobCount}
                 assessed={assessedCount}
               />
             </>
-          ) : !jobSearch.data ? (
+          ) : !current ? (
             <div className="empty-state">
               <div className="empty-icon"><Rocket size={36} strokeWidth={1.2} /></div>
               <div className="empty-title">Ready to launch your search</div>
@@ -999,6 +1028,12 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <div className="results-title">Results</div>
                   <div className="results-count">{sortedJobs.length} jobs</div>
+                  {jobSearch.isPending && (
+                    <span className="filter-pill">
+                      <div className="spinner" style={{ width: 9, height: 9, display: 'inline-block', marginRight: 4 }} />
+                      {boardsDone}/{activeSites.length} boards
+                    </span>
+                  )}
                   {Object.entries(sources).map(([site, st]) =>
                     st.error || st.count === 0 ? (
                       <span
