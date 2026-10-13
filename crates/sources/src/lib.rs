@@ -5,6 +5,7 @@ pub mod ats;
 pub mod br;
 pub mod extra;
 pub mod jobspy;
+pub mod search;
 pub mod soup;
 
 use serde_json::Value;

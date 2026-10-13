@@ -277,12 +277,12 @@ class LLMClient:
     max_tokens: int = 8192  # thinking models need head-room beyond their CoT pass
 
     def _resolve_base_url(self) -> Optional[str]:
-        if self.base_url:
+        # Only local providers take base_url: the UI sends its Ollama URL with every request, which would
+        # otherwise point cloud providers at Ollama.
+        if self.base_url and self.provider in ("ollama", "lmstudio"):
             url = self.base_url.rstrip("/")
-            # Local providers need /v1/ suffix for OpenAI-compat SDK
-            if self.provider in ("ollama", "lmstudio"):
-                if not url.endswith("/v1"):
-                    url = f"{url}/v1"
+            if not url.endswith("/v1"):  # OpenAI-compat SDK needs the /v1/ prefix
+                url = f"{url}/v1"
             return url + "/"
         if self.provider == "ollama":
             return f"{ollama_base_url()}/v1/"

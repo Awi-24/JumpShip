@@ -264,7 +264,7 @@ pub struct Location {
 }
 
 /// Python `str.title()`.
-fn title_case(s: &str) -> String {
+pub(crate) fn title_case(s: &str) -> String {
     let mut out = String::new();
     let mut prev_cased = false;
     for c in s.chars() {
@@ -366,11 +366,11 @@ fn extract_salary(text: &str) -> Option<Compensation> {
     })
 }
 
-static LOCATIONS: LazyLock<Value> = LazyLock::new(|| {
+pub(crate) static LOCATIONS: LazyLock<Value> = LazyLock::new(|| {
     serde_json::from_str(include_str!("../../../backend/data/locations.json")).expect("locations.json")
 });
 
-fn words(key: &str) -> Vec<&'static str> {
+pub(crate) fn words(key: &str) -> Vec<&'static str> {
     LOCATIONS[key]
         .as_array()
         .unwrap()
@@ -379,8 +379,8 @@ fn words(key: &str) -> Vec<&'static str> {
         .collect()
 }
 
-static REMOTE_WORDS: LazyLock<Vec<&str>> = LazyLock::new(|| words("remote_words"));
-static HYBRID_WORDS: LazyLock<Vec<&str>> = LazyLock::new(|| words("hybrid_words"));
+pub(crate) static REMOTE_WORDS: LazyLock<Vec<&str>> = LazyLock::new(|| words("remote_words"));
+pub(crate) static HYBRID_WORDS: LazyLock<Vec<&str>> = LazyLock::new(|| words("hybrid_words"));
 
 /// `_infer_work_mode` → (is_remote, hybrid).
 pub fn infer_work_mode(location: &str, description: &str, raw_is_remote: Option<bool>) -> (Option<bool>, bool) {

@@ -1,11 +1,12 @@
 //! JumpShip core: the normalized job model and keyword matching shared by every source.
 //! Mirrors `backend/services/text_match.py` and the job dicts the Python sources return.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use unicode_normalization::{UnicodeNormalization, char::canonical_combining_class};
 
 /// One normalized job posting; serializes to the same JSON as the Python job dicts.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Job {
     pub id: String,
     pub title: String,

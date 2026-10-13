@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::sync::LazyLock;
 use std::time::Duration;
 
+use futures::future::{BoxFuture, FutureExt};
 use futures::{StreamExt, stream};
 use jumpship_core::{Job, matches_any};
 use regex::Regex;
@@ -27,13 +28,15 @@ pub fn sources_by_ats(ats: &str) -> Vec<&'static Value> {
 }
 
 /// Fetch every board with at most `concurrency` in flight; results keep registry order.
-async fn fetch_boards<'a, F, Fut>(boards: Vec<&'a Value>, concurrency: usize, fetch: F) -> Vec<Job>
+/// The futures are boxed and built up front: a closure stored in the stream trips rustc's higher-ranked `Send` check
+/// when callers box `fetch_*` themselves (rust-lang/rust#102211).
+async fn fetch_boards<'a, F>(boards: Vec<&'static Value>, concurrency: usize, fetch: F) -> Vec<Job>
 where
-    F: Fn(&'a Value) -> Fut,
-    Fut: Future<Output = Vec<Job>>,
+    F: Fn(&'static Value) -> BoxFuture<'a, Vec<Job>>,
 {
-    stream::iter(boards)
-        .map(fetch)
+    // Futures are built before the stream so it holds no closure (see above).
+    let futs: Vec<_> = boards.into_iter().map(fetch).collect();
+    stream::iter(futs)
         .buffered(concurrency)
         .collect::<Vec<_>>()
         .await
@@ -67,31 +70,34 @@ pub async fn fetch_greenhouse(client: &reqwest::Client, keywords: &[String], res
         .into_iter()
         .chain(GREENHOUSE_SUPPLEMENTAL.iter())
         .collect();
-    let mut jobs = fetch_boards(boards, 5, |src| async move {
-        let token = s(&src["api"], "board_token");
-        let company = get(src, "name").map_or_else(|| token.clone(), pystr);
-        let url = format!("https://boards-api.greenhouse.io/v1/boards/{token}/jobs");
-        let res: Result<Value, Error> = async {
-            let r = client
-                .get(&url)
-                .query(&[("content", "true")])
-                .header("Accept", ACCEPT_JSON)
-                .timeout(Duration::from_secs(18))
-                .send()
-                .await?;
-            if r.status() == 404 {
-                return Ok(Value::Null);
+    let mut jobs = fetch_boards(boards, 5, |src| {
+        async move {
+            let token = s(&src["api"], "board_token");
+            let company = get(src, "name").map_or_else(|| token.clone(), pystr);
+            let url = format!("https://boards-api.greenhouse.io/v1/boards/{token}/jobs");
+            let res: Result<Value, Error> = async {
+                let r = client
+                    .get(&url)
+                    .query(&[("content", "true")])
+                    .header("Accept", ACCEPT_JSON)
+                    .timeout(Duration::from_secs(18))
+                    .send()
+                    .await?;
+                if r.status() == 404 {
+                    return Ok(Value::Null);
+                }
+                Ok(r.error_for_status()?.json().await?)
             }
-            Ok(r.error_for_status()?.json().await?)
-        }
-        .await;
-        match res {
-            Ok(data) => parse_greenhouse(&data, keywords, &company, &token),
-            Err(e) => {
-                tracing::warn!("Greenhouse fetch failed ({token}): {e}");
-                vec![]
+            .await;
+            match res {
+                Ok(data) => parse_greenhouse(&data, keywords, &company, &token),
+                Err(e) => {
+                    tracing::warn!("Greenhouse fetch failed ({token}): {e}");
+                    vec![]
+                }
             }
         }
+        .boxed()
     })
     .await;
     jobs.truncate(results_wanted);
@@ -130,30 +136,33 @@ pub fn parse_greenhouse(data: &Value, keywords: &[String], company: &str, token:
 // ── Lever ───────────────────────────────────────────────────────────────────────────────────────
 
 pub async fn fetch_lever(client: &reqwest::Client, keywords: &[String], results_wanted: usize) -> Vec<Job> {
-    let mut jobs = fetch_boards(sources_by_ats("lever"), 5, |src| async move {
-        let site = s(&src["api"], "site");
-        let company = get(src, "name").map_or_else(|| site.clone(), pystr);
-        let url = format!("https://api.lever.co/v0/postings/{site}?mode=json");
-        let res: Result<Value, Error> = async {
-            let r = client
-                .get(&url)
-                .header("Accept", ACCEPT_JSON)
-                .timeout(Duration::from_secs(18))
-                .send()
-                .await?;
-            if r.status() == 404 {
-                return Ok(json!([]));
+    let mut jobs = fetch_boards(sources_by_ats("lever"), 5, |src| {
+        async move {
+            let site = s(&src["api"], "site");
+            let company = get(src, "name").map_or_else(|| site.clone(), pystr);
+            let url = format!("https://api.lever.co/v0/postings/{site}?mode=json");
+            let res: Result<Value, Error> = async {
+                let r = client
+                    .get(&url)
+                    .header("Accept", ACCEPT_JSON)
+                    .timeout(Duration::from_secs(18))
+                    .send()
+                    .await?;
+                if r.status() == 404 {
+                    return Ok(json!([]));
+                }
+                Ok(r.error_for_status()?.json().await?)
             }
-            Ok(r.error_for_status()?.json().await?)
-        }
-        .await;
-        match res {
-            Ok(postings) => parse_lever(&postings, keywords, &company, &site),
-            Err(e) => {
-                tracing::warn!("Lever fetch failed ({site}): {e}");
-                vec![]
+            .await;
+            match res {
+                Ok(postings) => parse_lever(&postings, keywords, &company, &site),
+                Err(e) => {
+                    tracing::warn!("Lever fetch failed ({site}): {e}");
+                    vec![]
+                }
             }
         }
+        .boxed()
     })
     .await;
     jobs.truncate(results_wanted);
@@ -210,38 +219,42 @@ pub async fn fetch_workday(client: &reqwest::Client, keywords: &[String], result
         terms.push("");
     }
     let terms = &terms;
-    let mut jobs = fetch_boards(sources_by_ats("workday"), 4, |src| async move {
-        let Some((host, tenant, site)) = parse_workday_url(&s(&src["api"], "careers_url")) else {
-            tracing::warn!("Workday: could not parse URL for {}", s(src, "id"));
-            return vec![];
-        };
-        let api_url = format!("https://{host}/wday/cxs/{tenant}/{site}/jobs");
-        let mut payloads = Vec::new();
-        for term in terms {
-            let body = json!({"appliedFacets": {}, "limit": results_wanted.min(20), "offset": 0, "searchText": term});
-            let res: Result<Option<Value>, Error> = async {
-                let r = client
-                    .post(&api_url)
-                    .json(&body)
-                    .header("Accept", ACCEPT_JSON)
-                    .timeout(Duration::from_secs(20))
-                    .send()
-                    .await?;
-                if matches!(r.status().as_u16(), 403 | 404) {
-                    tracing::warn!("Workday board unreachable ({site}): HTTP {}", r.status());
-                    return Ok(None);
+    let mut jobs = fetch_boards(sources_by_ats("workday"), 4, |src| {
+        async move {
+            let Some((host, tenant, site)) = parse_workday_url(&s(&src["api"], "careers_url")) else {
+                tracing::warn!("Workday: could not parse URL for {}", s(src, "id"));
+                return vec![];
+            };
+            let api_url = format!("https://{host}/wday/cxs/{tenant}/{site}/jobs");
+            let mut payloads = Vec::new();
+            for term in terms {
+                let body =
+                    json!({"appliedFacets": {}, "limit": results_wanted.min(20), "offset": 0, "searchText": term});
+                let res: Result<Option<Value>, Error> = async {
+                    let r = client
+                        .post(&api_url)
+                        .json(&body)
+                        .header("Accept", ACCEPT_JSON)
+                        .timeout(Duration::from_secs(20))
+                        .send()
+                        .await?;
+                    if matches!(r.status().as_u16(), 403 | 404) {
+                        tracing::warn!("Workday board unreachable ({site}): HTTP {}", r.status());
+                        return Ok(None);
+                    }
+                    Ok(Some(r.error_for_status()?.json().await?))
                 }
-                Ok(Some(r.error_for_status()?.json().await?))
+                .await;
+                match res {
+                    Ok(Some(v)) => payloads.push(v),
+                    Ok(None) => break,
+                    Err(e) => tracing::warn!("Workday fetch failed ({site}, '{term}'): {e}"),
+                }
             }
-            .await;
-            match res {
-                Ok(Some(v)) => payloads.push(v),
-                Ok(None) => break,
-                Err(e) => tracing::warn!("Workday fetch failed ({site}, '{term}'): {e}"),
-            }
+            let company = get(src, "name").map_or_else(|| tenant.clone(), pystr);
+            parse_workday(&payloads, &host, &tenant, &company)
         }
-        let company = get(src, "name").map_or_else(|| tenant.clone(), pystr);
-        parse_workday(&payloads, &host, &tenant, &company)
+        .boxed()
     })
     .await;
     jobs.truncate(results_wanted);

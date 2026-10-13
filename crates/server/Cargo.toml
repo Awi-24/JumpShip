@@ -1,0 +1,23 @@
+[package]
+name = "jumpship-server"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+axum = "0.8.9"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+dotenvy = "0.15.7"
+futures = "0.3.34"
+jumpship-core = { path = "../core" }
+jumpship-sources = { path = "../sources" }
+regex = "1.13.1"
+reqwest = { version = "0.13.5", features = ["json", "gzip", "query"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tokio = { version = "1.53.2", features = ["full"] }
+tower-http = { version = "0.7.1", features = ["cors"] }
+tracing = "0.1.44"
+tracing-subscriber = "0.3.23"
+
+[dev-dependencies]
+sha2 = "0.11.1"
