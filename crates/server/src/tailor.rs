@@ -2,7 +2,7 @@
 //! `ai_evaluator.generate_tailored_resume_html`): LLM → HTML fragment → sanitize → one-page PDF.
 //! PDF rendering: the installed Edge / Chrome in headless `--print-to-pdf` mode instead of xhtml2pdf.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::LazyLock;
 use std::time::Duration;
 
@@ -286,40 +286,10 @@ fn wrap_document(fragment: &str, scale: f64) -> String {
 
 // ── PDF rendering ───────────────────────────────────────────────────────────────────────────────
 
-/// `JUMPSHIP_BROWSER`, else the usual Edge / Chrome / Chromium locations.
-fn browser() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("JUMPSHIP_BROWSER") {
-        return Some(PathBuf::from(p));
-    }
-    let env = |k: &str| std::env::var(k).ok().map(PathBuf::from);
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    for base in [env("ProgramFiles(x86)"), env("ProgramFiles"), env("LOCALAPPDATA")]
-        .into_iter()
-        .flatten()
-    {
-        candidates.push(base.join(r"Microsoft\Edge\Application\msedge.exe"));
-        candidates.push(base.join(r"Google\Chrome\Application\chrome.exe"));
-    }
-    candidates.push("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome".into());
-    candidates.push("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge".into());
-    let path = std::env::var_os("PATH").unwrap_or_default();
-    for dir in std::env::split_paths(&path) {
-        for name in [
-            "chromium",
-            "chromium-browser",
-            "google-chrome",
-            "google-chrome-stable",
-            "microsoft-edge",
-        ] {
-            candidates.push(dir.join(name));
-        }
-    }
-    candidates.into_iter().find(|p| p.is_file())
-}
-
 /// HTML → PDF bytes with a throwaway browser profile (never touches the user's running browser).
 async fn html_to_pdf(html: &str) -> Result<Vec<u8>, String> {
-    let exe = browser().ok_or("no Edge/Chrome/Chromium found (set JUMPSHIP_BROWSER to its executable)")?;
+    let exe = jumpship_sources::cdp::browser()
+        .ok_or("no Edge/Chrome/Chromium found (set JUMPSHIP_BROWSER to its executable)")?;
     let dir = std::env::temp_dir().join(format!("jumpship-pdf-{}", uuid::Uuid::new_v4().simple()));
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let result = async {

@@ -3,6 +3,8 @@
 
 pub mod ats;
 pub mod br;
+pub mod career;
+pub mod cdp;
 pub mod companies;
 pub mod extra;
 pub mod jobspy;

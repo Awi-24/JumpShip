@@ -212,6 +212,34 @@ fn parse_workday_url(careers_url: &str) -> Option<(String, String, String)> {
 }
 
 pub async fn fetch_workday(client: &reqwest::Client, keywords: &[String], results_wanted: usize) -> Vec<Job> {
+    let mut jobs = fetch_boards(sources_by_ats("workday"), 4, |src| {
+        async move {
+            let company = get(src, "name").map(pystr);
+            workday_board(
+                client,
+                &s(&src["api"], "careers_url"),
+                company,
+                keywords,
+                results_wanted,
+            )
+            .await
+        }
+        .boxed()
+    })
+    .await;
+    rank(&mut jobs, keywords);
+    jobs.truncate(results_wanted);
+    jobs
+}
+
+/// One Workday board by its careers URL; `company` defaults to the tenant.
+pub(crate) async fn workday_board(
+    client: &reqwest::Client,
+    careers_url: &str,
+    company: Option<String>,
+    keywords: &[String],
+    results_wanted: usize,
+) -> Vec<Job> {
     // One request per keyword (Workday ANDs the words of a single searchText); merged by externalPath.
     let mut terms: Vec<&str> = keywords
         .iter()
@@ -222,49 +250,38 @@ pub async fn fetch_workday(client: &reqwest::Client, keywords: &[String], result
     if terms.is_empty() {
         terms.push("");
     }
-    let terms = &terms;
-    let mut jobs = fetch_boards(sources_by_ats("workday"), 4, |src| {
-        async move {
-            let Some((host, tenant, site)) = parse_workday_url(&s(&src["api"], "careers_url")) else {
-                tracing::warn!("Workday: could not parse URL for {}", s(src, "id"));
-                return vec![];
-            };
-            let api_url = format!("https://{host}/wday/cxs/{tenant}/{site}/jobs");
-            let mut payloads = Vec::new();
-            for term in terms {
-                let body =
-                    json!({"appliedFacets": {}, "limit": results_wanted.min(20), "offset": 0, "searchText": term});
-                let res: Result<Option<Value>, Error> = async {
-                    let r = crate::polite::send(
-                        client
-                            .post(&api_url)
-                            .json(&body)
-                            .header("Accept", ACCEPT_JSON)
-                            .timeout(Duration::from_secs(20)),
-                    )
-                    .await?;
-                    if matches!(r.status().as_u16(), 403 | 404) {
-                        tracing::warn!("Workday board unreachable ({site}): HTTP {}", r.status());
-                        return Ok(None);
-                    }
-                    Ok(Some(r.error_for_status()?.json().await?))
-                }
-                .await;
-                match res {
-                    Ok(Some(v)) => payloads.push(v),
-                    Ok(None) => break,
-                    Err(e) => tracing::warn!("Workday fetch failed ({site}, '{term}'): {e}"),
-                }
+    let Some((host, tenant, site)) = parse_workday_url(careers_url) else {
+        tracing::warn!("Workday: could not parse URL {careers_url}");
+        return vec![];
+    };
+    let api_url = format!("https://{host}/wday/cxs/{tenant}/{site}/jobs");
+    let mut payloads = Vec::new();
+    for term in terms {
+        let body = json!({"appliedFacets": {}, "limit": results_wanted.min(20), "offset": 0, "searchText": term});
+        let res: Result<Option<Value>, Error> = async {
+            let r = crate::polite::send(
+                client
+                    .post(&api_url)
+                    .json(&body)
+                    .header("Accept", ACCEPT_JSON)
+                    .timeout(Duration::from_secs(20)),
+            )
+            .await?;
+            if matches!(r.status().as_u16(), 403 | 404) {
+                tracing::warn!("Workday board unreachable ({site}): HTTP {}", r.status());
+                return Ok(None);
             }
-            let company = get(src, "name").map_or_else(|| tenant.clone(), pystr);
-            parse_workday(&payloads, &host, &tenant, &company)
+            Ok(Some(r.error_for_status()?.json().await?))
         }
-        .boxed()
-    })
-    .await;
-    rank(&mut jobs, keywords);
-    jobs.truncate(results_wanted);
-    jobs
+        .await;
+        match res {
+            Ok(Some(v)) => payloads.push(v),
+            Ok(None) => break,
+            Err(e) => tracing::warn!("Workday fetch failed ({site}, '{term}'): {e}"),
+        }
+    }
+    let company = company.unwrap_or_else(|| tenant.clone());
+    parse_workday(&payloads, &host, &tenant, &company)
 }
 
 /// Normalize Workday CXS /jobs JSON (`{"jobPostings": [...]}`; one response per keyword).

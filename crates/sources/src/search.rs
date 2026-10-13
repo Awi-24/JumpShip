@@ -12,7 +12,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::jobspy::{LOCATIONS, REMOTE_WORDS, SearchInput, basic_tags, infer_work_mode, title_case};
-use crate::{ats, br, companies, extra, jobspy, remote, salary};
+use crate::{ats, br, career, companies, extra, jobspy, remote, salary};
 
 const JOBSPY_SITES: &[&str] = &["linkedin", "indeed", "glassdoor"];
 const EXTRA_SITES: &[&str] = &[
@@ -401,8 +401,8 @@ fn run_site(
                 .map_err(err)
         }
         .boxed(),
-        // ponytail: the headless career-page scraper is rewritten on CDP in phase 4 (PLAN §5).
-        _ => async { Err("career-page scraper not available in the Rust build yet".to_string()) }.boxed(),
+        "playwright" => async move { career::fetch_career_pages(&c, &kws, n, &resolved).await.map_err(err) }.boxed(),
+        _ => async { Err("unknown site".to_string()) }.boxed(),
     }
 }
 
@@ -506,7 +506,7 @@ impl Merger {
                 j.relevance = Some(jumpship_core::relevance(&self.keywords, &j.title, &j.description));
                 j
             })
-            .filter(|j| j.site == "playwright" || location_matches(&j.location, &self.resolved, j.is_remote.flatten()))
+            .filter(|j| location_matches(&j.location, &self.resolved, j.is_remote.flatten()))
             .filter(|j| work_mode_ok(j, &self.mode))
             // JobSpy boards filter hours_old themselves.
             .filter(|j| {
