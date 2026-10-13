@@ -26,6 +26,9 @@ pub struct Job {
     /// Absent for sources that don't tag (JobSpy rows always carry the list, even empty).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
+    /// `salary_range` as annual USD (search results only; for sorting, never shown).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub salary_annual_usd: Option<f64>,
 }
 
 /// NFKD, drop combining marks, casefold, collapse whitespace.

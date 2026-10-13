@@ -12,7 +12,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::jobspy::{LOCATIONS, REMOTE_WORDS, SearchInput, basic_tags, infer_work_mode, title_case};
-use crate::{ats, br, extra, jobspy, remote};
+use crate::{ats, br, extra, jobspy, remote, salary};
 
 const JOBSPY_SITES: &[&str] = &["linkedin", "indeed", "glassdoor"];
 const EXTRA_SITES: &[&str] = &[
@@ -458,8 +458,11 @@ pub async fn search(client: &reqwest::Client, q: &Query) -> (Vec<Job>, Status) {
         }
     }
     let mut all = dedup(all);
-    for j in all.iter_mut().filter(|j| EXTRA_SITES.contains(&j.site.as_str())) {
-        enrich(j);
+    for j in all.iter_mut() {
+        if EXTRA_SITES.contains(&j.site.as_str()) {
+            enrich(j);
+        }
+        j.salary_annual_usd = salary::annual_usd(&j.salary_range);
     }
     let now = chrono::Utc::now();
     let all: Vec<Job> = all

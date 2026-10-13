@@ -561,6 +561,9 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
       return !a || a.is_relevant !== false;
     });
 
+    // Rust backend: annual-USD salaries (comparable across currencies / periods); else the first number in the text.
+    const normalized = visible.some(j => j.salary_annual_usd != null);
+    const salary = (j: JobResult) => normalized ? j.salary_annual_usd ?? -1 : parseSalary(j.salary_range);
     return [...visible].sort((a, b) => {
       if (sortBy === 'match') {
         const sa = assessments[a.id]?.match_score ?? -1;
@@ -568,7 +571,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
         return sb - sa;
       }
       if (sortBy === 'newest') return parseDate(b.posted_date) - parseDate(a.posted_date);
-      if (sortBy === 'salary') return parseSalary(b.salary_range) - parseSalary(a.salary_range);
+      if (sortBy === 'salary') return salary(b) - salary(a);
       return 0;
     });
   }, [jobs, sortBy, assessments]);

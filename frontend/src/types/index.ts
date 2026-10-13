@@ -45,6 +45,8 @@ export interface JobResult {
   location: string;
   job_type: string;
   salary_range: string;
+  /** Rust backend only: salary_range normalized to annual USD (sorting). */
+  salary_annual_usd?: number | null;
   posted_date: string;
   description: string;
   url: string;
