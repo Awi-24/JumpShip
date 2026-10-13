@@ -201,7 +201,7 @@ async fn get(client: &reqwest::Client, url: &str, query: &[(&str, String)]) -> R
     for (k, v) in HEADERS {
         req = req.header(k, v);
     }
-    Ok(req.send().await?)
+    Ok(crate::polite::send(req).await?)
 }
 
 /// Search pages + one job page per result (JumpShip always fetches LinkedIn descriptions).

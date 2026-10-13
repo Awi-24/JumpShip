@@ -76,13 +76,14 @@ pub async fn fetch_greenhouse(client: &reqwest::Client, keywords: &[String], res
             let company = get(src, "name").map_or_else(|| token.clone(), pystr);
             let url = format!("https://boards-api.greenhouse.io/v1/boards/{token}/jobs");
             let res: Result<Value, Error> = async {
-                let r = client
-                    .get(&url)
-                    .query(&[("content", "true")])
-                    .header("Accept", ACCEPT_JSON)
-                    .timeout(Duration::from_secs(18))
-                    .send()
-                    .await?;
+                let r = crate::polite::send(
+                    client
+                        .get(&url)
+                        .query(&[("content", "true")])
+                        .header("Accept", ACCEPT_JSON)
+                        .timeout(Duration::from_secs(18)),
+                )
+                .await?;
                 if r.status() == 404 {
                     return Ok(Value::Null);
                 }
@@ -142,12 +143,13 @@ pub async fn fetch_lever(client: &reqwest::Client, keywords: &[String], results_
             let company = get(src, "name").map_or_else(|| site.clone(), pystr);
             let url = format!("https://api.lever.co/v0/postings/{site}?mode=json");
             let res: Result<Value, Error> = async {
-                let r = client
-                    .get(&url)
-                    .header("Accept", ACCEPT_JSON)
-                    .timeout(Duration::from_secs(18))
-                    .send()
-                    .await?;
+                let r = crate::polite::send(
+                    client
+                        .get(&url)
+                        .header("Accept", ACCEPT_JSON)
+                        .timeout(Duration::from_secs(18)),
+                )
+                .await?;
                 if r.status() == 404 {
                     return Ok(json!([]));
                 }
@@ -231,13 +233,14 @@ pub async fn fetch_workday(client: &reqwest::Client, keywords: &[String], result
                 let body =
                     json!({"appliedFacets": {}, "limit": results_wanted.min(20), "offset": 0, "searchText": term});
                 let res: Result<Option<Value>, Error> = async {
-                    let r = client
-                        .post(&api_url)
-                        .json(&body)
-                        .header("Accept", ACCEPT_JSON)
-                        .timeout(Duration::from_secs(20))
-                        .send()
-                        .await?;
+                    let r = crate::polite::send(
+                        client
+                            .post(&api_url)
+                            .json(&body)
+                            .header("Accept", ACCEPT_JSON)
+                            .timeout(Duration::from_secs(20)),
+                    )
+                    .await?;
                     if matches!(r.status().as_u16(), 403 | 404) {
                         tracing::warn!("Workday board unreachable ({site}): HTTP {}", r.status());
                         return Ok(None);

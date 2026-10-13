@@ -61,14 +61,15 @@ async fn gupy_query(client: &reqwest::Client, term: &str, remote: bool) -> Resul
     let mut attempt = 1;
     loop {
         let res = async {
-            let r = client
-                .get(&url)
-                .header("Accept", ACCEPT_HTML)
-                .header("Accept-Language", ACCEPT_LANGUAGE)
-                .timeout(Duration::from_secs(18))
-                .send()
-                .await?
-                .error_for_status()?;
+            let r = crate::polite::send(
+                client
+                    .get(&url)
+                    .header("Accept", ACCEPT_HTML)
+                    .header("Accept-Language", ACCEPT_LANGUAGE)
+                    .timeout(Duration::from_secs(18)),
+            )
+            .await?
+            .error_for_status()?;
             extract_gupy_next_data(&r.text().await?)
         }
         .await;
@@ -91,10 +92,8 @@ pub async fn fetch_gupy(
 ) -> Result<Vec<Job>, Error> {
     let mut pages = Vec::new();
     let mut last_err = None;
-    for (i, term) in terms(keywords, MAX_TERMS, "desenvolvedor").iter().enumerate() {
-        if i > 0 {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
+    // Spacing between terms: `polite` gives portal.gupy.io a 1 s gap.
+    for term in &terms(keywords, MAX_TERMS, "desenvolvedor") {
         match gupy_query(client, term, remote).await {
             Ok(pp) => pages.push(pp),
             Err(e) => {
@@ -265,7 +264,7 @@ pub async fn fetch_programathor(
         if page > 1 {
             req = req.query(&[("page", page)]);
         }
-        let html = req.send().await?.error_for_status()?.text().await?;
+        let html = crate::polite::send(req).await?.error_for_status()?.text().await?;
         let n = parse_programathor_listing(&html).len();
         if n == 0 {
             break;
@@ -320,16 +319,17 @@ pub async fn fetch_trampos(
     let mut last_err: Option<Error> = None;
     for term in terms(keywords, MAX_TERMS, "desenvolvedor") {
         let res: Result<Value, Error> = async {
-            Ok(client
-                .get("https://trampos.co/api/v2/opportunities")
-                .query(&[("tr", &term)])
-                .header("Accept", ACCEPT_JSON)
-                .timeout(Duration::from_secs(18))
-                .send()
-                .await?
-                .error_for_status()?
-                .json()
-                .await?)
+            Ok(crate::polite::send(
+                client
+                    .get("https://trampos.co/api/v2/opportunities")
+                    .query(&[("tr", &term)])
+                    .header("Accept", ACCEPT_JSON)
+                    .timeout(Duration::from_secs(18)),
+            )
+            .await?
+            .error_for_status()?
+            .json()
+            .await?)
         }
         .await;
         match res {

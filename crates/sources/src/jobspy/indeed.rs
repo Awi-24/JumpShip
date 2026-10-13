@@ -409,7 +409,7 @@ pub async fn fetch_indeed(client: &reqwest::Client, input: &SearchInput) -> Resu
             req = req.header(*k, v);
         }
         let page = async {
-            let r = req.send().await?;
+            let r = crate::polite::send(req).await?;
             if r.status() != 200 {
                 let status = r.status().as_u16();
                 tracing::debug!("Indeed {status}: {}", r.text().await.unwrap_or_default());

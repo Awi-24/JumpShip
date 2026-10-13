@@ -12,15 +12,16 @@ pub async fn fetch_remoteok(
     keywords: &[String],
     results_wanted: usize,
 ) -> Result<Vec<Job>, Error> {
-    let jobs: Value = client
-        .get("https://remoteok.com/api")
-        .header("Accept", ACCEPT_JSON)
-        .timeout(Duration::from_secs(12))
-        .send()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?;
+    let jobs: Value = crate::polite::send(
+        client
+            .get("https://remoteok.com/api")
+            .header("Accept", ACCEPT_JSON)
+            .timeout(Duration::from_secs(12)),
+    )
+    .await?
+    .error_for_status()?
+    .json()
+    .await?;
     Ok(parse_remoteok(&jobs, keywords, results_wanted))
 }
 
@@ -100,7 +101,7 @@ pub async fn fetch_arbeitnow(
         if let Some(q) = search {
             req = req.query(&[("search", q)]);
         }
-        async move { Ok::<Value, Error>(req.send().await?.error_for_status()?.json().await?) }
+        async move { Ok::<Value, Error>(crate::polite::send(req).await?.error_for_status()?.json().await?) }
     };
     let mut data = get_page((!search.is_empty()).then_some(&*search)).await?;
     // If search returns nothing, fall back to the unfiltered feed (still keyword-filtered below).

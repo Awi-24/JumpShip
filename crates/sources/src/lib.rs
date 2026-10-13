@@ -5,6 +5,7 @@ pub mod ats;
 pub mod br;
 pub mod extra;
 pub mod jobspy;
+pub mod polite;
 pub mod remote;
 pub mod salary;
 pub mod search;

@@ -10,16 +10,17 @@ use serde_json::Value;
 use crate::{ACCEPT_JSON, Error, get, md5_8, prefix, pyint, pystr, s, soup, terms, thousands, unix_date};
 
 async fn get_json(client: &reqwest::Client, url: &str, query: &[(&str, &str)]) -> Result<Value, Error> {
-    Ok(client
-        .get(url)
-        .header("Accept", ACCEPT_JSON)
-        .query(query)
-        .timeout(Duration::from_secs(15))
-        .send()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?)
+    Ok(crate::polite::send(
+        client
+            .get(url)
+            .header("Accept", ACCEPT_JSON)
+            .query(query)
+            .timeout(Duration::from_secs(15)),
+    )
+    .await?
+    .error_for_status()?
+    .json()
+    .await?)
 }
 
 /// Board job type → the app's `fulltime` / `parttime` / `contract` / `internship` / `temporary`.

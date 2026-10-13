@@ -318,9 +318,7 @@ pub async fn fetch_glassdoor(client: &reqwest::Client, input: &SearchInput) -> R
     let with_headers =
         |req: reqwest::RequestBuilder| req.header("gd-csrf-token", CSRF_TOKEN).timeout(Duration::from_secs(15));
 
-    let r = with_headers(client.get(autocomplete_url(&base_url, &input.location)))
-        .send()
-        .await?;
+    let r = crate::polite::send(with_headers(client.get(autocomplete_url(&base_url, &input.location)))).await?;
     if r.status() != 200 {
         return Err(format!("Glassdoor response status code {}", r.status().as_u16()).into());
     }
@@ -340,9 +338,7 @@ pub async fn fetch_glassdoor(client: &reqwest::Client, input: &SearchInput) -> R
     while posts.len() < input.results_wanted {
         let res = async {
             let body = search_body(&variables, page, cursor.as_deref());
-            let r = with_headers(client.post(format!("{base_url}/graph")).json(&body))
-                .send()
-                .await?;
+            let r = crate::polite::send(with_headers(client.post(format!("{base_url}/graph")).json(&body))).await?;
             if r.status() != 200 {
                 return Err::<_, Error>(format!("Glassdoor response status code {}", r.status().as_u16()).into());
             }
