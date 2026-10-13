@@ -76,7 +76,7 @@ Rule while both backends exist: change these artifacts, not code-embedded copies
 | 1 | ✅ **Core + sources** (done 2026-10-12: 29/29 golden + 3/3 JobSpy replays; live results identical to Python for 10 sources; Glassdoor needs a Chrome-TLS client + cookie jar, see §7) — workspace, `jumpship-core`, `jumpship-sources` (Gupy, Trampos, Greenhouse, Lever, Workday, RemoteOK, Arbeitnow, Programathor first; then Indeed GraphQL, LinkedIn guest, Glassdoor) | All `cases.json` golden tests pass in `cargo test`; live smoke matches Python counts ±noise |
 | 2 | ✅ **Server parity** (done 2026-10-13: all 23 UI operations; React ran unchanged against it; see §8) — axum with the endpoints marked *used* in API.md; store; LLM | React app works against axum with no frontend changes; side-by-side request diff on search/assess/resume parse |
 | 3 | 🟡 **Desktop** (built 2026-10-13: `crates/desktop`, NSIS installer 6.8 MB; see §9) — Tauri v2 shell spawns server on random port, injects base URL; installer (MSI/NSIS) | Clean install on a fresh Windows VM; no Python on the machine |
-| 4 | **New capabilities** (deferred from Python, see §5) | Each behind its own acceptance test |
+| 4 | 🟡 **New capabilities** (deferred from Python, see §5; in progress, see §10) | Each behind its own acceptance test |
 | 5 | Optional: Tauri commands/events for search streaming, drop localhost server | — |
 
 Port order inside phase 1 follows value × simplicity: JSON APIs first, HTML second, JobSpy-equivalents (internal APIs, TLS impersonation) last.
@@ -155,3 +155,11 @@ Port order inside phase 1 follows value × simplicity: JSON APIs first, HTML sec
 - **Links**: navigation away from the app and `target=_blank` open in the system browser.
 - **Not verified yet**: install on a clean Windows VM; résumé PDF download from inside WebView2; code signing.
 
+## 10. Phase 4 progress
+
+| §5 item | Status | Acceptance test |
+|---|---|---|
+| Assessment cache | ✅ `assessment_cache` table (Rust-only, ignored by Python); key = sha256 of provider, model, research flag, prompt templates, job, résumé. Company research text not in the key | `jobs::tests::assessment_cache_skips_llm` (stub LLM hit once; other model re-asks) |
+| New sources: Remotive, Himalayas, Jobicy | ✅ `crates/sources/src/remote.rs`; site pills in Search. Remotive full feed cached 6 h (its terms: ≤ 4 calls/day); Himalayas / Jobicy one call per keyword (≤ 3) | `remote::tests::*`; live 2026-10-13: 37 jobs, no errors |
+| Salary normalization | ✅ `crates/sources/src/salary.rs` → `salary_annual_usd` on search results (fixed FX table); Search sorts on it, original text shown | `salary::tests::normalizes` |
+| Job store, streaming search, ranking before truncation, per-host politeness, Ollama native API, CDP career pages, Ashby / SmartRecruiters / Inhire / Amazon | ⏳ | — |
