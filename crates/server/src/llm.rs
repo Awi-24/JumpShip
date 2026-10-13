@@ -109,6 +109,7 @@ pub struct Override {
 enum Adapter {
     Anthropic,
     OpenAi,
+    Ollama,
     Gemini,
     Cohere,
 }
@@ -167,7 +168,7 @@ fn provider_info(name: &str) -> Option<(Adapter, Option<&'static str>, &'static 
             "GOOGLE_API_KEY",
         ),
         "cohere" => (Cohere, Some("https://api.cohere.com"), "command-r", "COHERE_API_KEY"),
-        "ollama" => (OpenAi, None, "llama3.2", ""),
+        "ollama" => (Ollama, None, "llama3.2", ""),
         "lmstudio" => (OpenAi, None, "local-model", ""),
         _ => return None,
     })
@@ -200,6 +201,19 @@ pub struct LlmClient {
     api_key: String,
     base_url: Option<String>,
     max_tokens: u32,
+}
+
+static TRAILING_OBJECT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\{[\s\S]*\})\s*$").unwrap());
+
+/// Ollama context for one call: prompt (≈ 3 chars per token, on the safe side) + 2k for the answer, rounded up to
+/// 8k / 16k / 32k. Few fixed sizes, because Ollama reloads the model whenever `num_ctx` changes.
+/// `OLLAMA_NUM_CTX` pins it (e.g. for a GPU that can't hold 32k).
+fn num_ctx(system: &str, user: &str) -> u32 {
+    if let Some(n) = std::env::var("OLLAMA_NUM_CTX").ok().and_then(|v| v.trim().parse().ok()) {
+        return n;
+    }
+    let need = ((system.chars().count() + user.chars().count()) / 3 + 2048) as u32;
+    [8192, 16384, 32768].into_iter().find(|n| *n >= need).unwrap_or(32768)
 }
 
 static THINKING: LazyLock<Regex> =
@@ -283,6 +297,7 @@ impl LlmClient {
         };
         match adapter {
             Adapter::OpenAi => self.openai(http, &system, user, json_schema).await,
+            Adapter::Ollama => self.ollama(http, &system, user, json_schema).await,
             Adapter::Anthropic => self.anthropic(http, &system, user, json_schema).await,
             Adapter::Gemini => self.gemini(http, &system, user, json_schema).await,
             Adapter::Cohere => self.cohere(http, &system, user, json_schema).await,
@@ -340,13 +355,46 @@ impl LlmClient {
         let content = message["content"].as_str().unwrap_or_default().trim();
         if content.is_empty() {
             // Thinking models can spend the budget on reasoning: rescue a trailing JSON object from it.
-            static TRAILING_OBJECT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\{[\s\S]*\})\s*$").unwrap());
             if let Some(c) = message["reasoning_content"]
                 .as_str()
                 .and_then(|r| TRAILING_OBJECT.captures(r))
             {
                 return Ok(c[1].to_string());
             }
+        }
+        Ok(content.to_string())
+    }
+
+    /// Ollama's native `/api/chat` (PLAN §5): the OpenAI-compatible route runs with the server's default context and
+    /// silently cuts long prompts; here `num_ctx` is sized to the prompt.
+    async fn ollama(
+        &self,
+        http: &reqwest::Client,
+        system: &str,
+        user: &str,
+        schema: Option<&Value>,
+    ) -> Result<String, Error> {
+        let mut body = json!({
+            "model": self.model,
+            "messages": Self::messages(system, user),
+            "stream": false,
+            "options": {"num_ctx": num_ctx(system, user), "num_predict": self.max_tokens},
+        });
+        if let Some(schema) = schema {
+            body["format"] = schema.clone();
+        }
+        let base = self.base().trim_end_matches("/v1");
+        let req = http
+            .post(format!("{base}/api/chat"))
+            .json(&body)
+            .timeout(Duration::from_secs(600));
+        let data = self.post(req).await?;
+        let message = &data["message"];
+        let content = message["content"].as_str().unwrap_or_default().trim();
+        if content.is_empty()
+            && let Some(c) = message["thinking"].as_str().and_then(|r| TRAILING_OBJECT.captures(r))
+        {
+            return Ok(c[1].to_string());
         }
         Ok(content.to_string())
     }
@@ -520,5 +568,44 @@ mod tests {
         let c = LlmClient::new(&cfg, "ollama", "qwen3:8b", "", Some("http://h:11434/"));
         assert_eq!((c.base(), c.api_key.as_str()), ("http://h:11434/v1", "local"));
         assert!(needs_semaphore("ollama", "qwen3:8b") && !needs_semaphore("ollama", "gpt-oss:120b-cloud"));
+    }
+
+    #[test]
+    fn ollama_context_buckets() {
+        assert_eq!(num_ctx("sys", &"x".repeat(9000)), 8192);
+        assert_eq!(num_ctx("sys", &"x".repeat(30000)), 16384);
+        assert_eq!(num_ctx("sys", &"x".repeat(500_000)), 32768);
+    }
+
+    /// Acceptance (PLAN §5 Ollama native API): `/api/chat` with a sized `num_ctx`, `/v1` stripped from the base URL.
+    #[tokio::test]
+    async fn ollama_native_chat() {
+        use axum::{Json, Router, routing::post};
+        use std::sync::{Arc, Mutex};
+
+        let seen = Arc::new(Mutex::new(Value::Null));
+        let store = seen.clone();
+        let stub = Router::new().route(
+            "/api/chat",
+            post(move |Json(body): Json<Value>| async move {
+                *store.lock().unwrap() = body;
+                Json(json!({"message": {"role": "assistant", "content": " {\"ok\": true} "}, "done": true}))
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, stub).await });
+
+        let cfg = Config::from_env();
+        let llm = LlmClient::new(&cfg, "ollama", "gemma3:27b", "", Some(&base));
+        let out = llm
+            .complete(&reqwest::Client::new(), "system", &"y".repeat(30000), None)
+            .await
+            .unwrap();
+        assert_eq!(out, "{\"ok\": true}");
+        let body = seen.lock().unwrap().clone();
+        assert_eq!(body["options"]["num_ctx"], 16384);
+        assert_eq!(body["stream"], false);
+        assert_eq!(body["messages"][0]["role"], "system");
     }
 }
