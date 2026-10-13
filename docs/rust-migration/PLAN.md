@@ -1,6 +1,6 @@
 # Plan: JumpShip → native Rust desktop app
 
-> **Status:** ACTIVE — phases 1–2 done (Glassdoor live transport and the career-page scraper pending) · code: [`/crates`](../../crates) · Decision: `DEC-20261011-02`
+> **Status:** ACTIVE — phases 1–2 done, phase 3 built (fresh-VM install check pending) (Glassdoor live transport and the career-page scraper pending) · code: [`/crates`](../../crates) · Decision: `DEC-20261011-02`
 > Supersedes [`../desktop-app-plan.md`](../desktop-app-plan.md) (Tauri + PyInstaller wrapper).
 
 **Last updated:** 2026-10-13
@@ -75,7 +75,7 @@ Rule while both backends exist: change these artifacts, not code-embedded copies
 | 0 | **Prep** (done 2026-10-11) | Sources fixed & live-verified; parsers pure; golden fixtures; prompts/data extracted; specs written |
 | 1 | ✅ **Core + sources** (done 2026-10-12: 29/29 golden + 3/3 JobSpy replays; live results identical to Python for 10 sources; Glassdoor needs a Chrome-TLS client + cookie jar, see §7) — workspace, `jumpship-core`, `jumpship-sources` (Gupy, Trampos, Greenhouse, Lever, Workday, RemoteOK, Arbeitnow, Programathor first; then Indeed GraphQL, LinkedIn guest, Glassdoor) | All `cases.json` golden tests pass in `cargo test`; live smoke matches Python counts ±noise |
 | 2 | ✅ **Server parity** (done 2026-10-13: all 23 UI operations; React ran unchanged against it; see §8) — axum with the endpoints marked *used* in API.md; store; LLM | React app works against axum with no frontend changes; side-by-side request diff on search/assess/resume parse |
-| 3 | **Desktop** — Tauri v2 shell spawns server on random port, injects base URL; installer (MSI/NSIS) | Clean install on a fresh Windows VM; no Python on the machine |
+| 3 | 🟡 **Desktop** (built 2026-10-13: `crates/desktop`, NSIS installer 6.8 MB; see §9) — Tauri v2 shell spawns server on random port, injects base URL; installer (MSI/NSIS) | Clean install on a fresh Windows VM; no Python on the machine |
 | 4 | **New capabilities** (deferred from Python, see §5) | Each behind its own acceptance test |
 | 5 | Optional: Tauri commands/events for search streaming, drop localhost server | — |
 
@@ -137,4 +137,21 @@ Port order inside phase 1 follows value × simplicity: JSON APIs first, HTML sec
   defaults) instead of a 500.
 - **Not ported yet**: `playwright` career-page scraper (reports an error in `X-Source-Status`; phase 4 CDP/XHR
   rewrite); board errors after partial results are only logged; legacy / unused routers (API.md list).
+
+## 9. Phase 3 notes (as built)
+
+- **Shape**: `crates/desktop` runs the axum app **in-process** on `127.0.0.1:<random>` and opens the Tauri window on
+  that URL. The server's fallback serves the React build from Tauri's embedded assets (`frontendDist`), so page and
+  `/api` share one origin: no base-URL shim, no CORS, frontend unchanged. `GET /` (Python's API banner) was dropped.
+- **Build**: `cd crates/desktop && cargo tauri build` (runs `npm run build` first) →
+  `target/release/bundle/nsis/JumpShip_0.1.0_x64-setup.exe` (6.8 MB; app 23 MB). WebView2 bootstrapper is
+  downloaded by the installer when missing. The crate is outside `default-members`, so plain `cargo test/clippy` and
+  CI don't need WebView system libraries.
+- **Data**: `%APPDATA%\com.jumpship.desktop\` holds `jobspy_ui.db`, `generated_resumes\`, `jumpship.log`.
+  `DATABASE_URL`, `RESUME_OUTPUT_DIR`, `SECRET_KEY` and the LLM env vars still override (e.g. to open the old
+  Python database with its `SECRET_KEY`).
+- **Secrets**: a random Fernet secret per install in the OS keychain (Windows Credential Manager entry
+  `secret-key.JumpShip`; macOS Keychain; Secret Service on Linux, file fallback beside the DB when none).
+- **Links**: navigation away from the app and `target=_blank` open in the system browser.
+- **Not verified yet**: install on a clean Windows VM; résumé PDF download from inside WebView2; code signing.
 

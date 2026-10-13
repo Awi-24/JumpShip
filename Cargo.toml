@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+# The Tauri shell needs WebView system libraries; plain `cargo build/test/clippy` (and CI) skip it.
+default-members = ["crates/core", "crates/sources", "crates/server"]
 
 [workspace.package]
 version = "0.1.0"

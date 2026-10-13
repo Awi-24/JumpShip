@@ -76,3 +76,6 @@ frontend/coverage/
 
 # Rust
 /target
+
+# Tauri-generated capability schemas
+/crates/desktop/gen

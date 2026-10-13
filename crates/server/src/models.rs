@@ -17,10 +17,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/ollama/models", get(ollama_models))
         .route("/api/groq/models", get(groq_models))
         .route("/api/test-llm", post(test_llm))
-        .route(
-            "/",
-            get(|| async { Json(json!({"message": "JumpShip API 1.0 — visit /docs"})) }),
-        )
+    // No `GET /` (Python's "visit /docs" banner): the desktop shell serves the SPA there.
 }
 
 async fn health(State(st): State<AppState>) -> Json<Value> {
