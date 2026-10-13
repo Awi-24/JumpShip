@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use futures::future::{BoxFuture, FutureExt};
 use futures::{StreamExt, stream};
-use jumpship_core::{Job, matches_any};
+use jumpship_core::{Job, matches_any, rank};
 use regex::Regex;
 use serde_json::{Value, json};
 
@@ -101,6 +101,7 @@ pub async fn fetch_greenhouse(client: &reqwest::Client, keywords: &[String], res
         .boxed()
     })
     .await;
+    rank(&mut jobs, keywords);
     jobs.truncate(results_wanted);
     jobs
 }
@@ -167,6 +168,7 @@ pub async fn fetch_lever(client: &reqwest::Client, keywords: &[String], results_
         .boxed()
     })
     .await;
+    rank(&mut jobs, keywords);
     jobs.truncate(results_wanted);
     jobs
 }
@@ -260,6 +262,7 @@ pub async fn fetch_workday(client: &reqwest::Client, keywords: &[String], result
         .boxed()
     })
     .await;
+    rank(&mut jobs, keywords);
     jobs.truncate(results_wanted);
     jobs
 }

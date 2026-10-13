@@ -305,6 +305,7 @@ fn cache_key(llm: &LlmClient, p: &ResumeProfile, job: &Job, research: bool) -> S
     let job = Job {
         is_new: None,
         match_score: None,
+        relevance: None,
         ..job.clone()
     };
     let key = json!([

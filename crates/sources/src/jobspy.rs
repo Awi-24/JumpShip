@@ -547,6 +547,7 @@ pub fn to_jobs(site: &str, mut posts: Vec<Post>, country: Country) -> Vec<Job> {
                 tags: Some(tags),
                 salary_annual_usd: None,
                 is_new: None,
+                relevance: None,
             }
         })
         .collect()

@@ -51,6 +51,7 @@ export interface JobResult {
   salary_annual_usd?: number | null;
   /** Rust backend: not seen in an earlier search. */
   is_new?: boolean;
+  relevance?: number; // Rust backend: keyword relevance (title > description)
   posted_date: string;
   description: string;
   url: string;

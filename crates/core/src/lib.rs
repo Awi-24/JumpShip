@@ -32,6 +32,9 @@ pub struct Job {
     /// Not seen in an earlier search (job store; search results only).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_new: Option<bool>,
+    /// Keyword relevance of title + description ([`relevance`]; search results only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relevance: Option<u32>,
 }
 
 /// NFKD, drop combining marks, casefold, collapse whitespace.
@@ -88,6 +91,33 @@ pub fn matches_any<K: AsRef<str>>(keywords: &[K], texts: &[&str]) -> bool {
     kws.iter().any(|k| contains_word(&hay, k))
 }
 
+/// Cheap local relevance (PLAN §5 ranking): per keyword, 10 for the whole phrase in the title, else 2 per word of
+/// it in the title; +2 for the phrase in the description.
+pub fn relevance<K: AsRef<str>>(keywords: &[K], title: &str, description: &str) -> u32 {
+    let (title, description) = (fold(title), fold(description));
+    keywords
+        .iter()
+        .map(|k| fold(k.as_ref()))
+        .filter(|k| !k.is_empty())
+        .map(|k| {
+            let in_title = if contains_word(&title, &k) {
+                10
+            } else {
+                2 * k
+                    .split(' ')
+                    .filter(|w| w.chars().count() > 2 && contains_word(&title, w))
+                    .count() as u32
+            };
+            in_title + if contains_word(&description, &k) { 2 } else { 0 }
+        })
+        .sum()
+}
+
+/// Most relevant first; ties keep their order (stable sort).
+pub fn rank<K: AsRef<str>>(jobs: &mut [Job], keywords: &[K]) {
+    jobs.sort_by_cached_key(|j| std::cmp::Reverse(relevance(keywords, &j.title, &j.description)));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -103,5 +133,28 @@ mod tests {
         assert!(matches_any::<&str>(&[], &["anything"]));
         assert!(matches_any(&["", "  "], &["anything"]));
         assert!(!matches_any(&["go"], &["google"]));
+    }
+
+    /// Acceptance (PLAN §5 ranking before truncation): title phrase > title words > description only.
+    #[test]
+    fn ranking() {
+        let kws = ["software engineer", "engenheiro de software"];
+        let job = |id: &str, title: &str, description: &str| Job {
+            id: id.into(),
+            title: title.into(),
+            description: description.into(),
+            ..Job::default()
+        };
+        let mut jobs = vec![
+            job("apprentice", "Jovem Aprendiz", "software engineer mentoring"),
+            job("none", "Office Manager", ""),
+            job("words", "Analista de Desenvolvimento de Software", ""),
+            job("phrase", "Senior Software Engineer", "Rust"),
+            job("pt", "Engenheiro de Software Pleno", ""),
+        ];
+        assert_eq!(relevance(&kws, "Senior Software Engineer", ""), 10 + 2);
+        rank(&mut jobs, &kws);
+        let ids: Vec<_> = jobs.iter().map(|j| j.id.as_str()).collect();
+        assert_eq!(ids, ["phrase", "pt", "words", "apprentice", "none"]);
     }
 }

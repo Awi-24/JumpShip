@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use futures::future::FutureExt;
 use futures::{StreamExt, stream};
-use jumpship_core::{Job, matches_any};
+use jumpship_core::{Job, matches_any, rank, relevance};
 use serde_json::Value;
 
 use crate::remote::{job_type, place};
@@ -218,6 +218,7 @@ pub async fn fetch_ashby(client: &reqwest::Client, keywords: &[String], n: usize
         .filter(|j| matches_any(keywords, &[&j.title, &j.description]))
         .filter(|j| location_matches(&j.location, resolved, j.is_remote.flatten()))
         .collect();
+    rank(&mut jobs, keywords);
     jobs.truncate(n);
     jobs
 }
@@ -324,6 +325,8 @@ pub async fn fetch_smartrecruiters(
     {
         return Err(e);
     }
+    // The list has no description: rank on titles before the cap (`q` matches anywhere in the ad).
+    postings.sort_by_cached_key(|p| std::cmp::Reverse(relevance(keywords, &s(p, "name"), "")));
     postings.truncate(n);
     let details = postings.iter().map(|p| {
         let url = format!(

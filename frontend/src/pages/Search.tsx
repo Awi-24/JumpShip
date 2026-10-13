@@ -448,7 +448,10 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const jobIds = jobs.map(j => j.id).join(',');
   useEffect(() => {
     if (!resumeProfile) return;
-    const fresh = jobs.filter(j => !requestedRef.current.has(j.id));
+    // Most relevant first: with a slow local LLM those are scored before the long tail.
+    const fresh = jobs
+      .filter(j => !requestedRef.current.has(j.id))
+      .sort((a, b) => (b.relevance ?? 0) - (a.relevance ?? 0));
     if (!fresh.length) return;
     for (const j of fresh) requestedRef.current.add(j.id);
     // Mark them in flight right away so the search loader stays up without a gap
@@ -614,7 +617,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
       if (sortBy === 'match') {
         const sa = assessments[a.id]?.match_score ?? -1;
         const sb = assessments[b.id]?.match_score ?? -1;
-        return sb - sa;
+        return sb - sa || (b.relevance ?? 0) - (a.relevance ?? 0); // unscored: keyword relevance
       }
       if (sortBy === 'newest') return parseDate(b.posted_date) - parseDate(a.posted_date);
       if (sortBy === 'salary') return salary(b) - salary(a);

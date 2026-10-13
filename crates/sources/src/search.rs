@@ -40,6 +40,7 @@ const PT_SITES: &[&str] = &[
     "greenhouse",
     "lever",
     "workday",
+    "smartrecruiters",
     "playwright",
 ];
 const CACHE_TTL: Duration = Duration::from_secs(900);
@@ -470,6 +471,7 @@ fn plan(client: &reqwest::Client, q: &Query) -> Plan {
             now: chrono::Utc::now(),
             ids: HashSet::new(),
             keys: HashSet::new(),
+            keywords: pt_keywords(&q.keywords),
         },
     }
 }
@@ -483,6 +485,8 @@ struct Merger {
     now: chrono::DateTime<chrono::Utc>,
     ids: HashSet<String>,
     keys: HashSet<String>,
+    /// Search keywords + PT equivalents, for `Job::relevance`.
+    keywords: Vec<String>,
 }
 
 impl Merger {
@@ -499,6 +503,7 @@ impl Merger {
                     enrich(&mut j);
                 }
                 j.salary_annual_usd = salary::annual_usd(&j.salary_range);
+                j.relevance = Some(jumpship_core::relevance(&self.keywords, &j.title, &j.description));
                 j
             })
             .filter(|j| j.site == "playwright" || location_matches(&j.location, &self.resolved, j.is_remote.flatten()))
