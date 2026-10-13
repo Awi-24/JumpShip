@@ -1,11 +1,14 @@
 //! JumpShip HTTP server: the FastAPI backend's HTTP API (docs/rust-migration/API.md) on axum, so the React
 //! frontend runs unchanged against either implementation.
 
+pub mod applications;
 pub mod config;
+pub mod db;
 pub mod error;
 pub mod jobs;
 pub mod llm;
 pub mod models;
+pub mod profile;
 pub mod web_search;
 
 use std::sync::Arc;
@@ -20,9 +23,11 @@ use config::Config;
 pub struct AppState {
     pub cfg: Arc<Config>,
     pub http: reqwest::Client,
+    pub db: Arc<db::Db>,
+    pub secrets: Arc<db::Secrets>,
 }
 
-pub fn app(cfg: Config) -> Router {
+pub fn app(cfg: Config, db: db::Db) -> Router {
     let origins = if cfg.cors_origins.iter().any(|o| o == "*") {
         AllowOrigin::mirror_request()
     } else {
@@ -35,12 +40,16 @@ pub fn app(cfg: Config) -> Router {
         .allow_headers(AllowHeaders::mirror_request())
         .expose_headers([HeaderName::from_static("x-source-status")]);
     let state = AppState {
+        secrets: Arc::new(db::Secrets::new(&cfg.secret_key)),
         cfg: Arc::new(cfg),
         http: jumpship_sources::client(),
+        db: Arc::new(db),
     };
     Router::new()
         .merge(models::routes())
         .merge(jobs::routes())
+        .merge(profile::routes())
+        .merge(applications::routes())
         .with_state(state)
         .layer(cors)
 }

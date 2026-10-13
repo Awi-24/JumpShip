@@ -11,5 +11,17 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
     tracing::info!("JumpShip API on http://{addr}");
     let cfg = jumpship_server::config::Config::from_env();
-    axum::serve(listener, jumpship_server::app(cfg)).await.expect("serve");
+    if cfg.secret_key == "dev-secret-change-me-in-production" {
+        if !cfg.debug {
+            eprintln!(
+                "SECRET_KEY is still the default dev value. Set SECRET_KEY in .env,                  or set DEBUG=true to allow the default in development."
+            );
+            std::process::exit(1);
+        }
+        tracing::error!("SECRET_KEY is using default dev value (DEBUG=true). Do not deploy this way.");
+    }
+    let db = jumpship_server::db::Db::open(&cfg.database_url).expect("open database");
+    axum::serve(listener, jumpship_server::app(cfg, db))
+        .await
+        .expect("serve");
 }
