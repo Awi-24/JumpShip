@@ -68,6 +68,9 @@ async fn list(State(st): State<AppState>, Query(q): Query<ListQuery>) -> ApiResu
     Ok(Json(json!({"count": rows.len(), "applications": rows})))
 }
 
+/// Legacy `saved_jobs` (title, company_name, job_url, site).
+type SavedJob = (String, Option<String>, Option<String>, Option<String>);
+
 #[derive(Deserialize)]
 struct CreateRequest {
     job_id: Option<String>,
@@ -89,7 +92,7 @@ async fn create(State(st): State<AppState>, Body(req): Body<CreateRequest>) -> A
     let (mut title, mut company, mut url, mut site) = (Some(req.job_title), req.company_name, req.job_url, req.site);
     if let Some(job_id) = req.job_id.as_deref().filter(|j| !j.is_empty()) {
         // Legacy saved_jobs row fills what the request left empty.
-        let saved: Option<(String, Option<String>, Option<String>, Option<String>)> = conn
+        let saved: Option<SavedJob> = conn
             .query_row(
                 "SELECT title, company_name, job_url, site FROM saved_jobs WHERE id = ?1",
                 [job_id],

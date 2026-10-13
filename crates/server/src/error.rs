@@ -7,12 +7,13 @@ use axum::response::{IntoResponse, Response};
 use serde::de::DeserializeOwned;
 use serde_json::json;
 
+/// Status + `detail` (a message, or a FastAPI-style validation error list).
 #[derive(Debug)]
-pub struct ApiError(pub StatusCode, pub String);
+pub struct ApiError(pub StatusCode, pub serde_json::Value);
 
 impl ApiError {
     pub fn new(status: u16, detail: impl Into<String>) -> ApiError {
-        ApiError(StatusCode::from_u16(status).unwrap(), detail.into())
+        ApiError(StatusCode::from_u16(status).unwrap(), json!(detail.into()))
     }
 }
 

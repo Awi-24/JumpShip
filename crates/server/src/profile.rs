@@ -86,8 +86,7 @@ fn coerce(v: &Value, ty: Ty) -> Result<Value, &'static str> {
 }
 
 /// Validated `(field, value)` pairs present in the body; `keep_null` = PUT's `exclude_unset`.
-fn fields(body: &Value, keep_null: bool) -> Result<Vec<(&'static str, Value)>, axum::response::Response> {
-    use axum::response::IntoResponse;
+fn fields(body: &Value, keep_null: bool) -> ApiResult<Vec<(&'static str, Value)>> {
     let obj = body.as_object().cloned().unwrap_or_default();
     let mut out = Vec::new();
     let mut errors = Vec::new();
@@ -107,7 +106,7 @@ fn fields(body: &Value, keep_null: bool) -> Result<Vec<(&'static str, Value)>, a
     if errors.is_empty() {
         Ok(out)
     } else {
-        Err((StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"detail": errors}))).into_response())
+        Err(ApiError(StatusCode::UNPROCESSABLE_ENTITY, json!(errors)))
     }
 }
 
@@ -168,11 +167,10 @@ async fn upsert(
     State(st): State<AppState>,
     headers: HeaderMap,
     Body(body): Body<Value>,
-) -> Result<Json<Map<String, Value>>, axum::response::Response> {
-    use axum::response::IntoResponse;
-    check_key(&st, &headers).map_err(IntoResponse::into_response)?;
+) -> ApiResult<Json<Map<String, Value>>> {
+    check_key(&st, &headers)?;
     let set = fields(&body, false)?;
-    write(&st, set).map_err(IntoResponse::into_response)
+    write(&st, set)
 }
 
 /// PUT: partial update where an explicit null overwrites (`exclude_unset`).
@@ -180,11 +178,10 @@ async fn patch(
     State(st): State<AppState>,
     headers: HeaderMap,
     Body(body): Body<Value>,
-) -> Result<Json<Map<String, Value>>, axum::response::Response> {
-    use axum::response::IntoResponse;
-    check_key(&st, &headers).map_err(IntoResponse::into_response)?;
+) -> ApiResult<Json<Map<String, Value>>> {
+    check_key(&st, &headers)?;
     let set = fields(&body, true)?;
-    write(&st, set).map_err(IntoResponse::into_response)
+    write(&st, set)
 }
 
 // ── LLM keys ────────────────────────────────────────────────────────────────────────────────────
