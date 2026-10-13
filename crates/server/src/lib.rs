@@ -5,6 +5,7 @@ pub mod applications;
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod interview;
 pub mod jobs;
 pub mod llm;
 pub mod models;
@@ -50,6 +51,7 @@ pub fn app(cfg: Config, db: db::Db) -> Router {
         .merge(jobs::routes())
         .merge(profile::routes())
         .merge(applications::routes())
+        .merge(interview::routes())
         .with_state(state)
         .layer(cors)
 }
