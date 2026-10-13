@@ -75,8 +75,8 @@ Rule while both backends exist: change these artifacts, not code-embedded copies
 | 0 | **Prep** (done 2026-10-11) | Sources fixed & live-verified; parsers pure; golden fixtures; prompts/data extracted; specs written |
 | 1 | ✅ **Core + sources** (done 2026-10-12: 29/29 golden + 3/3 JobSpy replays; live results identical to Python for 10 sources; Glassdoor needs a Chrome-TLS client + cookie jar, see §7) — workspace, `jumpship-core`, `jumpship-sources` (Gupy, Trampos, Greenhouse, Lever, Workday, RemoteOK, Arbeitnow, Programathor first; then Indeed GraphQL, LinkedIn guest, Glassdoor) | All `cases.json` golden tests pass in `cargo test`; live smoke matches Python counts ±noise |
 | 2 | ✅ **Server parity** (done 2026-10-13: all 23 UI operations; React ran unchanged against it; see §8) — axum with the endpoints marked *used* in API.md; store; LLM | React app works against axum with no frontend changes; side-by-side request diff on search/assess/resume parse |
-| 3 | 🟡 **Desktop** (built 2026-10-13: `crates/desktop`, NSIS installer 6.8 MB; see §9) — Tauri v2 shell spawns server on random port, injects base URL; installer (MSI/NSIS) | Clean install on a fresh Windows VM; no Python on the machine |
-| 4 | 🟡 **New capabilities** (deferred from Python, see §5; in progress, see §10) | Each behind its own acceptance test |
+| 3 | 🟡 **Desktop** (built 2026-10-13: `crates/desktop`, NSIS installer 7.0 MB with phase 4; install / run without Python / uninstall verified, fresh VM pending; see §9) — Tauri v2 shell spawns server on random port, injects base URL; installer (MSI/NSIS) | Clean install on a fresh Windows VM; no Python on the machine |
+| 4 | ✅ **New capabilities** (deferred from Python, see §5; done 2026-10-13 except Inhire, see §10) | Each behind its own acceptance test |
 | 5 | Optional: Tauri commands/events for search streaming, drop localhost server | — |
 
 Port order inside phase 1 follows value × simplicity: JSON APIs first, HTML second, JobSpy-equivalents (internal APIs, TLS impersonation) last.
@@ -135,8 +135,8 @@ Port order inside phase 1 follows value × simplicity: JSON APIs first, HTML sec
   Ollama URL with every request); the local-LLM semaphore guards every call (Python: only some routes); Gemini via
   REST with default `gemini-2.5-flash`; Hugging Face via `router.huggingface.co`; lax-typed LLM JSON (null fields →
   defaults) instead of a 500.
-- **Not ported yet**: `playwright` career-page scraper (reports an error in `X-Source-Status`; phase 4 CDP/XHR
-  rewrite); board errors after partial results are only logged; legacy / unused routers (API.md list).
+- **Not ported yet**: board errors after partial results are only logged; legacy / unused routers (API.md list).
+  (The `playwright` career-page scraper came in phase 4 as a CDP rewrite, §10.)
 
 ## 9. Phase 3 notes (as built)
 
@@ -153,7 +153,16 @@ Port order inside phase 1 follows value × simplicity: JSON APIs first, HTML sec
 - **Secrets**: a random Fernet secret per install in the OS keychain (Windows Credential Manager entry
   `secret-key.JumpShip`; macOS Keychain; Secret Service on Linux, file fallback beside the DB when none).
 - **Links**: navigation away from the app and `target=_blank` open in the system browser.
-- **Not verified yet**: install on a clean Windows VM; résumé PDF download from inside WebView2; code signing.
+- **Install test (2026-10-13, this machine, not a fresh VM)**: installer rebuilt with phase 4 (7.0 MB; app 25.7 MB);
+  `setup.exe /S /D=<temp>` → run with `PATH=C:\Windows\System32;C:\Windows` (no Python), temp `DATABASE_URL` /
+  `RESUME_OUTPUT_DIR`, no `.env`, WebView2 driven over CDP (`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port`):
+  landing → Search → UI search (20 Indeed jobs; LinkedIn 429 after a day of tests, Glassdoor 403 as known); API search
+  with Career Pages (headless Edge launched by the installed app) + SmartRecruiters → 18 jobs; CSV export lands in
+  Downloads with WebView2's default download handling; tailored résumé via `/api/resume/generate-for-application`
+  with a stub Ollama (native `/api/chat`) → 1-page PDF (38 KB) downloaded through blob + `a.download` exactly like
+  JobTracker. `uninstall.exe /S` removed the files, the HKCU uninstall key and the Start-menu entry.
+- **Not verified yet**: a fresh Windows VM (Windows Sandbox is not enabled here: turning it on is a Windows feature
+  change + reboot, left to the user); code signing (needs a certificate).
 
 ## 10. Phase 4 progress
 
