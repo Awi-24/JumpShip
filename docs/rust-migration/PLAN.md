@@ -153,6 +153,14 @@ Port order inside phase 1 follows value × simplicity: JSON APIs first, HTML sec
 - **Secrets**: a random Fernet secret per install in the OS keychain (Windows Credential Manager entry
   `secret-key.JumpShip`; macOS Keychain; Secret Service on Linux, file fallback beside the DB when none).
 - **Links**: navigation away from the app and `target=_blank` open in the system browser.
+- **Window chrome (2026-10-14)**: on Windows the native frame is off; the page draws the title bar (`TitleBar.tsx`:
+  drag region with double-click maximize, Start / Search / Tracker tabs, page actions portaled in, Segoe Fluent
+  caption buttons) and a status bar (LLM in use + reachability). `capabilities/main.json` grants only the window
+  commands, to the `http://127.0.0.1:*` origin. Inside the app the web landing page is replaced by a start screen,
+  and `html.is-desktop` CSS drops web tells (Google-font typography → Segoe UI Variable, ambient backdrop, caps
+  labels, hand cursor on buttons, browser context menu, F5 / Ctrl+R). Browser mode is unchanged.
+- **Fixed port 47613** (random fallback when taken): localStorage is per origin, so with a random port the settings,
+  theme, cached résumé and search history were lost on every launch. Verified: theme survives a restart.
 - **Install test (2026-10-13, this machine, not a fresh VM)**: installer rebuilt with phase 4 (7.0 MB; app 25.7 MB);
   `setup.exe /S /D=<temp>` → run with `PATH=C:\Windows\System32;C:\Windows` (no Python), temp `DATABASE_URL` /
   `RESUME_OUTPUT_DIR`, no `.env`, WebView2 driven over CDP (`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port`):
