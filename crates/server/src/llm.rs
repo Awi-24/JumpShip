@@ -181,16 +181,21 @@ pub fn is_local(provider: &str) -> bool {
     matches!(provider, "ollama" | "lmstudio" | "openclaw")
 }
 
-/// Local GPU inference runs one call at a time (`LLM_MAX_CONCURRENT` slots); `*-cloud` Ollama models are remote.
+/// Local inference shares `LLM_MAX_CONCURRENT` slots; `*-cloud` Ollama models are remote.
 pub fn needs_semaphore(provider: &str, model: &str) -> bool {
     is_local(provider) && !model.ends_with("-cloud")
 }
+
+/// Default slots: the UI's fastest assessment speed (Turbo, 6 parallel), so the speed picked in Settings is what runs.
+/// With 1 (the old default, and what the desktop app got: it reads no `.env`) every local call was serialized and
+/// Balanced/Turbo did nothing. Ollama and LM Studio queue what they cannot run in parallel themselves.
+const DEFAULT_LOCAL_SLOTS: usize = 6;
 
 static LOCAL_SEM: LazyLock<Semaphore> = LazyLock::new(|| {
     let slots = std::env::var("LLM_MAX_CONCURRENT")
         .ok()
         .and_then(|v| v.trim().parse::<usize>().ok());
-    Semaphore::new(slots.unwrap_or(1).max(1))
+    Semaphore::new(slots.unwrap_or(DEFAULT_LOCAL_SLOTS).max(1))
 });
 
 #[derive(Debug, Clone)]

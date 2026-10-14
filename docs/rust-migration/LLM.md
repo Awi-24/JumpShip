@@ -75,7 +75,7 @@ Frontend source of these fields (`getLlmFields` in `Search.tsx` / `JobTracker.ts
 ## 5. Local concurrency semaphore
 
 - `LOCAL_PROVIDERS = {ollama, lmstudio, openclaw}`; `is_local_provider(p)`.
-- `get_local_sem()` lazily creates one process-wide `asyncio.Semaphore(slots)`; `slots = max(1, int(os.getenv("LLM_MAX_CONCURRENT", "1")))`, non-integer -> 1. Read once at first use. `Settings.llm_max_concurrent` exists but is **not** consulted (env var only).
+- `get_local_sem()` lazily creates one process-wide `asyncio.Semaphore(slots)`; `slots = max(1, int(os.getenv("LLM_MAX_CONCURRENT", "1")))`, non-integer -> 1. Read once at first use. `Settings.llm_max_concurrent` exists but is **not** consulted (env var only). **Rust diverges:** default 6 (the UI's Turbo speed) instead of 1, so the Assessment Speed setting is the effective limit; the desktop app reads no `.env` and was serialized to one call.
 - `needs_semaphore(provider, model)`: false if not local; false if the resolved model name ends with `-cloud` (Ollama cloud-relay models: inference is remote); else true.
 - Where it is applied (semaphore held for the whole thread-offloaded blocking call):
   - `_run_assessment` (`/api/jobs/assess`, `/assess-batch`): `needs_semaphore(provider, resolved_model)`, so `-cloud` models bypass it.
