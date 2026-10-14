@@ -99,7 +99,8 @@ function exportCSV(jobs: JobResult[], assessments: Record<string, JobAssessment>
       j.url,
     ].join(',');
   }).join('\n');
-  const blob = new Blob([header + rows], { type: 'text/csv' });
+  // BOM: without it Excel reads the UTF-8 file as ANSI ("SÃ£o Paulo").
+  const blob = new Blob(['\ufeff' + header + rows], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
