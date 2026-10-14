@@ -62,6 +62,11 @@ _CITY_OF = {c: k for k, cs in _CITIES.items() for c in cs}
 _COUNTRY_RE = re.compile(rf"(?<!\w)(?:{_alt(_COUNTRY_OF)})(?!\w)")
 _CITY_RE = re.compile(rf"(?<!\w)(?:{_alt(_CITY_OF)})(?!\w)")
 
+# Brazilian state code / folded name -> code; city -> state; metro cities -> their main city.
+_BR_STATE_OF = {k: c for c, name in _LOC["br_states"].items() for k in (c, name)}
+_BR_CITY_STATE: dict[str, str] = _LOC["br_city_state"]
+_METRO_OF: dict[str, str] = _LOC["metro_of"]
+
 _REMOTE_LABELS = set(_LOC["remote_labels"])
 _HYBRID_LABELS = set(_LOC["hybrid_labels"])
 _REMOTE_WORDS = tuple(_LOC["remote_words"])
@@ -92,6 +97,7 @@ class ResolvedLocation(NamedTuple):
     hybrid: bool
     country_key: str      # country used by the post-filter ("" = any)
     plain_location: str = ""  # board_location without the appended country (Glassdoor rejects "City, Country")
+    city: str = ""            # known city searched (folded; "" = not a city search): on-site jobs elsewhere are dropped
 
 
 def _job_countries(loc: str) -> set[str]:
@@ -135,7 +141,24 @@ def resolve_location(label: str | None) -> ResolvedLocation:
     else:
         board = base_raw
     plain = name if base in _COUNTRY_OF else base_raw
-    return ResolvedLocation(board, ck if ck in _COUNTRIES else "usa", "remot" in qual, False, ck, plain)
+    city = base if base in _CITY_OF else ""
+    return ResolvedLocation(board, ck if ck in _COUNTRIES else "usa", "remot" in qual, False, ck, plain, city)
+
+
+def _job_cities(loc: str) -> set[str]:
+    """Known cities in a job location, metro cities mapped to their main city."""
+    return {_METRO_OF.get(c, c) for c in _CITY_RE.findall(fold(loc))}
+
+
+def _br_states(loc: str) -> set[str]:
+    """Brazilian states named in a job location: a part that is a code ("Salvador - BA") or a name ("Ipojuca, Pernambuco")."""
+    found = set()
+    for part in (p.strip() for p in re.split(r"[,\-–/|()]", loc or "")):
+        code = len(part) == 2 and part.isascii() and part.isupper()
+        key = part.lower() if code else fold(part)
+        if key in _BR_STATE_OF and (code or len(key) > 2):
+            found.add(_BR_STATE_OF[key])
+    return found
 
 
 def _location_matches(job_loc: str, search: ResolvedLocation | str, job_is_remote: bool | None = None) -> bool:
@@ -154,7 +177,20 @@ def _location_matches(job_loc: str, search: ResolvedLocation | str, job_is_remot
     if not search.country_key:
         return True
     found = _job_countries(jl)
-    return not found or search.country_key in found
+    if found and search.country_key not in found:
+        return False
+    if not search.city or remote_job:
+        return True
+    # City search, on-site / hybrid job: same city (or its metro), else same state when the city is unknown, else
+    # only the country named. Anything else (another city, another state, "Madison Ave Corp") is no use there.
+    cities = _job_cities(jl)
+    if cities:
+        return search.city in cities
+    states = _br_states(jl)
+    if search.city in _BR_CITY_STATE and states:
+        return _BR_CITY_STATE[search.city] in states
+    # Just the country ("Brazil"): could be anywhere, keep. A place we don't know ("São Carlos, Brazil"): drop.
+    return bool(found) and not any(ch.isalpha() for ch in _COUNTRY_RE.sub("", fold(jl)))
 
 
 # Lightweight static PT-BR equivalents for the most common tech search terms.

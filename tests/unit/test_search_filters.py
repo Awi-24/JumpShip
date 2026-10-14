@@ -78,7 +78,7 @@ class TestLocationMatches:
         assert _location_matches("Remote - Worldwide", s)
 
     def test_city_search_is_country_level(self):
-        assert _location_matches("Campinas, SP", "São Paulo")
+        assert not _location_matches("Campinas, SP", "São Paulo")  # city search: another city
         assert not _location_matches("Dublin, Ireland", "London")
 
 
@@ -162,3 +162,25 @@ class TestBoardLogCapture:
         assert status["linkedin"] == {"count": 0, "error": "LinkedIn response status code 429"}
         assert status["indeed"] == {"count": 0, "error": None}  # no cross-talk between board loggers
         assert not logging.getLogger("JobSpy:LinkedIn").handlers[1:]  # temporary handler removed
+
+
+class TestCityFilter:
+    """Same cases as crates/sources/src/search.rs::city_filter (locations from a real "Salvador" search)."""
+
+    def test_salvador(self):
+        s = resolve_location("Salvador")
+        for keep in ["Salvador, BA, Brazil", "Salvador, Bahia, Brazil", "Camaçari, Bahia, Brazil", "Lauro de Freitas - BA",
+                     "Brazil", "Brasil", "Remoto, Brasil", "Remote", ""]:
+            assert _location_matches(keep, s), keep
+        for drop in ["Belo Horizonte, MG", "Curitiba, PR", "São Paulo, SP, Brazil", "São José dos Campos, São Paulo",
+                     "Indaiatuba, SP, Brazil", "Itapevi, SP", "Ipojuca, Pernambuco", "Santa Maria, Rio Grande do Sul",
+                     "São Carlos, Brazil", "Madison Ave Corp", "Sucursal Holanda", "San Andrés Cholula", "El Salvador"]:
+            assert not _location_matches(drop, s), drop
+        assert _location_matches("Worldwide", s, job_is_remote=True)
+        assert _location_matches("São Paulo, SP", s, job_is_remote=True)
+
+    def test_metro_and_country(self):
+        sp = resolve_location("São Paulo")
+        assert _location_matches("Osasco, SP", sp) and _location_matches("Jundiaí, São Paulo", sp)
+        assert not _location_matches("Rio de Janeiro, RJ", sp)
+        assert _location_matches("Madison Ave Corp", resolve_location("Brasil (todo o país)"))

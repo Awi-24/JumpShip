@@ -96,6 +96,20 @@ struct Tables {
     remote_labels: HashSet<&'static str>,
     hybrid_labels: HashSet<&'static str>,
     en_to_pt: HashMap<String, String>,
+    /// Brazilian state: code ("ba") and folded name ("bahia") → code.
+    br_state_of: HashMap<String, &'static str>,
+    br_city_state: HashMap<&'static str, &'static str>,
+    /// Cities that count as another city's metro area ("osasco" → "sao paulo").
+    metro_of: HashMap<&'static str, &'static str>,
+}
+
+fn str_map(key: &str) -> HashMap<&'static str, &'static str> {
+    LOCATIONS[key]
+        .as_object()
+        .unwrap()
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str().unwrap()))
+        .collect()
 }
 
 /// `\b(?:a|b|...)\b`, longest alias first (all aliases start and end with a word char).
@@ -130,6 +144,12 @@ static T: LazyLock<Tables> = LazyLock::new(|| {
         remote_labels: set("remote_labels"),
         hybrid_labels: set("hybrid_labels"),
         en_to_pt: serde_json::from_value(kw["en_to_pt"].clone()).unwrap(),
+        br_state_of: str_map("br_states")
+            .into_iter()
+            .flat_map(|(code, name)| [(code.to_string(), code), (name.to_string(), code)])
+            .collect(),
+        br_city_state: str_map("br_city_state"),
+        metro_of: str_map("metro_of"),
     }
 });
 
@@ -145,6 +165,8 @@ pub struct Resolved {
     pub country_key: String,
     /// board_location without the appended country (Glassdoor rejects "City, Country").
     pub plain_location: String,
+    /// Known city searched (folded, "salvador"; "" = not a city search): on-site jobs elsewhere are dropped.
+    pub city: String,
 }
 
 /// `_job_countries`: country names beat cities; "City, ST" means US.
@@ -187,6 +209,7 @@ pub fn resolve_location(label: &str) -> Resolved {
         hybrid: hyb,
         country_key: ck.into(),
         plain_location: plain.into(),
+        city: String::new(),
     };
     if T.remote_labels.contains(base.as_str()) {
         if !qual.is_empty() && !qual.contains("remot") && !qual.contains("todo o pais") && !qual.contains("country") {
@@ -221,7 +244,37 @@ pub fn resolve_location(label: &str) -> Resolved {
     };
     let plain = if is_country { name } else { base_raw.to_string() };
     let ci = if T.countries.contains(ck) { ck } else { "usa" };
-    r(&board, ci, qual.contains("remot"), false, ck, &plain)
+    Resolved {
+        city: if T.city_of.contains_key(base.as_str()) {
+            base.clone()
+        } else {
+            String::new()
+        },
+        ..r(&board, ci, qual.contains("remot"), false, ck, &plain)
+    }
+}
+
+/// Known cities in a job location, metro cities mapped to their main city.
+fn job_cities(loc: &str) -> HashSet<&'static str> {
+    T.city_re
+        .find_iter(&fold(loc))
+        .map(|m| {
+            let c = T.city_of.get_key_value(m.as_str()).unwrap().0;
+            T.metro_of.get(c).copied().unwrap_or(c)
+        })
+        .collect()
+}
+
+/// Brazilian states named in a job location: a part that is a code ("Salvador - BA") or a name ("Ipojuca, Pernambuco").
+fn br_states(loc: &str) -> HashSet<&'static str> {
+    loc.split([',', '-', '–', '/', '|', '(', ')'])
+        .map(str::trim)
+        .filter_map(|part| {
+            let code = part.len() == 2 && part.chars().all(|c| c.is_ascii_uppercase());
+            let key = if code { part.to_lowercase() } else { fold(part) };
+            T.br_state_of.get(&key).copied().filter(|_| code || key.len() > 2)
+        })
+        .collect()
 }
 
 /// `_location_matches`: keep the job unless its location contradicts the search. Unknown → keep.
@@ -241,7 +294,26 @@ pub fn location_matches(job_loc: &str, search: &Resolved, job_is_remote: Option<
         return true;
     }
     let found = job_countries(jl);
-    found.is_empty() || found.contains(search.country_key.as_str())
+    if !found.is_empty() && !found.contains(search.country_key.as_str()) {
+        return false;
+    }
+    if search.city.is_empty() || remote_job {
+        return true;
+    }
+    // City search, on-site / hybrid job: same city (or its metro), else same state when the city is unknown, else
+    // only the country named. Anything else (another city, another state, "Madison Ave Corp") is no use there.
+    let cities = job_cities(jl);
+    if !cities.is_empty() {
+        return cities.contains(search.city.as_str());
+    }
+    let states = br_states(jl);
+    if let Some(st) = T.br_city_state.get(search.city.as_str())
+        && !states.is_empty()
+    {
+        return states.contains(st);
+    }
+    // Just the country ("Brazil"): could be anywhere, keep. A place we don't know ("São Carlos, Brazil"): drop.
+    !found.is_empty() && !T.country_re.replace_all(&fold(jl), "").chars().any(char::is_alphabetic)
 }
 
 // ── Post-processing ─────────────────────────────────────────────────────────────────────────────
@@ -697,8 +769,59 @@ mod tests {
         assert!(location_matches("São Paulo", &remote, Some(true)));
         assert!(!location_matches("São Paulo", &remote, Some(false)));
         assert!(location_matches("Remote - Worldwide", &remote, None));
-        assert!(m("Campinas, SP", "São Paulo"));
         assert!(!m("Dublin, Ireland", "London"));
+    }
+
+    #[test]
+    fn city_filter() {
+        // Locations from a real "Salvador" search (results CSV, 2026-10-14).
+        let m = |job: &str| location_matches(job, &resolve_location("Salvador"), None);
+        for keep in [
+            "Salvador, BA, Brazil",
+            "Salvador, Bahia, Brazil",
+            "Camaçari, Bahia, Brazil",
+            "Lauro de Freitas - BA",
+            "Brazil",
+            "Brasil",
+            "Remoto, Brasil",
+            "Remote",
+            "",
+        ] {
+            assert!(m(keep), "keep {keep}");
+        }
+        // Remote boards flag their jobs ("Worldwide" from Remotive).
+        assert!(location_matches("Worldwide", &resolve_location("Salvador"), Some(true)));
+        for drop in [
+            "Belo Horizonte, MG",
+            "Curitiba, PR",
+            "São Paulo, SP, Brazil",
+            "São José dos Campos, São Paulo",
+            "Indaiatuba, SP, Brazil",
+            "Itapevi, SP",
+            "Ipojuca, Pernambuco",
+            "Santa Maria, Rio Grande do Sul",
+            "São Carlos, Brazil",
+            "Madison Ave Corp",
+            "Sucursal Holanda",
+            "San Andrés Cholula",
+            "El Salvador",
+        ] {
+            assert!(!m(drop), "drop {drop}");
+        }
+        // Remote jobs elsewhere in the country stay; metro cities count as their city.
+        assert!(location_matches(
+            "São Paulo, SP",
+            &resolve_location("Salvador"),
+            Some(true)
+        ));
+        let sp = |job: &str| location_matches(job, &resolve_location("São Paulo"), None);
+        assert!(sp("Osasco, SP") && sp("Jundiaí, São Paulo") && !sp("Campinas, SP") && !sp("Rio de Janeiro, RJ"));
+        // Country searches are unchanged.
+        assert!(location_matches(
+            "Madison Ave Corp",
+            &resolve_location("Brasil (todo o país)"),
+            None
+        ));
     }
 
     #[test]
