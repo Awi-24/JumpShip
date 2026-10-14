@@ -15,11 +15,15 @@ import { useResumeParse } from '../hooks/useResume';
 import { useJobSearch } from '../hooks/useJobs';
 import { useSettings } from '../hooks/useSettings';
 import { useResumeCache } from '../hooks/useResumeCache';
+import TitlebarActions from '../components/TitlebarActions';
+import { HISTORY_KEY, loadHistory, saveHistory, type SearchHistoryEntry } from '../searchHistory';
 import type { ResumeProfile, JobResult, JobAssessment, JobSearchResponse, SortOption, ProfileResponse } from '../types';
 
 interface SearchProps {
   onBack: () => void;
   onNavigate: (page: 'tracker') => void;
+  /** A recent search picked on the desktop start screen: its filters are restored on open. */
+  initialEntry?: SearchHistoryEntry | null;
 }
 
 const ALL_SITES = ['linkedin', 'indeed', 'glassdoor', 'remoteok', 'arbeitnow', 'remotive', 'himalayas', 'jobicy', 'gupy', 'programathor', 'trampos'];
@@ -71,32 +75,6 @@ function llmApiKeyFor(s: ReturnType<typeof useSettings>['settings']): string {
   return keyMap[s.llmProvider] || '';
 }
 
-// ── Search History (localStorage) ────────────────────────────────────────────
-interface SearchHistoryEntry {
-  keywords: string[];
-  location: string;
-  sites: string[];
-  timestamp: number;
-}
-
-const HISTORY_KEY = 'jumpship_search_history';
-const MAX_HISTORY = 10;
-
-function loadHistory(): SearchHistoryEntry[] {
-  try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
-  } catch { return []; }
-}
-
-function saveHistory(entry: SearchHistoryEntry) {
-  try {
-    const history = loadHistory().filter(
-      h => h.keywords.join(',') !== entry.keywords.join(',') || h.location !== entry.location
-    );
-    history.unshift(entry);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)));
-  } catch { /* ignore */ }
-}
 
 // ── Export helpers ────────────────────────────────────────────────────────────
 function exportCSV(jobs: JobResult[], assessments: Record<string, JobAssessment>) {
@@ -136,7 +114,7 @@ function exportJSON(jobs: JobResult[], assessments: Record<string, JobAssessment
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
-export default function Search({ onBack, onNavigate }: SearchProps) {
+export default function Search({ onBack, onNavigate, initialEntry }: SearchProps) {
   const { settings, saveSettings } = useSettings();
   const settingsRef = useRef(settings);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
@@ -602,6 +580,10 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     setLocation(entry.location);
     setActiveSites(entry.sites.filter(x => ALL_SITES.includes(x) || JUMPSHIP_SITES.includes(x)));
   };
+  useEffect(() => {
+    if (initialEntry) restoreSearch(initialEntry);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Sorting + relevance filter ──────────────────────────────────────────────
   const sortedJobs = useMemo(() => {
@@ -696,12 +678,14 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
             <Bookmark size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Tracker
           </button>
           <ThemeToggle compact />
-          <button className="settings-trigger" onClick={() => setProfileOpen(true)} title="Profile">
-            <User size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Profile
-          </button>
-          <button className="settings-trigger" onClick={() => setSettingsOpen(true)} title="Settings">
-            <Settings2 size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Settings
-          </button>
+          <TitlebarActions>
+            <button className="settings-trigger" onClick={() => setProfileOpen(true)} title="Profile">
+              <User size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Profile
+            </button>
+            <button className="settings-trigger" onClick={() => setSettingsOpen(true)} title="Settings">
+              <Settings2 size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Settings
+            </button>
+          </TitlebarActions>
         </div>
       </header>
 

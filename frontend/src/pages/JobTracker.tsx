@@ -1243,10 +1243,10 @@ export default function JobTracker({ onBack }: JobTrackerProps) {
     <div className="job-tracker-page">
       <header className="tracker-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button type="button" onClick={onBack} className="btn btn-secondary btn-sm">
+          <button type="button" onClick={onBack} className="btn btn-secondary btn-sm tracker-back">
             <ArrowLeft size={15} strokeWidth={1.75} /> Back
           </button>
-          <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
+          <div className="tracker-back" style={{ width: 1, height: 20, background: 'var(--border)' }} />
           <div>
             <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.3px' }}>
               Job <span style={{ color: 'var(--gold)' }}>Tracker</span>

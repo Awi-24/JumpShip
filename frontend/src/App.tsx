@@ -3,6 +3,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Landing from './pages/Landing';
 import Search from './pages/Search';
 import JobTracker from './pages/JobTracker';
+import Start from './pages/Start';
+import TitleBar, { type DesktopPage } from './components/TitleBar';
+import StatusBar from './components/StatusBar';
+import { isDesktop, TitlebarSlot } from './desktop';
+import type { SearchHistoryEntry } from './searchHistory';
 import './styles.css';
 
 interface ErrorBoundaryState {
@@ -96,7 +101,45 @@ function AppContent() {
   return <ErrorBoundary key={page}>{content}</ErrorBoundary>;
 }
 
+/** Desktop window: title bar with view tabs, the current view, status bar. No landing page or web backdrop. */
+function DesktopApp() {
+  const [page, setPage] = useState<DesktopPage>('start');
+  const [slot, setSlot] = useState<HTMLDivElement | null>(null);
+  const [entry, setEntry] = useState<SearchHistoryEntry | null>(null);
+
+  const openSearch = (e?: SearchHistoryEntry) => {
+    setEntry(e ?? null);
+    setPage('search');
+  };
+
+  let content: ReactNode;
+  if (page === 'start') content = <Start onSearch={openSearch} onTracker={() => setPage('tracker')} />;
+  else if (page === 'search') content = (
+    <Search key={entry?.timestamp ?? 'new'} initialEntry={entry} onBack={() => setPage('start')} onNavigate={setPage} />
+  );
+  else content = <JobTracker onBack={() => setPage('search')} />;
+
+  return (
+    <TitlebarSlot.Provider value={slot}>
+      <div className="desk">
+        <TitleBar page={page} onNavigate={setPage} slotRef={setSlot} />
+        <div className="desk-main">
+          <ErrorBoundary key={page}>{content}</ErrorBoundary>
+        </div>
+        <StatusBar />
+      </div>
+    </TitlebarSlot.Provider>
+  );
+}
+
 export default function App() {
+  if (isDesktop) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <DesktopApp />
+      </QueryClientProvider>
+    );
+  }
   return (
     <QueryClientProvider client={queryClient}>
       <div className="app-shell">

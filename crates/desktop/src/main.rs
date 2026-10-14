@@ -13,6 +13,9 @@ use jumpship_server::db::Db;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 const DEFAULT_SECRET: &str = "dev-secret-change-me-in-production";
+/// The page's origin includes the port, and localStorage (settings, theme, cached résumé, search history) is per
+/// origin: a fixed port keeps it across launches. Random only when something else holds this one.
+const PORT: u16 = 47613;
 
 /// The Fernet secret for stored API keys: `SECRET_KEY` if set, else a random one kept in the OS keychain.
 fn secret_key(data_dir: &Path) -> String {
@@ -94,7 +97,8 @@ fn main() {
             };
             let router = jumpship_server::app(cfg, db).fallback(spa);
 
-            let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+            let listener = std::net::TcpListener::bind(("127.0.0.1", PORT))
+                .or_else(|_| std::net::TcpListener::bind("127.0.0.1:0"))?;
             listener.set_nonblocking(true)?;
             let url = format!("http://127.0.0.1:{}/", listener.local_addr()?.port());
             tracing::info!("JumpShip server on {url}");
@@ -106,10 +110,12 @@ fn main() {
             });
 
             let home = url.clone();
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse()?))
+            let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse()?))
                 .title("JumpShip")
                 .inner_size(1360.0, 900.0)
                 .min_inner_size(900.0, 600.0)
+                // The app's dark chrome from the first frame (no white flash while the page loads).
+                .background_color(tauri::window::Color(17, 17, 17, 255))
                 // Job links and other sites open in the system browser, not inside the app.
                 .on_navigation(move |u| {
                     let local = u.as_str().starts_with(&home);
@@ -121,8 +127,12 @@ fn main() {
                 .on_new_window(|u, _| {
                     let _ = open::that(u.as_str());
                     tauri::webview::NewWindowResponse::Deny
-                })
-                .build()?;
+                });
+            // Windows: the page draws its own title bar (capabilities/main.json lets it drag / minimize / close).
+            // Elsewhere the native frame stays.
+            #[cfg(windows)]
+            let window = window.decorations(false);
+            window.build()?;
             Ok(())
         })
         .run(tauri::generate_context!())
