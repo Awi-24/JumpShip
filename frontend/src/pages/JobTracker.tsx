@@ -25,6 +25,8 @@ import {
   TrendingUp, MoreHorizontal, ArrowRightLeft,
 } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
+import { isDesktop } from '../desktop';
+import CustomSelect from '../components/CustomSelect';
 
 const RESUME_CACHE_KEY = 'jumpship_resume_cache';
 
@@ -121,6 +123,15 @@ function TrackerScoreRing({ score, size = 38 }: { score: number | null; size?: n
   const circ = 2 * Math.PI * r;
   const pct = score !== null ? Math.max(0, Math.min(100, score)) / 100 : 0;
   const color = scoreColor(score);
+  if (isDesktop) {
+    // Desktop: the square gauge of ScoreRing, filled from the bottom.
+    const cls = score === null ? '' : score >= 80 ? 'high' : score >= 60 ? 'med' : 'low';
+    return (
+      <div className={`score-ring ${cls}`} style={{ '--score': score ?? 0, width: size, height: size, fontSize: 12, flexShrink: 0 } as React.CSSProperties}>
+        <span>{score ?? '–'}</span>
+      </div>
+    );
+  }
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }}>
       <circle cx={cx} cy={cx} r={r} fill="none" stroke="var(--border)" strokeWidth="3" />
@@ -783,6 +794,91 @@ function AddJobModal({ onClose, onAdd }: { onClose: () => void; onAdd: (job: Par
   );
 }
 
+// ── Application details (assessment, description, notes): in the expanded card, or the desktop drawer ──
+
+function ApplicationDetails({ app, onNotesChange }: { app: ApplicationRecord; onNotesChange: (id: string, notes: string) => void }) {
+  const [localNotes, setLocalNotes] = useState(app.notes || '');
+  const handleNotesSave = () => {
+    if (localNotes !== app.notes) onNotesChange(app.id, localNotes);
+  };
+  return (
+    <>
+      {/* Assessment */}
+      {app.assessment_data && (
+        <div style={{ marginBottom: 14 }}>
+          <div className="tracker-section-title">
+            <BarChart2 size={12} style={{ color: '#a78bfa' }} /> Assessment
+          </div>
+          <div className="tracker-assessment-section">
+            {app.assessment_data.summary && <p style={{ marginBottom: 8, lineHeight: 1.65 }}>{app.assessment_data.summary}</p>}
+            {app.assessment_data.strong_points.length > 0 && (
+              <div style={{ marginBottom: 6, display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                <span style={{ color: '#4ade80', fontWeight: 700, whiteSpace: 'nowrap' }}>✓ Strong:</span>
+                <span>{app.assessment_data.strong_points.join(' · ')}</span>
+              </div>
+            )}
+            {app.assessment_data.gaps.length > 0 && (
+              <div style={{ marginBottom: 6, display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                <span style={{ color: '#f87171', fontWeight: 700, whiteSpace: 'nowrap' }}>✗ Gaps:</span>
+                <span>{app.assessment_data.gaps.join(' · ')}</span>
+              </div>
+            )}
+            {app.assessment_data.income_range && (
+              <div style={{ marginTop: 6, color: '#fbbf24', fontWeight: 600, fontSize: 12 }}>
+                💰 {app.assessment_data.income_range}
+              </div>
+            )}
+            {app.assessment_data.keywords_matched?.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>Keywords matched:</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {app.assessment_data.keywords_matched.slice(0, 10).map(k => (
+                    <span key={k} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(74,222,128,0.1)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.2)' }}>{k}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {app.assessment_data.keywords_missing?.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>Keywords missing:</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {app.assessment_data.keywords_missing.slice(0, 10).map(k => (
+                    <span key={k} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(248,113,113,0.08)', color: '#f87171', border: '1px solid rgba(248,113,113,0.2)' }}>{k}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Job description */}
+      {app.job_description && (
+        <div style={{ marginBottom: 14 }}>
+          <div className="tracker-section-title">
+            <FileText size={12} style={{ color: '#60a5fa' }} /> Job Description
+          </div>
+          <div className="tracker-jd-scroll" style={{ maxHeight: 200 }}>{app.job_description}</div>
+        </div>
+      )}
+
+      {/* Notes */}
+      <div>
+        <div className="tracker-section-title">
+          <StickyNote size={12} style={{ color: '#fbbf24' }} /> Notes
+        </div>
+        <textarea
+          className="tracker-notes-field"
+          value={localNotes}
+          onChange={e => setLocalNotes(e.target.value)}
+          onBlur={handleNotesSave}
+          placeholder="Add notes about this application…"
+        />
+      </div>
+    </>
+  );
+}
+
 // ── Draggable Card ────────────────────────────────────────────────────────────
 
 function DraggableCard({
@@ -803,8 +899,6 @@ function DraggableCard({
   const [showOverflow, setShowOverflow] = useState(false);
   const moveBtnRef = useRef<HTMLButtonElement>(null);
   const overflowBtnRef = useRef<HTMLButtonElement>(null);
-  const [localNotes, setLocalNotes] = useState(app.notes || '');
-
   const scoreVal = app.match_score ?? app.assessment_data?.match_score ?? null;
   const color = STATUS_COLORS[app.status as AppStatus] ?? '#888';
 
@@ -818,11 +912,27 @@ function DraggableCard({
     ? new Date(app.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
     : null;
 
-  const handleNotesSave = () => {
-    if (localNotes !== app.notes) onNotesChange(app.id, localNotes);
-  };
-
   const toggleExpand = () => onExpand(isExpanded ? null : app.id);
+
+  // Desktop: a compact card; the whole card drags, a click opens the drawer (actions and details live there).
+  if (isDesktop) {
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        className={`tracker-card tracker-card--compact${isExpanded ? ' selected' : ''}`}
+        onClick={toggleExpand}
+        {...attributes}
+        {...listeners}
+      >
+        <TrackerScoreRing score={scoreVal} size={32} />
+        <div className="tracker-card-text">
+          <div className="tracker-card-title">{app.job_title || 'Untitled Role'}</div>
+          <div className="tracker-card-company">{app.company_name}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={setNodeRef} style={style} className={`tracker-card${isExpanded ? ' expanded' : ''}`}>
@@ -942,83 +1052,73 @@ function DraggableCard({
           >
             {/* Scrollable inner — content never overflows the card */}
             <div style={{ maxHeight: '54vh', overflowY: 'auto', padding: '0 14px 14px' }}>
-            {/* Assessment */}
-            {app.assessment_data && (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
-                  <BarChart2 size={12} style={{ color: '#a78bfa' }} /> Assessment
-                </div>
-                <div className="tracker-assessment-section">
-                  {app.assessment_data.summary && <p style={{ marginBottom: 8, lineHeight: 1.65 }}>{app.assessment_data.summary}</p>}
-                  {app.assessment_data.strong_points.length > 0 && (
-                    <div style={{ marginBottom: 6, display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'baseline' }}>
-                      <span style={{ color: '#4ade80', fontWeight: 700, whiteSpace: 'nowrap' }}>✓ Strong:</span>
-                      <span>{app.assessment_data.strong_points.join(' · ')}</span>
-                    </div>
-                  )}
-                  {app.assessment_data.gaps.length > 0 && (
-                    <div style={{ marginBottom: 6, display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'baseline' }}>
-                      <span style={{ color: '#f87171', fontWeight: 700, whiteSpace: 'nowrap' }}>✗ Gaps:</span>
-                      <span>{app.assessment_data.gaps.join(' · ')}</span>
-                    </div>
-                  )}
-                  {app.assessment_data.income_range && (
-                    <div style={{ marginTop: 6, color: '#fbbf24', fontWeight: 600, fontSize: 12 }}>
-                      💰 {app.assessment_data.income_range}
-                    </div>
-                  )}
-                  {app.assessment_data.keywords_matched?.length > 0 && (
-                    <div style={{ marginTop: 8 }}>
-                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>Keywords matched:</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                        {app.assessment_data.keywords_matched.slice(0, 10).map(k => (
-                          <span key={k} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(74,222,128,0.1)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.2)' }}>{k}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {app.assessment_data.keywords_missing?.length > 0 && (
-                    <div style={{ marginTop: 8 }}>
-                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>Keywords missing:</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                        {app.assessment_data.keywords_missing.slice(0, 10).map(k => (
-                          <span key={k} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(248,113,113,0.08)', color: '#f87171', border: '1px solid rgba(248,113,113,0.2)' }}>{k}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Job description */}
-            {app.job_description && (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
-                  <FileText size={12} style={{ color: '#60a5fa' }} /> Job Description
-                </div>
-                <div className="tracker-jd-scroll" style={{ maxHeight: 200 }}>{app.job_description}</div>
-              </div>
-            )}
-
-            {/* Notes */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
-                <StickyNote size={12} style={{ color: '#fbbf24' }} /> Notes
-              </div>
-              <textarea
-                className="tracker-notes-field"
-                value={localNotes}
-                onChange={e => setLocalNotes(e.target.value)}
-                onBlur={handleNotesSave}
-                placeholder="Add notes about this application…"
-              />
-            </div>
+              <ApplicationDetails app={app} onNotesChange={onNotesChange} />
             </div>{/* end scrollable inner */}
           </motion.div>
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+// ── Desktop drawer: one application's actions and details, over the right of the board ──
+
+function TrackerDrawer({
+  app, onClose, onStatusChange, onDelete, onInterview, onGenerateResume, onNotesChange,
+}: {
+  app: ApplicationRecord;
+  onClose: () => void;
+  onStatusChange: (id: string, status: AppStatus) => void;
+  onDelete: (id: string) => void;
+  onInterview: (app: ApplicationRecord) => void;
+  onGenerateResume: (app: ApplicationRecord) => void;
+  onNotesChange: (id: string, notes: string) => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const savedDate = app.created_at
+    ? new Date(app.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    : null;
+
+  return (
+    <aside className="tracker-drawer" data-pane="application">
+      <div className="detail-head">
+        <div className="detail-title">{app.job_title || 'Untitled Role'}</div>
+        <div className="detail-sub">{[app.company_name, app.site, savedDate && `saved ${savedDate}`].filter(Boolean).join(' · ')}</div>
+        <button type="button" className="drawer-close" onClick={onClose} aria-label="Close">×</button>
+      </div>
+      <div className="drawer-actions">
+        {app.job_url && (
+          <a href={app.job_url} target="_blank" rel="noopener noreferrer" className="btn btn-primary">
+            <ExternalLink size={13} /> Apply
+          </a>
+        )}
+        <button type="button" className="btn btn-secondary" onClick={() => onGenerateResume(app)}>
+          <FileDown size={13} /> Résumé
+        </button>
+        <button type="button" className="btn btn-secondary" onClick={() => onInterview(app)}>
+          <MessageSquare size={13} /> Interview
+        </button>
+        <button type="button" className="btn btn-secondary drawer-delete" onClick={() => onDelete(app.id)} aria-label="Delete application">
+          <Trash2 size={13} />
+        </button>
+      </div>
+      <div className="drawer-body">
+        <div className="drawer-field">
+          <span>status</span>
+          <CustomSelect
+            value={app.status}
+            onChange={v => onStatusChange(app.id, v as AppStatus)}
+            options={STATUS_PIPELINE.map(s => ({ value: s, label: STATUS_LABELS[s] }))}
+          />
+        </div>
+        <ApplicationDetails app={app} onNotesChange={onNotesChange} />
+      </div>
+    </aside>
   );
 }
 
@@ -1063,7 +1163,7 @@ function KanbanColumn({
         <div style={{ height: 3, background: color, flexShrink: 0 }} />
 
         {/* Collapsed — slim header, mini card bars */}
-        {!isThisColumnExpanded && expandedCardId !== null ? (
+        {!isDesktop && !isThisColumnExpanded && expandedCardId !== null ? (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', cursor: 'pointer' }} onClick={() => onExpand(null)} title={`${STATUS_LABELS[status]} — click to restore`}>
             <div className="pipeline-col-header">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
@@ -1210,10 +1310,10 @@ export default function JobTracker({ onBack }: JobTrackerProps) {
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [loading]); // the pipeline only mounts once loading ends
 
   const N = STATUS_PIPELINE.length;
-  const COL_GAP = 15;
+  const COL_GAP = isDesktop ? 8 : 15;
   const MIN_COLLAPSED = 88;
 
   const { normalWidth, expandedWidth, collapsedWidth } = useMemo(() => {
@@ -1226,7 +1326,8 @@ export default function JobTracker({ onBack }: JobTrackerProps) {
   }, [containerWidth]);
 
   const activeApp = applications.find(a => a.id === activeId);
-  const anyExpanded = expandedCardId !== null;
+  const anyExpanded = !isDesktop && expandedCardId !== null; // desktop: details open in the drawer instead
+  const selectedApp = isDesktop ? applications.find(a => a.id === expandedCardId) ?? null : null;
 
   const stats = STATUS_PIPELINE.reduce<Record<string, number>>((acc, s) => {
     acc[s] = applications.filter(a => a.status === s).length;
@@ -1316,6 +1417,19 @@ export default function JobTracker({ onBack }: JobTrackerProps) {
                 />
               );
             })}
+            {/* Desktop: over the right of the board, under the header and stats */}
+            {selectedApp && (
+              <TrackerDrawer
+                key={selectedApp.id}
+                app={selectedApp}
+                onClose={() => setExpandedCardId(null)}
+                onStatusChange={handleStatusChange}
+                onDelete={handleDelete}
+                onInterview={setInterviewApp}
+                onGenerateResume={setResumeApp}
+                onNotesChange={handleNotesChange}
+              />
+            )}
           </div>
           <DragOverlay>
             {activeApp ? (

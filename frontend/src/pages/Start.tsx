@@ -35,8 +35,7 @@ export default function Start({ onSearch, onTracker }: StartProps) {
       </header>
 
       <div className="start-cols">
-        <section>
-          <h2>Start</h2>
+        <section data-pane="actions">
           <button type="button" className="start-row" onClick={() => onSearch()}>
             <Search size={18} strokeWidth={1.75} />
             <span>
@@ -68,8 +67,7 @@ export default function Start({ onSearch, onTracker }: StartProps) {
           </button>
         </section>
 
-        <section>
-          <h2>Recent searches</h2>
+        <section data-pane="recent">
           {history.length === 0 ? (
             <p className="start-empty">Your searches appear here, ready to run again.</p>
           ) : (

@@ -50,4 +50,17 @@ describe('X-Source-Status parsing', () => {
     expect(out.jobs.map(j => j.id)).toEqual(['b']);
     expect(fetchMock.mock.calls[1][0]).toBe('/api/jobs/search');
   });
+
+  it('cancel signal goes to fetch, not into the request body', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('{"detail":"Not Found"}', { status: 404 }))
+      .mockResolvedValueOnce(new Response('[]'));
+    vi.stubGlobal('fetch', fetchMock);
+    const { signal } = new AbortController();
+    await searchJobsStream(req, undefined, signal);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init.signal).toBe(signal); // stream and one-shot fallback both cancellable
+      expect(JSON.parse(init.body)).toEqual(req);
+    }
+  });
 });

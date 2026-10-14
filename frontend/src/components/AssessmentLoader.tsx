@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { isDesktop } from '../desktop';
 
 /** One-liner joke + where the riff comes from (show, film, game, meme, etc.). */
 const MESSAGES: { line: string; ref: string }[] = [
@@ -127,9 +128,11 @@ interface Props {
   total: number;
   /** Jobs already assessed (0 while fetching). */
   assessed: number;
+  /** Assessments running right now (desktop progress line). */
+  parallel?: number;
 }
 
-export default function AssessmentLoader({ fetching, total, assessed }: Props) {
+export default function AssessmentLoader({ fetching, total, assessed, parallel = 0 }: Props) {
   const [idx, setIdx] = useState(() => Math.floor(Math.random() * MESSAGES.length));
   const [visible, setVisible] = useState(true);
   const [fetchPulse, setFetchPulse] = useState(11);
@@ -162,6 +165,23 @@ export default function AssessmentLoader({ fetching, total, assessed }: Props) {
 
   const showBarIndeterminate = fetching;
   const entry = MESSAGES[idx];
+
+  if (isDesktop) {
+    // Desktop: the quote over one terminal progress bar (no sphere, no second bar or caption).
+    const cells = Math.round(fillPct * 0.32);
+    return (
+      <div className="assessment-loader">
+        <div className={`al-message${visible ? ' visible' : ''}`}>
+          <p className="al-message-line">{entry.line}</p>
+          <p className="al-message-ref">{entry.ref}</p>
+        </div>
+        <pre className="al-term" aria-live="polite">
+          [{'█'.repeat(cells)}{'░'.repeat(32 - cells)}] {fetching ? 'fetching' : `${assessed}/${safeTotal}`}
+          {!fetching && parallel > 0 && ` · ${parallel} in parallel`}
+        </pre>
+      </div>
+    );
+  }
 
   return (
     <div className="assessment-loader">

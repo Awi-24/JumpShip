@@ -1,14 +1,19 @@
-import { Component, useState, type ErrorInfo, type ReactNode } from 'react';
+import { Component, useCallback, useEffect, useState, type ErrorInfo, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Landing from './pages/Landing';
 import Search from './pages/Search';
 import JobTracker from './pages/JobTracker';
 import Start from './pages/Start';
-import TitleBar, { type DesktopPage } from './components/TitleBar';
+import Profile from './pages/Profile';
+import TitleBar from './components/TitleBar';
+import NavRail, { NAV, type DesktopPage } from './components/NavRail';
 import StatusBar from './components/StatusBar';
-import { isDesktop, TitlebarSlot } from './desktop';
+import SettingsModal from './components/SettingsModal';
+import { useSettings } from './hooks/useSettings';
+import { isDesktop } from './desktop';
 import type { SearchHistoryEntry } from './searchHistory';
 import './styles.css';
+import './desktop.css';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -101,34 +106,70 @@ function AppContent() {
   return <ErrorBoundary key={page}>{content}</ErrorBoundary>;
 }
 
-/** Desktop window: title bar with view tabs, the current view, status bar. No landing page or web backdrop. */
+/** Desktop window: title bar, nav rail, the current view, status bar. Search stays mounted while hidden so its
+ *  results survive a visit to the tracker or settings. */
 function DesktopApp() {
   const [page, setPage] = useState<DesktopPage>('start');
-  const [slot, setSlot] = useState<HTMLDivElement | null>(null);
+  const [searchOpened, setSearchOpened] = useState(false);
   const [entry, setEntry] = useState<SearchHistoryEntry | null>(null);
+  const [back, setBack] = useState<DesktopPage>('start');
+  const { settings, saveSettings } = useSettings();
 
+  const go = useCallback((next: DesktopPage) => {
+    if (next === 'search') setSearchOpened(true);
+    setPage(prev => { if (prev !== next) setBack(prev); return next; });
+  }, []);
   const openSearch = (e?: SearchHistoryEntry) => {
     setEntry(e ?? null);
-    setPage('search');
+    go('search');
   };
 
-  let content: ReactNode;
-  if (page === 'start') content = <Start onSearch={openSearch} onTracker={() => setPage('tracker')} />;
-  else if (page === 'search') content = (
-    <Search key={entry?.timestamp ?? 'new'} initialEntry={entry} onBack={() => setPage('start')} onNavigate={setPage} />
+  // Ctrl+1..5 jumps between views, as listed in the rail.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const i = Number(e.key) - 1;
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && NAV[i]) {
+        e.preventDefault();
+        go(NAV[i].id);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [go]);
+
+  let content: ReactNode = null;
+  if (page === 'start') content = <Start onSearch={openSearch} onTracker={() => go('tracker')} />;
+  else if (page === 'tracker') content = <JobTracker onBack={() => go('search')} />;
+  else if (page === 'profile') content = <Profile asPage onClose={() => go(back)} />;
+  else if (page === 'settings') content = (
+    <SettingsModal asPage open initial={settings} onSave={saveSettings} onClose={() => go(back)} />
   );
-  else content = <JobTracker onBack={() => setPage('search')} />;
 
   return (
-    <TitlebarSlot.Provider value={slot}>
-      <div className="desk">
-        <TitleBar page={page} onNavigate={setPage} slotRef={setSlot} />
-        <div className="desk-main">
-          <ErrorBoundary key={page}>{content}</ErrorBoundary>
-        </div>
-        <StatusBar />
-      </div>
-    </TitlebarSlot.Provider>
+    <div className="desk">
+      <TitleBar page={page} />
+      <NavRail page={page} onNavigate={go} />
+      <main className="desk-main">
+        {searchOpened && (
+          <div className="desk-view" hidden={page !== 'search'}>
+            <ErrorBoundary>
+              <Search
+                key={entry?.timestamp ?? 'new'}
+                initialEntry={entry}
+                onBack={() => go('start')}
+                onNavigate={go}
+              />
+            </ErrorBoundary>
+          </div>
+        )}
+        {content && (
+          <div className="desk-view">
+            <ErrorBoundary key={page}>{content}</ErrorBoundary>
+          </div>
+        )}
+      </main>
+      <StatusBar />
+    </div>
   );
 }
 

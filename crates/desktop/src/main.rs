@@ -61,6 +61,21 @@ fn config(data_dir: &Path) -> Config {
     cfg
 }
 
+/// The window's logical size: 16:10, as large as fits 90% of the primary screen, at most 1440×900.
+fn window_size(app: &tauri::App) -> (f64, f64) {
+    let (sw, sh) = app
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .map(|m| {
+            let s = m.size().to_logical::<f64>(m.scale_factor());
+            (s.width, s.height)
+        })
+        .unwrap_or((1440.0, 900.0));
+    let w = (sw * 0.9).min(sh * 0.9 * 1.6).min(1440.0).round();
+    (w, (w / 1.6).round())
+}
+
 fn init_logging(data_dir: &Path) {
     let file = std::fs::File::create(data_dir.join("jumpship.log"));
     let builder = tracing_subscriber::fmt().with_ansi(false);
@@ -110,10 +125,14 @@ fn main() {
             });
 
             let home = url.clone();
+            let (width, height) = window_size(app);
             let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse()?))
                 .title("JumpShip")
-                .inner_size(1360.0, 900.0)
-                .min_inner_size(900.0, 600.0)
+                // Fixed proportions: the layout is drawn for one 16:10 window, not resized or maximized.
+                .inner_size(width, height)
+                .resizable(false)
+                .maximizable(false)
+                .center()
                 // The app's dark chrome from the first frame (no white flash while the page loads).
                 .background_color(tauri::window::Color(17, 17, 17, 255))
                 // Job links and other sites open in the system browser, not inside the app.

@@ -867,6 +867,9 @@ html[data-theme="light"] .app-shell:hover .grid-overlay {
   gap: 6px;
 }
 
+.resume-name { min-width: 0; }
+.resume-file { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .resume-profile {
   font-size: 12px;
   color: var(--text-muted);
@@ -1209,6 +1212,8 @@ html[data-theme="light"] .app-shell:hover .grid-overlay {
 
 .search-btn:hover { background: var(--gold-light); transform: translateY(-1px); }
 .search-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.search-btn--cancel { background: transparent; border: 1px solid var(--error-border); color: var(--error-text); }
+.search-btn--cancel:hover { background: var(--error-bg); }
 
 /* MAIN CONTENT */
 .main-content {
@@ -4426,6 +4431,7 @@ input:focus, select:focus, textarea:focus {
 .tracker-card-expand-btn:hover { color: var(--text); }
 .tracker-card-expand-btn.open { transform: rotate(180deg); }
 .tracker-card-body { overflow: visible; border-top: 1px solid var(--border); margin-top: 8px; padding-top: 10px; }
+.tracker-section-title { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
 .tracker-assessment-section { background: var(--bg2); border-radius: 8px; padding: 10px; font-size: 12px; color: var(--text-muted); line-height: 1.6; }
 .tracker-jd-scroll { max-height: 120px; overflow-y: auto; font-size: 12px; color: var(--text-muted); line-height: 1.6; white-space: pre-wrap; }
 .tracker-notes-field { width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 12px; padding: 8px; resize: vertical; min-height: 60px; font-family: inherit; }
@@ -4484,227 +4490,3 @@ input:focus, select:focus, textarea:focus {
 .interview-typing span:nth-child(3) { animation-delay: 0.4s; }
 @keyframes bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
 .interview-persona-label { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 4px; color: #a78bfa; }
-
-/* ── DESKTOP SHELL ───────────────────────────────────────────────────────────
-   Only inside the Tauri app (desktop.ts adds html.is-desktop; .has-custom-chrome on Windows, where the page draws
-   the title bar). A window, not a website: system font, neutral hairlines, tighter radii, no web backdrop,
-   arrow cursor on controls, text selection only where there is text to copy. */
-html.is-desktop {
-  --radius: 8px;
-  --radius-lg: 10px;
-  --ui-font: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --ui-font-display: 'Segoe UI Variable Display', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --chrome: #161616;
-  --chrome-hover: rgba(255, 255, 255, 0.07);
-  --border: rgba(255, 255, 255, 0.08);
-  height: 100%;
-  overflow: hidden;
-  scroll-behavior: auto;
-}
-html.is-desktop[data-theme="light"] {
-  --chrome: #e3e8ef;
-  --chrome-hover: rgba(15, 23, 42, 0.06);
-  --border: rgba(15, 23, 42, 0.1);
-}
-html.is-desktop body { height: 100%; overflow: hidden; }
-html.is-desktop body *:not(.caption-btn) { font-family: var(--ui-font) !important; }
-html.is-desktop button,
-html.is-desktop [role="button"],
-html.is-desktop [role="tab"] { cursor: default; }
-html.is-desktop * { scrollbar-width: thin; scrollbar-color: rgba(127, 127, 127, 0.45) transparent; }
-html.is-desktop :focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
-
-.desk {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  height: 100vh;
-  background: var(--bg);
-}
-.desk-main { min-height: 0; overflow: auto; position: relative; }
-
-/* Title bar: brand, view tabs joined to the content below, page actions, caption buttons */
-.titlebar {
-  display: flex;
-  align-items: flex-end;
-  height: 40px;
-  padding-left: 12px;
-  background: var(--chrome);
-  border-bottom: 1px solid var(--border);
-  user-select: none;
-  -webkit-user-select: none;
-}
-.titlebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  align-self: stretch;
-  padding-right: 14px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-}
-.titlebar-brand img { height: 26px; width: auto; }
-.titlebar-tabs { display: flex; gap: 2px; }
-.titlebar-tab {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  height: 32px;
-  margin-bottom: -1px;
-  padding: 0 14px;
-  border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: 8px 8px 0 0;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 12.5px;
-}
-.titlebar-tab:hover { color: var(--text); background: var(--chrome-hover); }
-.titlebar-tab[aria-selected="true"] {
-  background: var(--bg);
-  color: var(--text);
-  border-color: var(--border);
-  box-shadow: inset 0 2px 0 var(--gold);
-}
-.titlebar-tab[aria-selected="true"] svg { color: var(--gold); }
-.titlebar-fill { flex: 1; align-self: stretch; }
-.titlebar-actions { display: flex; align-items: center; gap: 2px; align-self: center; }
-.titlebar-actions .settings-trigger,
-html.is-desktop .titlebar .titlebar-theme {
-  height: 28px;
-  min-height: 28px;
-  width: auto;
-  min-width: 28px;
-  padding: 0 10px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-html.is-desktop .titlebar .titlebar-theme { align-self: center; padding: 0 8px; }
-html.is-desktop .titlebar .titlebar-theme svg { width: 15px; height: 15px; }
-.titlebar-actions .settings-trigger:hover,
-html.is-desktop .titlebar .titlebar-theme:hover { background: var(--chrome-hover); color: var(--text); }
-.caption { display: flex; align-self: stretch; margin-left: 6px; }
-.caption-btn {
-  width: 46px;
-  border: none;
-  background: transparent;
-  color: var(--text);
-  font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets', sans-serif;
-  font-size: 10px;
-}
-.caption-btn:hover { background: var(--chrome-hover); }
-.caption-btn--close:hover { background: #c42b1c; color: #fff; }
-.titlebar--inactive .titlebar-brand,
-.titlebar--inactive .caption-btn:not(:hover) { opacity: 0.45; }
-
-/* Status bar */
-.statusbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 24px;
-  padding: 0 12px;
-  background: var(--chrome);
-  border-top: 1px solid var(--border);
-  color: var(--text-muted);
-  font-size: 11.5px;
-  user-select: none;
-  -webkit-user-select: none;
-}
-.statusbar-item { display: flex; align-items: center; }
-.statusbar .status-dot { width: 6px; height: 6px; box-shadow: none; }
-
-/* Sentence case throughout, as in native Windows apps (no tracked-out caps labels). */
-html.is-desktop body * { text-transform: none !important; }
-html.is-desktop .sidebar-section-title,
-html.is-desktop .pipeline-col-label,
-html.is-desktop .tracker-status-badge { letter-spacing: normal; }
-html.is-desktop .sidebar-section-title { font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
-
-/* Pages inside the window: the title bar and status bar replace their headers and the LLM card */
-html.is-desktop .search-header,
-html.is-desktop .tracker-back,
-html.is-desktop .tracker-header h1,
-html.is-desktop .llm-status-card { display: none; }
-html.is-desktop .tracker-header p { font-size: 12.5px; }
-/* The search action stays in reach at the foot of the filter pane. */
-html.is-desktop .sidebar .search-btn {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  box-shadow: 0 -16px 16px var(--bg2);
-  padding: 11px;
-  border-radius: 6px;
-}
-html.is-desktop .sidebar .search-btn:hover { transform: none; }
-/* Solid when disabled: it sits over the scrolling pane, so no see-through opacity. */
-html.is-desktop .sidebar .search-btn:disabled { opacity: 1; background: var(--bg3); color: var(--text-muted); cursor: default; }
-html.is-desktop .search-page { height: 100%; min-height: 0; }
-html.is-desktop .search-body { flex: 1; min-height: 0; }
-html.is-desktop .sidebar,
-html.is-desktop .main-content { max-height: none; height: 100%; }
-html.is-desktop .sidebar { animation: none; padding: 20px; gap: 20px; }
-html.is-desktop .job-tracker-page { height: 100%; }
-html.is-desktop .tracker-header { background: var(--bg); }
-html.is-desktop .settings-trigger { border-color: var(--border); }
-
-/* Start screen */
-.start {
-  max-width: 920px;
-  padding: 56px 56px 40px;
-}
-.start-head { margin-bottom: 44px; }
-.start-head h1 { line-height: 0; }
-.start-head img { height: 96px; width: auto; margin-left: -4px; }
-/* The wordmark's "JUMP" is white: outline it on light backgrounds. */
-html.is-desktop[data-theme="light"] .start-head img,
-html.is-desktop[data-theme="light"] .titlebar-brand img { filter: drop-shadow(0 0 1px rgba(15, 23, 42, 0.85)); }
-.start-head p {
-  margin-top: 18px;
-  max-width: 56ch;
-  font-size: 15px;
-  line-height: 1.5;
-  color: var(--text-muted);
-}
-.start-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 56px; }
-.start h2 {
-  margin-bottom: 8px;
-  padding-left: 12px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-.start-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  width: 100%;
-  padding: 10px 12px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text);
-  text-align: left;
-}
-.start-row:hover { background: var(--chrome-hover); }
-.start-row > svg { flex-shrink: 0; margin-top: 2px; color: var(--gold); }
-.start-row > span { flex: 1; min-width: 0; }
-.start-row strong {
-  display: block;
-  font-size: 14px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.start-row small { display: block; margin-top: 2px; font-size: 12.5px; color: var(--text-muted); }
-.start-row--recent > svg { color: var(--text-muted); }
-.start-row time { flex-shrink: 0; font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-.start-empty { padding: 10px 12px; font-size: 13px; color: var(--text-muted); }
-@media (max-width: 980px) {
-  .start { padding: 40px 32px; }
-  .start-cols { grid-template-columns: 1fr; gap: 32px; }
-}

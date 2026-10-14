@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { LLMProvider } from '../types';
 
@@ -94,6 +94,26 @@ function saveLocal(s: Settings) {
   } catch {
     /* ignore */
   }
+  localListeners.forEach(l => l());
+}
+
+// Every useSettings() reads one store, so a save anywhere (desktop config view) reaches all of them (status bar,
+// search). The snapshot is re-parsed only when the stored string changes.
+const localListeners = new Set<() => void>();
+let snapshotRaw: string | null | undefined;
+let snapshot: Settings = DEFAULT_SETTINGS;
+function subscribeLocal(cb: () => void) {
+  localListeners.add(cb);
+  return () => { localListeners.delete(cb); };
+}
+function readLocal(): Settings {
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(STORAGE_KEY); } catch { /* ignore */ }
+  if (raw !== snapshotRaw) {
+    snapshotRaw = raw;
+    snapshot = loadLocal();
+  }
+  return snapshot;
 }
 
 async function fetchLlmKeys(): Promise<ServerKeys> {
@@ -195,7 +215,7 @@ function useMigrateLocalStorageKeys(serverKeys: ServerKeys | undefined) {
 export function useSettings() {
   // REMOVED 2026-04-27 — LLM API keys moved to server (Fernet-encrypted). See HDF-20260427-10.
   // Non-key fields still persist in localStorage; key fields are hydrated from the server.
-  const [localSettings, setLocalSettings] = useState<Settings>(loadLocal);
+  const localSettings = useSyncExternalStore(subscribeLocal, readLocal);
   const { data: serverKeys } = useLlmKeys();
   const updateKeys = useUpdateLlmKeys();
 
@@ -215,7 +235,6 @@ export function useSettings() {
   const saveSettings = useCallback((next: Settings) => {
     // Persist non-key fields locally.
     saveLocal(next);
-    setLocalSettings(next);
 
     // Diff key fields against currently-known server keys; PUT only changes.
     const currentServer = serverKeys ?? {};

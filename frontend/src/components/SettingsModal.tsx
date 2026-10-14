@@ -63,9 +63,11 @@ interface Props {
   initial: Settings;
   onSave: (s: Settings) => void;
   onClose: () => void;
+  /** Desktop: a view of the window instead of a dialog over the page. */
+  asPage?: boolean;
 }
 
-export default function SettingsModal({ open, initial, onSave, onClose }: Props) {
+export default function SettingsModal({ open, initial, onSave, onClose, asPage }: Props) {
   const [draft, setDraft] = useState<Settings>(initial);
   const [status, setStatus] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState('');
@@ -172,8 +174,8 @@ export default function SettingsModal({ open, initial, onSave, onClose }: Props)
   const isLocalUnreachable = isLocal && !loadingModels && liveModels.length === 0;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-panel" onClick={e => e.stopPropagation()}>
+    <div className={asPage ? 'view-page' : 'modal-backdrop'} onClick={asPage ? undefined : onClose}>
+      <div className={asPage ? 'modal-panel modal-panel--page' : 'modal-panel'} onClick={e => e.stopPropagation()}>
 
         <div className="modal-header">
           <div className="modal-title">

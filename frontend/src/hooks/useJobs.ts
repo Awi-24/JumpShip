@@ -17,11 +17,12 @@ async function throwSearchError(res: Response): Promise<never> {
   throw new Error(typeof detail === 'string' && detail ? detail : 'Failed to search jobs');
 }
 
-export async function searchJobs(request: JobSearchRequest): Promise<JobSearchResponse> {
+export async function searchJobs(request: JobSearchRequest, signal?: AbortSignal): Promise<JobSearchResponse> {
   const res = await fetch('/api/jobs/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
+    signal,
   });
   if (!res.ok) await throwSearchError(res);
   return {
@@ -43,13 +44,15 @@ type StreamEvent =
 export async function searchJobsStream(
   request: JobSearchRequest,
   onProgress?: (partial: JobSearchResponse) => void,
+  signal?: AbortSignal,
 ): Promise<JobSearchResponse> {
   const res = await fetch('/api/jobs/search/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
+    signal,
   });
-  if (res.status === 404 || res.status === 405 || !res.body) return searchJobs(request);
+  if (res.status === 404 || res.status === 405 || !res.body) return searchJobs(request, signal);
   if (!res.ok) await throwSearchError(res);
 
   const acc: JobSearchResponse = { jobs: [], sources: {}, dismissed: 0 };
@@ -74,10 +77,13 @@ export async function searchJobsStream(
   }
 }
 
+/** `signal` cancels the search (the request and the stream); it is not sent to the backend. */
+export type JobSearchVariables = JobSearchRequest & { signal?: AbortSignal };
+
 export function useJobSearch(
   onProgress?: (partial: JobSearchResponse) => void,
-): UseMutationResult<JobSearchResponse, Error, JobSearchRequest> {
+): UseMutationResult<JobSearchResponse, Error, JobSearchVariables> {
   return useMutation({
-    mutationFn: (request: JobSearchRequest) => searchJobsStream(request, onProgress),
+    mutationFn: ({ signal, ...request }: JobSearchVariables) => searchJobsStream(request, onProgress, signal),
   });
 }

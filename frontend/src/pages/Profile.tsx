@@ -27,7 +27,11 @@ interface ProfileData {
   extra_info?: string;
 }
 
-interface Props { onClose: () => void; }
+interface Props {
+  onClose: () => void;
+  /** Desktop: a view of the window instead of a dialog over the page. */
+  asPage?: boolean;
+}
 
 const WORK_AUTH_OPTIONS: SelectOption[] = [
   { value: '', label: 'Select…' },
@@ -61,7 +65,7 @@ const CURRENCY_OPTIONS: SelectOption[] = [
   { value: 'GBP', label: 'GBP — £' },
 ];
 
-export default function Profile({ onClose }: Props) {
+export default function Profile({ onClose, asPage }: Props) {
   const [data, setData] = useState<ProfileData>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -117,16 +121,16 @@ export default function Profile({ onClose }: Props) {
   ];
 
   if (loading) return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: 620 }}>
+    <div className={asPage ? 'view-page' : 'modal-backdrop'} onClick={asPage ? undefined : onClose}>
+      <div className={asPage ? 'modal-panel modal-panel--page' : 'modal-panel'} onClick={e => e.stopPropagation()} style={{ maxWidth: 620 }}>
         <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>
       </div>
     </div>
   );
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: 620 }}>
+    <div className={asPage ? 'view-page' : 'modal-backdrop'} onClick={asPage ? undefined : onClose}>
+      <div className={asPage ? 'modal-panel modal-panel--page' : 'modal-panel'} onClick={e => e.stopPropagation()} style={{ maxWidth: 620 }}>
 
         <div className="modal-header">
           <div className="modal-title"><User size={15} style={{ verticalAlign: 'middle', marginRight: 6 }} />Profile</div>

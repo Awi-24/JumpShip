@@ -1,13 +1,10 @@
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSettings } from '../hooks/useSettings';
 
 const LOCAL = new Set(['ollama', 'lmstudio', 'openclaw']);
-const NAMES: Record<string, string> = {
-  ollama: 'Ollama', lmstudio: 'LM Studio', openai: 'OpenAI', anthropic: 'Anthropic', groq: 'Groq', gemini: 'Gemini',
-  mistral: 'Mistral', deepseek: 'DeepSeek', huggingface: 'Hugging Face', openrouter: 'OpenRouter', cohere: 'Cohere',
-};
 
-/** Desktop status bar: which model assesses jobs and whether the backend reaches it. */
+/** Desktop status bar, tmux style: app segment, which model assesses jobs and whether it is reachable, clock. */
 export default function StatusBar() {
   const { settings } = useSettings();
   const health = useQuery({
@@ -15,19 +12,29 @@ export default function StatusBar() {
     queryFn: async () => (await fetch('/api/health')).json() as Promise<{ llm_available?: boolean }>,
     refetchInterval: 15_000,
   });
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   const local = LOCAL.has(settings.llmProvider);
   const state = health.isError ? 'red' : health.data?.llm_available || !local ? 'green' : 'yellow';
-  const note = health.isError ? 'app server not responding' : local && !health.data?.llm_available ? 'not reachable' : '';
+  const note = health.isError ? 'server down' : local && !health.data?.llm_available ? 'unreachable' : 'ok';
 
   return (
     <footer className="statusbar">
-      <span className="statusbar-item">
+      <span className="statusbar-seg statusbar-seg--app">[jumpship]</span>
+      <span className="statusbar-seg">
         <span className={`status-dot ${state}`} />
-        {NAMES[settings.llmProvider] ?? settings.llmProvider}
-        {settings.llmModel ? ` · ${settings.llmModel}` : ''}
-        {note && ` — ${note}`}
+        {settings.llmProvider}{settings.llmModel ? `:${settings.llmModel}` : ''}
       </span>
-      <span className="statusbar-item">{local ? 'Runs on this computer' : 'Cloud model'}</span>
+      <span className={`statusbar-seg statusbar-note statusbar-note--${state}`}>{note}</span>
+      <span className="statusbar-fill" />
+      <span className="statusbar-seg">{local ? 'local' : 'cloud'}</span>
+      <span className="statusbar-seg statusbar-seg--clock">
+        {now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+      </span>
     </footer>
   );
 }

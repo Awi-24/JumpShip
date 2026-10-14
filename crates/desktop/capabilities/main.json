@@ -1,14 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-window",
-  "description": "Custom title bar: drag, minimize, maximize and close from the app page (served on 127.0.0.1).",
+  "description": "Custom title bar: drag, minimize and close from the app page (served on 127.0.0.1).",
   "windows": ["main"],
   "remote": { "urls": ["http://127.0.0.1:*"] },
   "permissions": [
     "core:window:default",
     "core:window:allow-start-dragging",
     "core:window:allow-minimize",
-    "core:window:allow-toggle-maximize",
     "core:window:allow-close"
   ]
 }

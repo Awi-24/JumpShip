@@ -50,8 +50,10 @@ export default function ResumeUpload({ profile, isLoading, onUpload, fileName: e
       <div className="resume-loaded">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
           <div className="resume-name" style={{ flex: 1, marginBottom: 0 }}>
-            <CheckCircle size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-            {externalFileName || fileName || 'resume.pdf'}
+            <CheckCircle size={13} style={{ verticalAlign: 'middle', marginRight: 4, flexShrink: 0 }} />
+            <span className="resume-file" title={externalFileName || fileName || 'resume.pdf'}>
+              {externalFileName || fileName || 'resume.pdf'}
+            </span>
             {cached && (
               <span style={{
                 marginLeft: 6, fontSize: 9, padding: '1px 5px', borderRadius: 4,

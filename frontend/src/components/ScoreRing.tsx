@@ -8,7 +8,7 @@ export default function ScoreRing({ score }: ScoreRingProps) {
     <div className="match-score">
       <div
         className={`score-ring ${cls}`}
-        style={{ '--pct': `${score * 3.6}deg` } as React.CSSProperties}
+        style={{ '--pct': `${score * 3.6}deg`, '--score': score } as React.CSSProperties}
       >
         <span>{score}</span>
       </div>
