@@ -35,7 +35,7 @@ The Python / Docker web version from 1.0 still runs from this repo (see [Web mod
 
 ## Install the desktop app (Windows)
 
-1. Download `JumpShip_2.0.0_x64-setup.exe` from the [latest release](https://github.com/Awi-24/JumpShip/releases/latest) and run it. It installs for your user only, so no admin rights are needed.
+1. Download the installer (`JumpShip_<version>_x64-setup.exe`) from the [latest release](https://github.com/Awi-24/JumpShip/releases/latest) and run it. It installs for your user only, so no admin rights are needed.
 2. **Windows SmartScreen** may say "Windows protected your PC" because the installer isn't code-signed yet. Click **More info → Run anyway**.
 3. If the machine lacks Microsoft Edge WebView2 (rare on Windows 10/11), the installer downloads it.
 4. Install an LLM runtime: [Ollama](https://ollama.com/download) (then `ollama pull gemma3:12b` or another ≥7B instruct model) or [LM Studio](https://lmstudio.ai). Cloud providers work too, with your API key.
