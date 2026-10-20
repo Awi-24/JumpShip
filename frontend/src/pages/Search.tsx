@@ -26,7 +26,10 @@ interface SearchProps {
   initialEntry?: SearchHistoryEntry | null;
 }
 
-const ALL_SITES = ['linkedin', 'indeed', 'glassdoor', 'remoteok', 'arbeitnow', 'remotive', 'himalayas', 'jobicy', 'gupy', 'programathor', 'trampos'];
+// The desktop (Rust) backend has no Chrome-TLS client yet, so Glassdoor answers 403 every time there: not offered.
+const ALL_SITES = ['linkedin', 'indeed', 'glassdoor', 'remoteok', 'arbeitnow', 'remotive', 'himalayas', 'jobicy', 'gupy', 'programathor', 'trampos']
+  .filter(s => !(isDesktop && s === 'glassdoor'));
+const knownSite = (s: string) => ALL_SITES.includes(s) || JUMPSHIP_SITES.includes(s);
 const JUMPSHIP_SITES = ['greenhouse', 'lever', 'workday', 'smartrecruiters', 'ashby', 'amazon', 'playwright'];
 const JUMPSHIP_SITE_LABELS: Record<string, string> = {
   greenhouse: 'Greenhouse',
@@ -148,9 +151,10 @@ export default function Search({ onBack, onNavigate, initialEntry }: SearchProps
   const [workMode, setWorkMode] = useState<'any' | 'remote' | 'hybrid' | 'onsite'>('any');
   const [sortBy, setSortBy] = useState<SortOption>('match');
   const [newKeyword, setNewKeyword] = useState('');
-  const [activeSites, setActiveSites] = useState<string[]>(
-    settings.defaultSites?.length ? settings.defaultSites : ['linkedin', 'indeed', 'glassdoor']
-  );
+  const [activeSites, setActiveSites] = useState<string[]>(() => {
+    const sites = (settings.defaultSites ?? []).filter(knownSite);
+    return sites.length ? sites : ['linkedin', 'indeed'];
+  });
   const [resultsWanted, setResultsWanted] = useState(settings.resultsWanted ?? 20);
 
   // Pagination
@@ -631,7 +635,7 @@ export default function Search({ onBack, onNavigate, initialEntry }: SearchProps
   const restoreSearch = (entry: SearchHistoryEntry) => {
     setKeywords(entry.keywords);
     setLocation(entry.location);
-    setActiveSites(entry.sites.filter(x => ALL_SITES.includes(x) || JUMPSHIP_SITES.includes(x)));
+    setActiveSites(entry.sites.filter(knownSite));
   };
   useEffect(() => {
     if (initialEntry) restoreSearch(initialEntry);

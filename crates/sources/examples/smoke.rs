@@ -18,7 +18,7 @@ async fn main() {
     };
     report("remoteok", extra::fetch_remoteok(&c, &kw, n).await);
     report("arbeitnow", extra::fetch_arbeitnow(&c, &kw, n).await);
-    report("gupy", br::fetch_gupy(&c, &kw, n, false).await);
+    report("gupy", br::fetch_gupy(&c, &kw, n, false, &None).await);
     report("programathor", br::fetch_programathor(&c, &kw, n).await);
     report("trampos", br::fetch_trampos(&c, &kw, n).await);
     report("greenhouse", Ok(ats::fetch_greenhouse(&c, &kw, n).await));

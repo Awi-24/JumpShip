@@ -198,7 +198,9 @@ html.is-desktop .titlebar .titlebar-theme svg { width: 14px; height: 14px; }
 }
 .rail-item:hover { color: var(--text); background: var(--hover); }
 .rail-item[aria-current='page'] { color: var(--accent-text); background: var(--select); text-shadow: var(--glow); }
-.rail-item--sep { margin-top: var(--s3); border-top: 1px solid var(--line); height: calc(var(--ctl) + var(--s3)); padding-top: var(--s3); }
+/* Group break before profile: a rule in the gap above, the item itself as tall as the others. */
+.rail-item--sep { position: relative; margin-top: calc(var(--s3) * 2 + 1px); }
+.rail-item--sep::before { content: ''; position: absolute; top: calc(var(--s3) * -1 - 1px); left: 0; right: 0; border-top: 1px solid var(--line); }
 .rail-mark { width: 1ch; }
 .rail-item kbd { margin-left: auto; font-size: var(--fs-xs); opacity: 0.5; text-shadow: none; }
 .rail-logo { margin: auto auto var(--s2); width: 36px; opacity: 0.35; filter: grayscale(1); }

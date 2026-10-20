@@ -433,6 +433,12 @@ fn cache_key(q: &Query, job_type: Option<&str>, work_mode: &str) -> String {
 
 type SiteResult = Result<Vec<Job>, String>;
 
+/// Gupy's place filter for a Brazilian city search ("Salvador" → Bahia / Salvador).
+fn gupy_place(r: &Resolved) -> br::GupyPlace {
+    let code = T.br_city_state.get(r.city.as_str())?;
+    Some((br::br_state_name(code)?.to_string(), r.plain_location.clone()))
+}
+
 fn run_site(
     client: &reqwest::Client,
     site: &str,
@@ -459,7 +465,10 @@ fn run_site(
         "remotive" => async move { remote::fetch_remotive(&c, &kws, n).await.map_err(err) }.boxed(),
         "himalayas" => async move { remote::fetch_himalayas(&c, &kws, n).await.map_err(err) }.boxed(),
         "jobicy" => async move { remote::fetch_jobicy(&c, &kws, n).await.map_err(err) }.boxed(),
-        "gupy" => async move { br::fetch_gupy(&c, &kws, n, remote).await.map_err(err) }.boxed(),
+        "gupy" => {
+            let place = gupy_place(&resolved);
+            async move { br::fetch_gupy(&c, &kws, n, remote, &place).await.map_err(err) }.boxed()
+        }
         "programathor" => async move { br::fetch_programathor(&c, &kws, n).await.map_err(err) }.boxed(),
         "trampos" => async move { br::fetch_trampos(&c, &kws, n).await.map_err(err) }.boxed(),
         "greenhouse" => async move { Ok(ats::fetch_greenhouse(&c, &kws, n).await) }.boxed(),
@@ -713,6 +722,15 @@ pub fn search_stream(client: &reqwest::Client, q: &Query) -> futures::stream::Bo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gupy_place_for_brazilian_cities() {
+        let place = |label: &str| gupy_place(&resolve_location(label));
+        assert_eq!(place("Salvador"), Some(("Bahia".into(), "Salvador".into())));
+        assert_eq!(place("São Paulo"), Some(("São Paulo".into(), "São Paulo".into())));
+        assert_eq!(place("Brasil"), None);
+        assert_eq!(place("Berlin"), None);
+    }
 
     #[test]
     fn labels() {

@@ -49,14 +49,58 @@ pub fn extract_gupy_next_data(html: &str) -> Result<Value, Error> {
     Ok(pp)
 }
 
-/// One portal.gupy.io search page (12 items; pagination is ignored by the site) → pageProps.
-async fn gupy_query(client: &reqwest::Client, term: &str, remote: bool) -> Result<Value, Error> {
+/// Gupy's state names (its `state=` filter wants them spelled out, accents included), by UF code.
+pub fn br_state_name(code: &str) -> Option<&'static str> {
+    Some(match code {
+        "ac" => "Acre",
+        "al" => "Alagoas",
+        "ap" => "Amapá",
+        "am" => "Amazonas",
+        "ba" => "Bahia",
+        "ce" => "Ceará",
+        "df" => "Distrito Federal",
+        "es" => "Espírito Santo",
+        "go" => "Goiás",
+        "ma" => "Maranhão",
+        "mt" => "Mato Grosso",
+        "ms" => "Mato Grosso do Sul",
+        "mg" => "Minas Gerais",
+        "pa" => "Pará",
+        "pb" => "Paraíba",
+        "pr" => "Paraná",
+        "pe" => "Pernambuco",
+        "pi" => "Piauí",
+        "rj" => "Rio de Janeiro",
+        "rn" => "Rio Grande do Norte",
+        "rs" => "Rio Grande do Sul",
+        "ro" => "Rondônia",
+        "rr" => "Roraima",
+        "sc" => "Santa Catarina",
+        "sp" => "São Paulo",
+        "se" => "Sergipe",
+        "to" => "Tocantins",
+        _ => return None,
+    })
+}
+
+/// A Brazilian city for Gupy's own place filter: (state name, city name), e.g. ("Bahia", "Salvador").
+pub type GupyPlace = Option<(String, String)>;
+
+/// One portal.gupy.io search page (12 items; pagination is ignored by the site) → pageProps. With a place, the 12
+/// come from that city (a nationwide page has few or none there once the city filter runs).
+async fn gupy_query(client: &reqwest::Client, term: &str, remote: bool, place: &GupyPlace) -> Result<Value, Error> {
     let mut url = format!(
         "https://portal.gupy.io/job-search/term={}",
         utf8_percent_encode(&prefix(term, 200), QUOTE)
     );
     if remote {
         url.push_str("&workplaceTypes[]=remote");
+    } else if let Some((state, city)) = place {
+        url.push_str(&format!(
+            "&state={}&city={}",
+            utf8_percent_encode(state, QUOTE),
+            utf8_percent_encode(city, QUOTE)
+        ));
     }
     let mut attempt = 1;
     loop {
@@ -89,12 +133,13 @@ pub async fn fetch_gupy(
     keywords: &[String],
     results_wanted: usize,
     remote: bool,
+    place: &GupyPlace,
 ) -> Result<Vec<Job>, Error> {
     let mut pages = Vec::new();
     let mut last_err = None;
     // Spacing between terms: `polite` gives portal.gupy.io a 1 s gap.
     for term in &terms(keywords, MAX_TERMS, "desenvolvedor") {
-        match gupy_query(client, term, remote).await {
+        match gupy_query(client, term, remote, place).await {
             Ok(pp) => pages.push(pp),
             Err(e) => {
                 tracing::warn!("Gupy query '{term}' failed: {e}");
