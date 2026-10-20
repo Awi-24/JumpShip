@@ -15,7 +15,7 @@ import { useResumeParse } from '../hooks/useResume';
 import { useJobSearch } from '../hooks/useJobs';
 import { useSettings } from '../hooks/useSettings';
 import { useResumeCache } from '../hooks/useResumeCache';
-import { isDesktop } from '../desktop';
+import { isDesktop, useStoredFlag } from '../desktop';
 import { HISTORY_KEY, loadHistory, saveHistory, type SearchHistoryEntry } from '../searchHistory';
 import type { ResumeProfile, JobResult, JobAssessment, JobSearchResponse, SortOption, ProfileResponse } from '../types';
 
@@ -163,6 +163,8 @@ export default function Search({ onBack, onNavigate, initialEntry }: SearchProps
   const [savedUrls, setSavedUrls] = useState<Set<string>>(new Set());
 
   const [showHidden, setShowHidden] = useState(false);
+  // Desktop: filters pane folded to a strip, more room for results while the model works.
+  const [filtersMin, setFiltersMin] = useStoredFlag('jumpship-filters-min');
   // Desktop: the job shown in the detail pane.
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -750,9 +752,22 @@ export default function Search({ onBack, onNavigate, initialEntry }: SearchProps
       {profileOpen && <Profile onClose={() => setProfileOpen(false)} />}
 
 
-      <div className="search-body">
+      <div className={`search-body${isDesktop && filtersMin ? ' filters-min' : ''}`}>
         {/* ── SIDEBAR ── */}
         <aside className="sidebar" data-pane="filters">
+          {isDesktop && (
+            <div className="pane-tools">
+              <button
+                type="button"
+                className="pane-toggle"
+                onClick={() => setFiltersMin(!filtersMin)}
+                title={filtersMin ? 'Show filters' : 'Hide filters'}
+                aria-expanded={!filtersMin}
+              >
+                {filtersMin ? '» filters' : '«'}
+              </button>
+            </div>
+          )}
 
           {/* Resume */}
           <div>
@@ -823,7 +838,7 @@ export default function Search({ onBack, onNavigate, initialEntry }: SearchProps
                 {keywords.map(k => {
                   const isLong = k.split(' ').length > 2 || k.length > 25;
                   return (
-                    <div key={k} className={`keyword-chip${isLong ? ' kw-warn' : ''}`} title={isLong ? 'Long phrases may return fewer results' : undefined}>
+                    <div key={k} className={`keyword-chip${isLong ? ' kw-warn' : ''}${k.length > 14 ? ' chip--wide' : ''}`} title={isLong ? 'Long phrases may return fewer results' : undefined}>
                       {k}
                       <button onClick={() => removeKeyword(k)}>×</button>
                     </div>
@@ -851,7 +866,7 @@ export default function Search({ onBack, onNavigate, initialEntry }: SearchProps
 
               {/* AI Keyword Tools */}
               {keywords.length > 0 && llmStatus === 'green' && (
-                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <div className="kw-tools" style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                   <button
                     className="export-btn"
                     style={{ flex: 1 }}
@@ -867,10 +882,11 @@ export default function Search({ onBack, onNavigate, initialEntry }: SearchProps
                     style={{ flex: 1 }}
                     onClick={fetchTranslations}
                     disabled={loadingTranslations}
+                    title="Translate the keywords to Portuguese"
                   >
                     {loadingTranslations
                       ? <><div className="spinner" style={{ width: 8, height: 8 }} /> Loading…</>
-                      : <><Globe size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />Translate PT</>}
+                      : <><Globe size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />{isDesktop ? 'Translate' : 'Translate PT'}</>}
                   </button>
                 </div>
               )}
@@ -879,7 +895,7 @@ export default function Search({ onBack, onNavigate, initialEntry }: SearchProps
               {suggestions.length > 0 && (
                 <div className="suggestion-chips">
                   {suggestions.map(s => (
-                    <button key={s} className="suggestion-chip" onClick={() => addKeyword(s)}>+ {s}</button>
+                    <button key={s} className={`suggestion-chip${s.length > 14 ? ' chip--wide' : ''}`} onClick={() => addKeyword(s)}>+ {s}</button>
                   ))}
                 </div>
               )}
@@ -888,7 +904,7 @@ export default function Search({ onBack, onNavigate, initialEntry }: SearchProps
               {translations.length > 0 && (
                 <div className="translate-chips">
                   {translations.map(t => (
-                    <button key={t} className="translate-chip" onClick={() => addKeyword(t)}>+ {t}</button>
+                    <button key={t} className={`translate-chip${t.length > 14 ? ' chip--wide' : ''}`} onClick={() => addKeyword(t)}>+ {t}</button>
                   ))}
                 </div>
               )}

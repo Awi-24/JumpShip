@@ -2,6 +2,8 @@
 // commands are allowed for this origin by crates/desktop/capabilities/main.json. No @tauri-apps/api dependency:
 // two window commands don't need it.
 
+import { useState } from 'react';
+
 type Invoke = (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
 
 const bridge = (window as unknown as { __TAURI_INTERNALS__?: { invoke: Invoke } }).__TAURI_INTERNALS__;
@@ -32,4 +34,16 @@ export function initDesktop(): void {
     const reload = e.key === 'F5' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r');
     if (reload) e.preventDefault();
   });
+}
+
+/** A boolean UI preference kept in localStorage (collapsed panes); defaults to false when storage is unavailable. */
+export function useStoredFlag(key: string): [boolean, (v: boolean) => void] {
+  const [value, setValue] = useState(() => {
+    try { return localStorage.getItem(key) === '1'; } catch { return false; }
+  });
+  const set = (v: boolean) => {
+    setValue(v);
+    try { localStorage.setItem(key, v ? '1' : '0'); } catch { /* per-session only */ }
+  };
+  return [value, set];
 }

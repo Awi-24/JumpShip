@@ -10,7 +10,7 @@ import NavRail, { NAV, type DesktopPage } from './components/NavRail';
 import StatusBar from './components/StatusBar';
 import SettingsModal from './components/SettingsModal';
 import { useSettings } from './hooks/useSettings';
-import { isDesktop } from './desktop';
+import { isDesktop, useStoredFlag } from './desktop';
 import type { SearchHistoryEntry } from './searchHistory';
 import './styles.css';
 import './desktop.css';
@@ -114,6 +114,7 @@ function DesktopApp() {
   const [entry, setEntry] = useState<SearchHistoryEntry | null>(null);
   const [back, setBack] = useState<DesktopPage>('start');
   const { settings, saveSettings } = useSettings();
+  const [railMin, setRailMin] = useStoredFlag('jumpship-rail-min');
 
   const go = useCallback((next: DesktopPage) => {
     if (next === 'search') setSearchOpened(true);
@@ -146,9 +147,9 @@ function DesktopApp() {
   );
 
   return (
-    <div className="desk">
+    <div className={`desk${railMin ? ' desk--rail-min' : ''}`}>
       <TitleBar page={page} />
-      <NavRail page={page} onNavigate={go} />
+      <NavRail page={page} onNavigate={go} collapsed={railMin} onToggle={() => setRailMin(!railMin)} />
       <main className="desk-main">
         {searchOpened && (
           <div className="desk-view" hidden={page !== 'search'}>

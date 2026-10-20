@@ -79,7 +79,15 @@ html.is-desktop *::after { border-radius: 0 !important; box-shadow: none !import
 html.is-desktop button,
 html.is-desktop [role='button'],
 html.is-desktop [role='tab'] { cursor: default; }
-html.is-desktop * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+/* Scrollbars: a 6px gutter (content never runs under it), the thumb only shows while the pointer is over the box.
+   ::-webkit-scrollbar is ignored once scrollbar-width / scrollbar-color are set, so those stay unset (WebView2 is Chromium). */
+html.is-desktop ::-webkit-scrollbar { width: 6px; height: 6px; }
+html.is-desktop ::-webkit-scrollbar-track,
+html.is-desktop ::-webkit-scrollbar-corner { background: transparent; }
+html.is-desktop ::-webkit-scrollbar-thumb { background: transparent; }
+html.is-desktop :hover::-webkit-scrollbar-thumb { background: var(--line); }
+html.is-desktop ::-webkit-scrollbar-thumb:hover,
+html.is-desktop ::-webkit-scrollbar-thumb:active { background: var(--line-strong); }
 html.is-desktop :focus-visible { outline: 1px solid var(--gold); outline-offset: 1px; }
 html.is-desktop ::selection { background: var(--gold); color: #0a0a0a; }
 html.is-desktop [hidden] { display: none !important; }
@@ -87,7 +95,8 @@ html.is-desktop [hidden] { display: none !important; }
 /* ── Frame: title bar / rail + view / status bar ── */
 .desk {
   display: grid;
-  grid-template: 'title title' 34px 'rail main' minmax(0, 1fr) 'status status' 24px / 150px minmax(0, 1fr);
+  --rail-w: 150px;
+  grid-template: 'title title' 34px 'rail main' minmax(0, 1fr) 'status status' 24px / var(--rail-w) minmax(0, 1fr);
   height: 100vh;
   background: var(--bg) repeating-linear-gradient(to bottom, transparent 0 2px, var(--scan) 2px 3px);
   color: var(--text);
@@ -190,7 +199,24 @@ html.is-desktop .titlebar .titlebar-theme svg { width: 14px; height: 14px; }
 .rail-item--sep { margin-top: var(--s3); border-top: 1px solid var(--line); height: calc(var(--ctl) + var(--s3)); padding-top: var(--s3); }
 .rail-mark { width: 1ch; }
 .rail-item kbd { margin-left: auto; font-size: var(--fs-xs); opacity: 0.5; text-shadow: none; }
-.rail-logo { margin: auto auto var(--s1); width: 36px; opacity: 0.35; filter: grayscale(1); }
+.rail-logo { margin: auto auto var(--s2); width: 36px; opacity: 0.35; filter: grayscale(1); }
+.rail-toggle {
+  height: var(--ctl);
+  margin: 0 var(--s2);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.rail-toggle:hover { color: var(--accent-text); border-color: var(--line-strong); }
+/* Collapsed rail: the views by number (name in the tooltip). */
+.desk--rail-min { --rail-w: 44px; }
+.desk--rail-min .rail-item { justify-content: center; padding: 0; }
+.desk--rail-min .rail-mark,
+.desk--rail-min .rail-label,
+.desk--rail-min .rail-logo { display: none; }
+.desk--rail-min .rail-item kbd { margin: 0; font-size: var(--fs-sm); opacity: 1; }
+.desk--rail-min .rail-toggle { margin-top: auto; }
 
 .statusbar {
   grid-area: status;
@@ -368,15 +394,27 @@ html.is-desktop .pipeline-col-badge {
   font-size: var(--fs-xs) !important;
   line-height: 1.3;
 }
+html.is-desktop .job-tags { display: flex; flex-wrap: wrap; gap: var(--s1); margin-top: 0 !important; }
+/* Filter chips: a two-column grid of equal cells, text centred; long ones (.chip--wide) take the whole row. */
 html.is-desktop .keyword-chips,
 html.is-desktop .site-pills,
 html.is-desktop .suggestion-chips,
-html.is-desktop .translate-chips,
-html.is-desktop .job-tags { display: flex; flex-wrap: wrap; gap: var(--s1); margin-top: 0 !important; }
+html.is-desktop .translate-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s1); margin-top: 0 !important; }
+html.is-desktop .keyword-chips > span,
+html.is-desktop .chip--wide { grid-column: 1 / -1; }
+html.is-desktop .keyword-chips > span { text-align: center; }
+html.is-desktop .keyword-chip,
+html.is-desktop .site-pill,
+html.is-desktop .suggestion-chip,
+html.is-desktop .translate-chip { width: 100%; justify-content: center; text-align: center; }
+html.is-desktop .keyword-chip { position: relative; padding: 0 calc(var(--s2) + 12px) !important; }
+html.is-desktop .keyword-chip button { position: absolute; right: var(--s2); top: 50%; transform: translateY(-50%); }
 html.is-desktop .site-pill { background: transparent; border: 1px solid var(--line); color: var(--text-muted); }
-html.is-desktop .site-pill::before { content: '[ ] '; white-space: pre; }
+html.is-desktop .site-pill::before { content: ''; flex-shrink: 0; width: 7px; height: 7px; border: 1px solid currentColor; }
 html.is-desktop .site-pill.active { color: var(--accent-text); border-color: var(--line-strong); background: var(--select); }
-html.is-desktop .site-pill.active::before { content: '[x] '; }
+html.is-desktop .site-pill.active::before { background: currentColor; }
+html.is-desktop .kw-tools { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s1); margin-top: var(--s2); }
+html.is-desktop .kw-tools .export-btn { min-width: 0; padding: 0 var(--s2) !important; }
 html.is-desktop[data-theme='light'] .tracker-tag,
 html.is-desktop[data-theme='light'] .tag.kw-match,
 html.is-desktop[data-theme='light'] .tag.tag-new,
@@ -449,11 +487,50 @@ html.is-desktop .modal-panel--page .modal-close { display: none; }
 html.is-desktop .search-header { display: none; }
 html.is-desktop .search-page { height: 100%; min-height: 0; background: transparent; }
 html.is-desktop .search-body {
+  --filters-w: 300px;
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 290px minmax(0, 1fr) minmax(0, 1.15fr);
+  grid-template-columns: var(--filters-w) minmax(0, 1fr) minmax(0, 1.15fr);
   gap: var(--s2);
+}
+/* Collapsed filters: a slim strip, the whole of it a button to open them again. */
+html.is-desktop .search-body.filters-min { --filters-w: 30px; }
+html.is-desktop .filters-min .sidebar { padding: 0; overflow: hidden; }
+html.is-desktop .filters-min .sidebar::before,
+html.is-desktop .filters-min .sidebar > :not(.pane-tools) { display: none; }
+.pane-tools {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  justify-content: flex-end;
+  height: 0;
+  /* Pulled up over the pane's title strip (and the column gap after it); the next item keeps its place. */
+  margin: calc((var(--strip) + var(--s4)) * -1) calc(var(--s3) * -1) var(--strip);
+}
+.pane-toggle {
+  height: var(--strip);
+  padding: 0 var(--s2);
+  border: none;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+.pane-toggle:hover { color: var(--accent-text); background: var(--hover); }
+.filters-min .pane-tools { flex: 1; height: auto; margin: 0; }
+.filters-min .pane-toggle {
+  flex: 1;
+  height: auto;
+  padding: var(--s3) 0;
+  border: none;
+  writing-mode: vertical-rl;
+  text-transform: uppercase;
+  text-align: start;
+  color: var(--accent-text);
+  text-shadow: var(--glow);
 }
 html.is-desktop .sidebar,
 html.is-desktop .main-content,
@@ -721,7 +798,7 @@ html.is-desktop[data-theme='light'] .rail-logo { filter: drop-shadow(0 0 1px rgb
 
 @media (max-width: 1180px) {
   /* Small screen (the window is 90% of it): results over detail, filters beside both. */
-  html.is-desktop .search-body { grid-template: minmax(0, 1fr) minmax(0, 1fr) / 260px minmax(0, 1fr); }
+  html.is-desktop .search-body { --filters-w: 280px; grid-template: minmax(0, 1fr) minmax(0, 1fr) / var(--filters-w) minmax(0, 1fr); }
   html.is-desktop .sidebar { grid-row: 1 / 3; }
 }
 @media (max-width: 900px) {
