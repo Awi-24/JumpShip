@@ -84,7 +84,9 @@ impl Browser {
         ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-        let child = tokio::process::Command::new(&exe)
+        // The browser's stderr, quoted when it doesn't come up (sandbox, missing libraries, …).
+        let log = std::fs::File::create(dir.join("browser.log")).map_err(|e| e.to_string())?;
+        let mut child = tokio::process::Command::new(&exe)
             .args([
                 "--headless=new",
                 "--disable-gpu",
@@ -100,7 +102,7 @@ impl Browser {
             .arg(format!("--user-data-dir={}", dir.display()))
             .arg("about:blank")
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
+            .stderr(log)
             .kill_on_drop(true)
             .spawn()
             .map_err(|e| format!("could not start {}: {e}", exe.display()))?;
@@ -108,6 +110,9 @@ impl Browser {
         let port_file = dir.join("DevToolsActivePort");
         let mut endpoint = None;
         for _ in 0..150 {
+            if let Ok(Some(_)) = child.try_wait() {
+                break; // exited: no port coming
+            }
             if let Ok(text) = std::fs::read_to_string(&port_file)
                 && let [port, path, ..] = text.lines().collect::<Vec<_>>()[..]
             {
@@ -116,7 +121,18 @@ impl Browser {
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        let endpoint = endpoint.ok_or("browser did not open its DevTools port")?;
+        let endpoint = endpoint.ok_or_else(|| {
+            let log = std::fs::read_to_string(dir.join("browser.log")).unwrap_or_default();
+            let tail: String = log
+                .chars()
+                .rev()
+                .take(600)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
+            format!("{} did not open its DevTools port: {}", exe.display(), tail.trim())
+        })?;
         let (ws, _) = tokio_tungstenite::connect_async(endpoint.as_str())
             .await
             .map_err(|e| format!("DevTools connect: {e}"))?;
