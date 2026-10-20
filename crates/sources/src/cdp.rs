@@ -107,10 +107,11 @@ impl Browser {
             .kill_on_drop(true)
             .spawn()
             .map_err(|e| format!("could not start {}: {e}", exe.display()))?;
-        // The browser writes "<port>\n<ws path>" once DevTools listens.
+        // The browser writes "<port>\n<ws path>" once DevTools listens. Up to 30 s: a cold first start (new
+        // profile, CI runners) can take more than 15.
         let port_file = dir.join("DevToolsActivePort");
         let mut endpoint = None;
-        for _ in 0..150 {
+        for _ in 0..300 {
             if let Ok(Some(_)) = child.try_wait() {
                 break; // exited: no port coming
             }
