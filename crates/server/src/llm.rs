@@ -30,6 +30,7 @@ prompts!(
     assess_system,
     assess_user,
     assess_company_context,
+    assess_eligibility,
     compact_resume_system,
     compact_resume_user,
     health_check_system,

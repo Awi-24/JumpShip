@@ -186,6 +186,9 @@ pub struct JobAssessment {
     pub keywords_missing: Vec<String>,
     pub resume_generation_triggered: bool,
     pub hire_recommendation: String,
+    /// False when the posting is restricted to women or PcD and the profile is not (`assess_eligibility`).
+    pub eligible: bool,
+    pub eligibility_note: String,
 }
 
 impl Default for JobAssessment {
@@ -204,6 +207,8 @@ impl Default for JobAssessment {
             keywords_missing: vec![],
             resume_generation_triggered: false,
             hire_recommendation: "borderline".into(),
+            eligible: true,
+            eligibility_note: String::new(),
         }
     }
 }
@@ -299,7 +304,7 @@ fn company_context(research: bool, info: &str) -> String {
 
 /// Assessment-cache key (PLAN §5): everything that shapes the answer, prompt templates included, so editing a
 /// prompt or switching model re-assesses. ponytail: the company research text is left out (web results drift).
-fn cache_key(llm: &LlmClient, p: &ResumeProfile, job: &Job, research: bool) -> String {
+fn cache_key(llm: &LlmClient, p: &ResumeProfile, job: &Job, research: bool, eligibility: &str) -> String {
     use sha2::Digest;
     // Per-search flags, not job content.
     let job = Job {
@@ -315,6 +320,7 @@ fn cache_key(llm: &LlmClient, p: &ResumeProfile, job: &Job, research: bool) -> S
         load("assess_system"),
         load("assess_user"),
         load("assess_company_context"),
+        eligibility,
         job,
         p
     ]);
@@ -332,7 +338,9 @@ async fn run_assessment(
     research: bool,
     refresh: bool,
 ) -> Result<JobAssessment, String> {
-    let key = cache_key(llm, p, job, research);
+    // Read per job: a profile saved mid-search applies to the jobs still queued.
+    let eligibility = crate::profile::eligibility(st, &p.name);
+    let key = cache_key(llm, p, job, research, &eligibility);
     let cached = (!refresh)
         .then(|| {
             st.db
@@ -357,7 +365,7 @@ async fn run_assessment(
                 .complete(
                     &st.http,
                     load("assess_system"),
-                    &assess_user(p, job, &company_context),
+                    &(assess_user(p, job, &company_context) + &eligibility),
                     None,
                 )
                 .await
@@ -374,7 +382,7 @@ async fn run_assessment(
             a
         }
     };
-    a.resume_generation_triggered = a.match_score >= st.cfg.resume_gen_threshold && a.is_relevant;
+    a.resume_generation_triggered = a.match_score >= st.cfg.resume_gen_threshold && a.is_relevant && a.eligible;
     Ok(a)
 }
 
@@ -680,5 +688,11 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 3);
+        // Gender / PcD saved on the profile change the prompt, so the job is assessed again.
+        crate::profile::tests::save_answers(&st, json!({"gender": "female", "pcd": true}));
+        run_assessment(&st, &client("m1"), &p, &job, false, false)
+            .await
+            .unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 4);
     }
 }

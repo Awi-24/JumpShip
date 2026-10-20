@@ -642,7 +642,7 @@ export default function Search({ onBack, onNavigate, initialEntry }: SearchProps
   const sortedJobs = useMemo(() => {
     const visible = jobs.filter(j => {
       const a = assessments[j.id];
-      return !dismissedIds.has(j.id) && (!a || a.is_relevant !== false);
+      return !dismissedIds.has(j.id) && (!a || (a.is_relevant !== false && a.eligible !== false));
     });
 
     // Rust backend: annual-USD salaries (comparable across currencies / periods); else the first number in the text.
@@ -661,13 +661,12 @@ export default function Search({ onBack, onNavigate, initialEntry }: SearchProps
   }, [jobs, sortBy, assessments, dismissedIds]);
   const dismissedCount = (jobSearch.data?.dismissed ?? 0) + dismissedIds.size;
 
-  const filteredCount = useMemo(() =>
-    jobs.filter(j => assessments[j.id]?.is_relevant === false).length,
-  [jobs, assessments]);
-
+  // Hidden by the assessment: outside the candidate's field, or restricted to women / PcD and the profile is not.
   const hiddenJobs = useMemo(() =>
-    jobs.filter(j => assessments[j.id]?.is_relevant === false),
+    jobs.filter(j => assessments[j.id]?.is_relevant === false || assessments[j.id]?.eligible === false),
   [jobs, assessments]);
+  const ineligibleCount = hiddenJobs.filter(j => assessments[j.id]?.eligible === false).length;
+  const filteredCount = hiddenJobs.length;
 
   const llmConfig = {
     provider: settings.llmProvider,
@@ -1125,7 +1124,11 @@ export default function Search({ onBack, onNavigate, initialEntry }: SearchProps
                       className={`filter-pill${showHidden ? ' active' : ''}`}
                       onClick={() => setShowHidden(v => !v)}
                     >
-                      {showHidden ? <><X size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />Hide</> : <Eye size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />} {filteredCount} unrelated
+                      {showHidden ? <><X size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />Hide</> : <Eye size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />}{' '}
+                      {[
+                        filteredCount > ineligibleCount && `${filteredCount - ineligibleCount} unrelated`,
+                        ineligibleCount > 0 && `${ineligibleCount} not eligible`,
+                      ].filter(Boolean).join(' · ')}
                     </button>
                   )}
                 </div>
@@ -1194,9 +1197,9 @@ export default function Search({ onBack, onNavigate, initialEntry }: SearchProps
               {showHidden && hiddenJobs.length > 0 && (
                 <div className="hidden-jobs-section">
                   <div className="hidden-jobs-header">
-                    <span>Unrelated Jobs</span>
+                    <span>Hidden Jobs</span>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>
-                      These were flagged by the AI as outside your professional field
+                      Flagged by the AI as outside your professional field, or restricted to women / PcD candidates per your profile
                     </span>
                   </div>
                   <div className="jobs-list">

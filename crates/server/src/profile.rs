@@ -123,6 +123,39 @@ fn load(st: &AppState) -> ApiResult<Option<Map<String, Value>>> {
     .map_err(db_err)
 }
 
+/// The `assess_eligibility` block (after a blank line) from the stored profile: gender and PcD as set on the Profile
+/// page (`custom_answers.gender` / `.pcd`), the profile name or else the résumé's for the model to read gender from.
+pub fn eligibility(st: &AppState, resume_name: &str) -> String {
+    let p = load(st).ok().flatten().unwrap_or_default();
+    let answers = p.get("custom_answers").and_then(Value::as_object);
+    let answer = |k: &str| answers.and_then(|a| a.get(k));
+    let gender = match answer("gender").and_then(Value::as_str) {
+        Some("female") => "woman",
+        Some("male") => "man",
+        Some("nonbinary") => "non-binary",
+        _ => "not stated",
+    };
+    let pcd = answer("pcd").and_then(Value::as_bool).unwrap_or(false);
+    let name = p
+        .get("full_name")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .unwrap_or(resume_name.trim());
+    let name = if name.is_empty() { "Unknown" } else { name };
+    format!(
+        "\n\n{}",
+        crate::llm::render(
+            "assess_eligibility",
+            &[
+                ("name", name),
+                ("gender", gender),
+                ("pcd", if pcd { "yes" } else { "no" })
+            ]
+        )
+    )
+}
+
 pub fn db_err(e: rusqlite::Error) -> ApiError {
     tracing::error!("database error: {e}");
     ApiError::new(500, format!("Database error: {e}"))
@@ -264,4 +297,34 @@ async fn put_keys(
         )
         .map_err(db_err)?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+
+    pub(crate) fn save_answers(st: &AppState, answers: Value) {
+        let _ = write(st, vec![("custom_answers", answers)]).unwrap();
+    }
+
+    #[test]
+    fn eligibility_from_profile() {
+        let st = AppState {
+            cfg: Arc::new(crate::config::Config::from_env()),
+            http: reqwest::Client::new(),
+            db: Arc::new(crate::db::Db::memory()),
+            secrets: Arc::new(crate::db::Secrets::new("test")),
+        };
+        // Nothing saved: gender left to the model (résumé name), not PcD.
+        let e = eligibility(&st, "Ana Souza");
+        assert!(e.starts_with("\n\nCANDIDATE ELIGIBILITY"));
+        assert!(e.contains("Name: Ana Souza\nGender: not stated\n") && e.contains("(PcD / PwD): no\n"));
+        // Profile wins over the résumé.
+        let _ = write(&st, vec![("full_name", json!("Carlos Lima"))]).unwrap();
+        save_answers(&st, json!({"gender": "male", "pcd": true}));
+        let e = eligibility(&st, "Ana Souza");
+        assert!(e.contains("Name: Carlos Lima\nGender: man\n") && e.contains("(PcD / PwD): yes\n"));
+    }
 }

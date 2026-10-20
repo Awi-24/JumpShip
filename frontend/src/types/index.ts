@@ -84,6 +84,9 @@ export interface JobAssessment {
   keywords_missing?: string[];
   resume_generation_triggered?: boolean;
   hire_recommendation?: 'strong_yes' | 'yes' | 'borderline' | 'no' | 'strong_no';
+  /** Rust backend: false when the posting is restricted to women or PcD and the profile is not. */
+  eligible?: boolean;
+  eligibility_note?: string;
 }
 
 export interface GeneratedResumeItem {

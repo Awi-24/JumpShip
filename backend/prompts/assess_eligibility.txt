@@ -1,0 +1,13 @@
+CANDIDATE ELIGIBILITY (restricted postings):
+Name: {name}
+Gender: {gender}
+Person with disability (PcD / PwD): {pcd}
+
+Some postings are open ONLY to women ("vaga exclusiva para mulheres", "vaga afirmativa para mulheres", "women only") or ONLY to people with disabilities ("vaga exclusiva para PcD", "vaga afirmativa para pessoas com deficiência", "exclusive to PwD"). Decide whether this candidate can apply:
+- eligible = false only when the posting is explicitly restricted to women or to people with disabilities and the candidate is not in that group.
+- Postings that only encourage or prefer these groups ("we encourage women to apply", "vaga também para PcD") are open to everyone: eligible = true.
+- Restrictions to any other group do not count here: eligible = true.
+- Gender "not stated": infer it from the first name only when the name is clearly and commonly gendered; if unsure, treat the candidate as eligible.
+Add these two keys to the JSON object:
+  "eligible": <true or false>,
+  "eligibility_note": "<when false: the restriction in a few words, e.g. 'women-only position'; otherwise empty>"

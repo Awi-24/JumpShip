@@ -267,6 +267,21 @@ export function JobDetail({
                       <AlertTriangle size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />This job appears unrelated to your professional field.
                     </div>
                   )}
+                  {assessment.eligible === false && (
+                    <div className="eligibility-warning" style={{
+                      background: 'rgba(248,113,113,0.08)',
+                      border: '1px solid rgba(248,113,113,0.25)',
+                      borderRadius: 8,
+                      padding: '10px 12px',
+                      marginBottom: 14,
+                      fontSize: 12,
+                      color: '#f87171',
+                      lineHeight: 1.5,
+                    }}>
+                      <AlertTriangle size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                      Not open to you{assessment.eligibility_note ? `: ${assessment.eligibility_note}` : ''} (based on your profile).
+                    </div>
+                  )}
 
                   <div className="assessment-score-row">
                     <ScoreRing score={assessment.match_score} />
