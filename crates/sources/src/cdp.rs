@@ -30,12 +30,13 @@ pub fn browser() -> Option<PathBuf> {
     candidates.push("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge".into());
     let path = std::env::var_os("PATH").unwrap_or_default();
     for dir in std::env::split_paths(&path) {
+        // Chrome / Edge before Chromium: Ubuntu's chromium is a snap, slow to start the first time and confined.
         for name in [
-            "chromium",
-            "chromium-browser",
             "google-chrome",
             "google-chrome-stable",
             "microsoft-edge",
+            "chromium",
+            "chromium-browser",
         ] {
             candidates.push(dir.join(name));
         }
