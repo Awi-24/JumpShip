@@ -108,7 +108,8 @@ def _check_ollama_health() -> tuple[bool, list[str]]:
     Returns (available: bool, models: list[str])
     Uses a 2-second timeout to fail fast if Ollama isn't running.
     """
-    ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    from backend.services.llm_client import ollama_base_url
+    ollama_host = ollama_base_url()
     try:
         with httpx.Client(timeout=2.0) as client:
             resp = client.get(f"{ollama_host.rstrip('/')}/api/tags")

@@ -1,0 +1,512 @@
+{
+  "us_states": [
+    "AL",
+    "AK",
+    "AZ",
+    "AR",
+    "CA",
+    "CO",
+    "CT",
+    "DE",
+    "FL",
+    "GA",
+    "HI",
+    "ID",
+    "IL",
+    "IN",
+    "IA",
+    "KS",
+    "KY",
+    "LA",
+    "ME",
+    "MD",
+    "MA",
+    "MI",
+    "MN",
+    "MS",
+    "MO",
+    "MT",
+    "NE",
+    "NV",
+    "NH",
+    "NJ",
+    "NM",
+    "NY",
+    "NC",
+    "ND",
+    "OH",
+    "OK",
+    "OR",
+    "PA",
+    "RI",
+    "SC",
+    "SD",
+    "TN",
+    "TX",
+    "UT",
+    "VT",
+    "VA",
+    "WA",
+    "WV",
+    "WI",
+    "WY",
+    "DC"
+  ],
+  "us_states_ambiguous": [
+    "AL",
+    "MA",
+    "MT",
+    "MS",
+    "PA",
+    "SC"
+  ],
+  "countries": {
+    "brazil": [
+      "brasil",
+      "brazil"
+    ],
+    "usa": [
+      "united states",
+      "usa",
+      "us",
+      "estados unidos"
+    ],
+    "canada": [
+      "canada"
+    ],
+    "uk": [
+      "united kingdom",
+      "uk",
+      "england",
+      "scotland",
+      "wales",
+      "great britain"
+    ],
+    "germany": [
+      "germany",
+      "deutschland",
+      "alemanha"
+    ],
+    "france": [
+      "france"
+    ],
+    "spain": [
+      "spain",
+      "espana"
+    ],
+    "portugal": [
+      "portugal"
+    ],
+    "netherlands": [
+      "netherlands",
+      "nederland",
+      "holland"
+    ],
+    "ireland": [
+      "ireland"
+    ],
+    "switzerland": [
+      "switzerland",
+      "schweiz",
+      "suisse"
+    ],
+    "sweden": [
+      "sweden",
+      "sverige"
+    ],
+    "poland": [
+      "poland",
+      "polska"
+    ],
+    "mexico": [
+      "mexico"
+    ],
+    "argentina": [
+      "argentina"
+    ],
+    "colombia": [
+      "colombia"
+    ],
+    "chile": [
+      "chile"
+    ],
+    "australia": [
+      "australia"
+    ],
+    "india": [
+      "india"
+    ],
+    "japan": [
+      "japan"
+    ],
+    "singapore": [
+      "singapore"
+    ],
+    "italy": [
+      "italy",
+      "italia"
+    ],
+    "austria": [
+      "austria"
+    ],
+    "belgium": [
+      "belgium"
+    ],
+    "norway": [
+      "norway"
+    ],
+    "denmark": [
+      "denmark"
+    ],
+    "finland": [
+      "finland"
+    ],
+    "israel": [
+      "israel"
+    ],
+    "china": [
+      "china"
+    ],
+    "peru": [
+      "peru"
+    ],
+    "uruguay": [
+      "uruguay"
+    ],
+    "venezuela": [
+      "venezuela"
+    ],
+    "ecuador": [
+      "ecuador"
+    ],
+    "costa rica": [
+      "costa rica"
+    ],
+    "panama": [
+      "panama"
+    ],
+    "new zealand": [
+      "new zealand"
+    ],
+    "south africa": [
+      "south africa"
+    ],
+    "turkey": [
+      "turkey",
+      "turkiye"
+    ],
+    "ukraine": [
+      "ukraine"
+    ],
+    "romania": [
+      "romania"
+    ],
+    "greece": [
+      "greece"
+    ],
+    "hungary": [
+      "hungary"
+    ],
+    "czech republic": [
+      "czech republic",
+      "czechia"
+    ],
+    "hong kong": [
+      "hong kong"
+    ],
+    "indonesia": [
+      "indonesia"
+    ],
+    "philippines": [
+      "philippines"
+    ],
+    "vietnam": [
+      "vietnam"
+    ],
+    "thailand": [
+      "thailand"
+    ],
+    "malaysia": [
+      "malaysia"
+    ],
+    "south korea": [
+      "south korea"
+    ],
+    "united arab emirates": [
+      "united arab emirates",
+      "uae"
+    ]
+  },
+  "other_countries": {
+    "el salvador": [
+      "el salvador",
+      "san salvador"
+    ],
+    "paraguay": [
+      "paraguay"
+    ],
+    "bolivia": [
+      "bolivia"
+    ]
+  },
+  "cities": {
+    "brazil": [
+      "sao paulo",
+      "rio de janeiro",
+      "belo horizonte",
+      "curitiba",
+      "porto alegre",
+      "brasilia",
+      "florianopolis",
+      "salvador",
+      "recife",
+      "fortaleza",
+      "campinas",
+      "manaus",
+      "goiania",
+      "belem",
+      "natal",
+      "maceio",
+      "joao pessoa",
+      "teresina",
+      "campo grande",
+      "aracaju",
+      "macapa",
+      "boa vista",
+      "palmas",
+      "porto velho",
+      "rio branco",
+      "joinville",
+      "blumenau",
+      "londrina",
+      "maringa",
+      "uberlandia",
+      "sorocaba",
+      "santos",
+      "ribeirao preto",
+      "sao jose dos campos",
+      "niteroi",
+      "cuiaba",
+      "sao luis",
+      "osasco",
+      "barueri"
+    ],
+    "usa": [
+      "new york",
+      "san francisco",
+      "seattle",
+      "austin",
+      "boston",
+      "chicago",
+      "los angeles",
+      "miami",
+      "denver",
+      "san jose",
+      "atlanta",
+      "dallas",
+      "houston"
+    ],
+    "canada": [
+      "toronto",
+      "vancouver",
+      "montreal",
+      "ottawa",
+      "calgary"
+    ],
+    "uk": [
+      "london",
+      "manchester",
+      "edinburgh"
+    ],
+    "germany": [
+      "berlin",
+      "munich",
+      "munchen",
+      "hamburg",
+      "frankfurt",
+      "koln",
+      "cologne",
+      "stuttgart",
+      "dusseldorf"
+    ],
+    "france": [
+      "paris",
+      "lyon",
+      "toulouse"
+    ],
+    "spain": [
+      "madrid",
+      "barcelona",
+      "valencia",
+      "las palmas"
+    ],
+    "portugal": [
+      "lisbon",
+      "porto"
+    ],
+    "netherlands": [
+      "amsterdam",
+      "rotterdam"
+    ],
+    "ireland": [
+      "dublin",
+      "cork"
+    ],
+    "switzerland": [
+      "zurich",
+      "geneva",
+      "basel"
+    ],
+    "sweden": [
+      "stockholm",
+      "gothenburg",
+      "malmo"
+    ],
+    "poland": [
+      "warsaw",
+      "krakow",
+      "wroclaw"
+    ],
+    "mexico": [
+      "mexico city",
+      "guadalajara",
+      "monterrey"
+    ],
+    "argentina": [
+      "buenos aires",
+      "cordoba"
+    ],
+    "colombia": [
+      "bogota",
+      "medellin"
+    ],
+    "chile": [
+      "santiago"
+    ],
+    "australia": [
+      "sydney",
+      "melbourne",
+      "brisbane"
+    ],
+    "india": [
+      "bengaluru",
+      "bangalore",
+      "mumbai",
+      "hyderabad",
+      "pune"
+    ],
+    "japan": [
+      "tokyo",
+      "osaka"
+    ]
+  },
+  "country_display": {
+    "usa": "United States",
+    "uk": "United Kingdom"
+  },
+  "remote_labels": [
+    "anywhere",
+    "global",
+    "remote",
+    "remoto",
+    "worldwide"
+  ],
+  "hybrid_labels": [
+    "hibrido",
+    "hybrid"
+  ],
+  "remote_words": [
+    "remote",
+    "remoto",
+    "home office",
+    "anywhere",
+    "distributed",
+    "teletrabalho",
+    "trabalho remoto",
+    "wfh",
+    "100% remoto",
+    "fully remote"
+  ],
+  "hybrid_words": [
+    "híbrido",
+    "hibrido",
+    "hybrid",
+    "modelo híbrido",
+    "home office/escritório"
+  ],
+  "br_states": {
+    "ac": "acre",
+    "al": "alagoas",
+    "ap": "amapa",
+    "am": "amazonas",
+    "ba": "bahia",
+    "ce": "ceara",
+    "df": "distrito federal",
+    "es": "espirito santo",
+    "go": "goias",
+    "ma": "maranhao",
+    "mt": "mato grosso",
+    "ms": "mato grosso do sul",
+    "mg": "minas gerais",
+    "pa": "para",
+    "pb": "paraiba",
+    "pr": "parana",
+    "pe": "pernambuco",
+    "pi": "piaui",
+    "rj": "rio de janeiro",
+    "rn": "rio grande do norte",
+    "rs": "rio grande do sul",
+    "ro": "rondonia",
+    "rr": "roraima",
+    "sc": "santa catarina",
+    "sp": "sao paulo",
+    "se": "sergipe",
+    "to": "tocantins"
+  },
+  "br_city_state": {
+    "sao paulo": "sp",
+    "rio de janeiro": "rj",
+    "belo horizonte": "mg",
+    "curitiba": "pr",
+    "porto alegre": "rs",
+    "brasilia": "df",
+    "florianopolis": "sc",
+    "salvador": "ba",
+    "recife": "pe",
+    "fortaleza": "ce",
+    "campinas": "sp",
+    "manaus": "am",
+    "goiania": "go",
+    "belem": "pa",
+    "natal": "rn",
+    "maceio": "al",
+    "joao pessoa": "pb",
+    "teresina": "pi",
+    "campo grande": "ms",
+    "aracaju": "se",
+    "macapa": "ap",
+    "boa vista": "rr",
+    "palmas": "to",
+    "porto velho": "ro",
+    "rio branco": "ac",
+    "joinville": "sc",
+    "blumenau": "sc",
+    "londrina": "pr",
+    "maringa": "pr",
+    "uberlandia": "mg",
+    "sorocaba": "sp",
+    "santos": "sp",
+    "ribeirao preto": "sp",
+    "sao jose dos campos": "sp",
+    "niteroi": "rj",
+    "cuiaba": "mt",
+    "sao luis": "ma",
+    "osasco": "sp",
+    "barueri": "sp"
+  },
+  "metro_of": {
+    "osasco": "sao paulo",
+    "barueri": "sao paulo",
+    "niteroi": "rio de janeiro"
+  }
+}

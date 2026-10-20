@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.database import engine, Base
 from backend.config import settings
 from backend.models.schemas import HealthResponse
+from backend.prompts import load
 from backend.services.llm_service import get_llm_service
 
 # Legacy routers
@@ -71,7 +72,7 @@ _migrate_db()
 app = FastAPI(
     title="JumpShip API",
     description="AI-powered job search. Resume parsing, multi-source scraping, LLM job assessment, tailored resume generation.",
-    version="1.0.0",
+    version="2.0.0",
 )
 
 origins = settings.cors_origins_list
@@ -82,6 +83,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Source-Status"],
 )
 
 # Primary routers
@@ -112,7 +114,7 @@ async def health():
         llm_provider=settings.llm_provider,
         llm_model=settings.llm_model,
         llm_available=available,
-        version="1.0.0",
+        version="2.0.0",
     )
 
 
@@ -136,7 +138,7 @@ async def health_llm():
 
     try:
         response = await asyncio.wait_for(
-            llm.complete("You are helpful.", "Reply with exactly: OK"),
+            llm.complete(load("health_check_system"), load("health_check_user")),
             timeout=120,
         )
         return {

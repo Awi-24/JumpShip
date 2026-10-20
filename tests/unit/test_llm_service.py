@@ -12,7 +12,7 @@ async def test_complete_posts_to_ollama_generate():
     llm = LLMService(provider="ollama", model="gemma3:27b", ollama_base_url="http://localhost:11434")
     mock_resp = MagicMock()
     mock_resp.raise_for_status = MagicMock()
-    mock_resp.json = MagicMock(return_value={"response": "hello from model"})
+    mock_resp.json = MagicMock(return_value={"choices": [{"message": {"content": "hello from model"}}]})
 
     with patch("httpx.AsyncClient") as mock_client_cls:
         mock_client = AsyncMock()
@@ -25,7 +25,7 @@ async def test_complete_posts_to_ollama_generate():
     assert out == "hello from model"
     mock_client.post.assert_called_once()
     args, kwargs = mock_client.post.call_args
-    assert args[0] == "http://localhost:11434/api/generate"
+    assert args[0] == "http://localhost:11434/v1/chat/completions"
     assert kwargs["json"]["model"] == "gemma3:27b"
 
 

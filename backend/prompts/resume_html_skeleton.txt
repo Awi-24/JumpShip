@@ -1,0 +1,60 @@
+<div class="resume" id="resume-root">
+  <header class="hdr">
+    <h1 class="legal-name">Full Legal Name</h1>
+    <p class="contact-line">City, Country · email@example.com · +1 (555) 000-0000 · linkedin.com/in/handle · github.com/handle</p>
+  </header>
+
+  <section id="summary">
+    <h2>Professional Summary</h2>
+    <p>2–3 sentences from source only; weave ATS keywords from the job posting where they honestly match the source.</p>
+  </section>
+
+  <section id="experience">
+    <h2>Professional Experience</h2>
+    <div class="job">
+      <h3><span class="role">Job Title</span><span class="dash"> — </span><span class="company">Company Name</span></h3>
+      <p class="job-meta"><em>Mon YYYY – Mon YYYY · City, ST (Remote/Hybrid/On-site)</em></p>
+      <ul>
+        <li>Impact-focused bullet with <strong>specific tool/platform names</strong> from source; quantify when metric appears in source.</li>
+        <li>Second achievement from source content.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="skills">
+    <h2>Technical Skills</h2>
+    <p class="skills-block"><strong>Languages:</strong> … · <strong>Frameworks:</strong> … · <strong>Cloud &amp; Data:</strong> … · <strong>Tools:</strong> … (include every technology from source; use · separator; never truncate)</p>
+  </section>
+
+  <!-- OPTIONAL: include this section ONLY if <additional_candidate_info> lists projects or side work -->
+  <section id="projects">
+    <h2>Projects &amp; Open Source</h2>
+    <div class="job">
+      <h3><span class="role">Project Name</span></h3>
+      <p class="job-meta"><em>Technology stack · github.com/handle/repo (optional)</em></p>
+      <ul>
+        <li>What it does and the impact or scale — include tech keywords matching the job posting.</li>
+      </ul>
+    </div>
+  </section>
+
+  <table class="layout-cols" width="100%"><tr>
+    <td width="48%" style="vertical-align:top;padding:0;">
+      <section id="education">
+        <h2>Education</h2>
+        <ul>
+          <li><strong>Degree, Field</strong> — Institution <em>(Year)</em></li>
+        </ul>
+      </section>
+    </td>
+    <td width="4%" style="padding:0;"></td>
+    <td width="48%" style="vertical-align:top;padding:0;">
+      <section id="certifications">
+        <h2>Certifications &amp; Licenses</h2>
+        <ul>
+          <li>Credential — Issuer <em>(Year)</em></li>
+        </ul>
+      </section>
+    </td>
+  </tr></table>
+</div>

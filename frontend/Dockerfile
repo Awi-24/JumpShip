@@ -3,8 +3,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install
+# Exact versions from the lockfile (package.json pins them, .npmrc enforces it)
+COPY package.json package-lock.json .npmrc ./
+RUN npm ci
 
 COPY . .
 RUN npm run build

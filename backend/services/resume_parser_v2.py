@@ -9,6 +9,8 @@ import json
 import logging
 import re
 
+from backend.prompts import load, render
+
 logger = logging.getLogger(__name__)
 
 
@@ -66,42 +68,8 @@ def _extract_docx(data: bytes) -> str:
 async def parse_profile(text: str, llm) -> dict:
     """Use the LLM to extract a structured profile from resume text."""
 
-    system = """\
-You are an expert technical recruiter parsing a resume for a Brazilian job platform.
-Extract a structured profile and generate bilingual job search keywords.
-
-CRITICAL RULES:
-1. Return ONLY valid JSON — no markdown fences, no explanation, no commentary.
-2. "suggested_keywords" = job titles the candidate should search for, in BOTH Portuguese AND English.
-   Include the same role in both languages. Keep each entry to 2-5 words.
-   Examples: ["Engenheiro de Dados", "Data Engineer", "Desenvolvedor Python", "Python Developer",
-              "Engenheiro MLOps", "MLOps Engineer", "Cientista de Dados Sênior", "Senior Data Scientist"]
-3. "suggested_titles" = same list but English-only, ordered by best fit (used as display labels).
-4. "skills" = specific tools/technologies only (e.g. "FastAPI", "PostgreSQL", "React", "Kubernetes").
-5. Infer seniority (Júnior/Pleno/Sênior or Junior/Mid/Senior) from years of experience and job titles.
-6. Use empty string "" or empty array [] or 0 for missing fields — never invent information.
-7. For contact fields: extract ONLY what is explicitly stated in the resume. Empty string if not found.
-
-OUTPUT SCHEMA (strict — no extra keys):
-{
-  "name": "Full Name as written in the resume",
-  "email": "email address or empty string",
-  "phone": "phone number as written or empty string",
-  "location_city": "city of residence or empty string",
-  "location_country": "country of residence or empty string",
-  "title": "Current/most recent role with seniority level in English",
-  "skills": ["up to 20 specific technologies and tools"],
-  "experience_years": <integer>,
-  "domains": ["industry domains, e.g. FinTech, E-commerce, Data Engineering, GenAI"],
-  "suggested_keywords": ["10-20 bilingual job titles: alternate PT and EN versions of each role"],
-  "suggested_titles": ["5-8 English job titles ordered by best fit"]
-}"""
-
-    user = f"""\
-Parse this resume. Return ONLY the JSON object, nothing else.
-
-RESUME:
-{text[:5000]}"""
+    system = load("resume_parse_system")
+    user = render("resume_parse_user", text=text[:5000])
 
     if asyncio.iscoroutinefunction(llm.complete):
         response = await llm.complete(system, user)

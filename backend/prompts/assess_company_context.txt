@@ -1,0 +1,2 @@
+COMPANY INTELLIGENCE (sourced from the web — use this to enrich your assessment):
+{company_info}

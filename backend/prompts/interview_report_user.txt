@@ -1,0 +1,7 @@
+<interview_track>{track}</interview_track>
+
+<transcript>
+{transcript}
+</transcript>
+
+Produce the JSON report now.

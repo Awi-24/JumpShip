@@ -19,6 +19,8 @@ export interface JobSearchRequest {
   keywords: string[];
   location: string;
   job_type: string;
+  hours_old?: number | null;
+  work_mode?: 'any' | 'remote' | 'hybrid' | 'onsite';
   sites: string[];
   results_wanted: number;
   resume_profile?: ResumeProfile | null;
@@ -26,6 +28,15 @@ export interface JobSearchRequest {
   llm_model?: string;
   llm_api_key?: string;
   llm_base_url?: string;
+}
+
+export type SourceStatus = Record<string, { count: number; error: string | null }>;
+
+export interface JobSearchResponse {
+  jobs: JobResult[];
+  sources: SourceStatus;
+  /** Rust backend: jobs left out because the user dismissed them earlier. */
+  dismissed: number;
 }
 
 export interface JobResult {
@@ -36,6 +47,11 @@ export interface JobResult {
   location: string;
   job_type: string;
   salary_range: string;
+  /** Rust backend only: salary_range normalized to annual USD (sorting). */
+  salary_annual_usd?: number | null;
+  /** Rust backend: not seen in an earlier search. */
+  is_new?: boolean;
+  relevance?: number; // Rust backend: keyword relevance (title > description)
   posted_date: string;
   description: string;
   url: string;
@@ -68,6 +84,9 @@ export interface JobAssessment {
   keywords_missing?: string[];
   resume_generation_triggered?: boolean;
   hire_recommendation?: 'strong_yes' | 'yes' | 'borderline' | 'no' | 'strong_no';
+  /** Rust backend: false when the posting is restricted to women or PcD and the profile is not. */
+  eligible?: boolean;
+  eligibility_note?: string;
 }
 
 export interface GeneratedResumeItem {
@@ -129,7 +148,6 @@ export interface ProfileResponse {
   salary_min?: number | null;
   salary_max?: number | null;
   salary_currency?: string | null;
-  linkedin_email?: string | null;
   custom_answers?: Record<string, unknown> | null;
   extra_info?: string | null;
 }

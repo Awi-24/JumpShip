@@ -1,0 +1,4 @@
+Translate these job search keywords to {language}: {keywords}
+
+Return a JSON array of translated keywords, preserving technical terms that don't need translation.
+Return ONLY valid JSON array. Example: ["palavra1", "palavra2"]

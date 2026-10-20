@@ -3,8 +3,11 @@ Shared pytest fixtures for JumpShip tests.
 """
 from __future__ import annotations
 
-import sys
+import atexit
 import os
+import shutil
+import sys
+import tempfile
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, MagicMock
@@ -12,9 +15,19 @@ from unittest.mock import AsyncMock, MagicMock
 # Make sure "backend" package is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+# ── temp database ────────────────────────────────────────────────────────────
+# backend.database reads DATABASE_URL at import time (and profile.py uses the engine
+# directly, bypassing get_db), so point it at a throwaway SQLite file before any backend
+# import. Never touch the developer's real jobspy_ui.db / generated_resumes.
+_TMP_DIR = tempfile.mkdtemp(prefix="jumpship-tests-")
+atexit.register(shutil.rmtree, _TMP_DIR, ignore_errors=True)
+os.environ["DATABASE_URL"] = f"sqlite:///{_TMP_DIR}/test.db".replace("\\", "/")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
+os.environ["RESUME_OUTPUT_DIR"] = os.path.join(_TMP_DIR, "generated_resumes")
+
 # ── jobspy stub ──────────────────────────────────────────────────────────────
-# The real jobspy depends on tls_client which is not installed in the test
-# environment. Stub it out in sys.modules *before* any backend module imports
+# The real jobspy pulls in heavy network deps (curl_cffi) and would hit live boards.
+# Stub it out in sys.modules *before* any backend module imports
 # it, so all `from jobspy import scrape_jobs` calls get our MagicMock.
 _mock_jobspy = MagicMock()
 _mock_jobspy.scrape_jobs = MagicMock()
@@ -26,7 +39,7 @@ for _mod in ["jobspy", "jobspy.bayt", "jobspy.util", "jobspy.linkedin",
 
 @pytest.fixture()
 def client():
-    """FastAPI TestClient with overridden LLM and DB dependencies."""
+    """FastAPI TestClient backed by the temporary SQLite DB configured above."""
     from backend.main import app
     with TestClient(app) as c:
         yield c

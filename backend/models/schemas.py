@@ -52,6 +52,8 @@ class JobSearchRequest(LLMOverride):
     job_type: str = "fulltime"
     sites: list[str] = ["linkedin", "indeed", "glassdoor"]
     results_wanted: int = 20
+    hours_old: int | None = None          # only jobs posted within the last N hours
+    work_mode: str = "any"                # any | remote | hybrid | onsite
     resume_profile: ResumeProfile | None = None
 
 
@@ -111,4 +113,4 @@ class HealthResponse(BaseModel):
     llm_provider: str = ""
     llm_model: str = ""
     llm_available: bool = False
-    version: str = "1.0.0"
+    version: str = "2.0.0"

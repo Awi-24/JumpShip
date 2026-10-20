@@ -1,0 +1,3 @@
+<company_intelligence>
+{company_info}
+</company_intelligence>

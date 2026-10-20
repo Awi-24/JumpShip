@@ -1,0 +1,3 @@
+<candidate_extra_profile>
+{user_profile}
+</candidate_extra_profile>

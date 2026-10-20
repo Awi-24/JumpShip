@@ -26,6 +26,22 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: pytest tests/unit/
 
+  rust:
+    name: Rust (fmt + clippy + test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      # career::tests::renders_local_page drives the runner's Chrome; Ubuntu 24's AppArmor blocks the unprivileged
+      # user namespaces its sandbox needs, so Chrome exits before opening DevTools. Allow them on the runner only.
+      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: cargo test
+
   frontend:
     name: Frontend (lint + build + test)
     runs-on: ubuntu-latest

@@ -25,9 +25,15 @@ interface ProfileData {
   salary_max?: number;
   salary_currency?: string;
   extra_info?: string;
+  /** Free-form answers; `gender` / `pcd` hide postings restricted to women or PcD that the user can't apply to. */
+  custom_answers?: { gender?: string; pcd?: boolean; [k: string]: unknown };
 }
 
-interface Props { onClose: () => void; }
+interface Props {
+  onClose: () => void;
+  /** Desktop: a view of the window instead of a dialog over the page. */
+  asPage?: boolean;
+}
 
 const WORK_AUTH_OPTIONS: SelectOption[] = [
   { value: '', label: 'Select…' },
@@ -54,6 +60,13 @@ const DEGREE_OPTIONS: SelectOption[] = [
   { value: 'Other', label: 'Other' },
 ];
 
+const GENDER_OPTIONS: SelectOption[] = [
+  { value: '', label: 'Not stated (read from name)' },
+  { value: 'female', label: 'Woman' },
+  { value: 'male', label: 'Man' },
+  { value: 'nonbinary', label: 'Non-binary' },
+];
+
 const CURRENCY_OPTIONS: SelectOption[] = [
   { value: 'BRL', label: 'BRL — R$' },
   { value: 'USD', label: 'USD — $' },
@@ -61,7 +74,7 @@ const CURRENCY_OPTIONS: SelectOption[] = [
   { value: 'GBP', label: 'GBP — £' },
 ];
 
-export default function Profile({ onClose }: Props) {
+export default function Profile({ onClose, asPage }: Props) {
   const [data, setData] = useState<ProfileData>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -80,6 +93,8 @@ export default function Profile({ onClose }: Props) {
 
   const set = <K extends keyof ProfileData>(key: K, val: ProfileData[K]) =>
     setData(d => ({ ...d, [key]: val }));
+  const setAnswer = (key: 'gender' | 'pcd', val: string | boolean) =>
+    setData(d => ({ ...d, custom_answers: { ...d.custom_answers, [key]: val } }));
 
   const handleSave = async () => {
     setSaving(true);
@@ -117,16 +132,16 @@ export default function Profile({ onClose }: Props) {
   ];
 
   if (loading) return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: 620 }}>
+    <div className={asPage ? 'view-page' : 'modal-backdrop'} onClick={asPage ? undefined : onClose}>
+      <div className={asPage ? 'modal-panel modal-panel--page' : 'modal-panel'} onClick={e => e.stopPropagation()} style={{ maxWidth: 620 }}>
         <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>
       </div>
     </div>
   );
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: 620 }}>
+    <div className={asPage ? 'view-page' : 'modal-backdrop'} onClick={asPage ? undefined : onClose}>
+      <div className={asPage ? 'modal-panel modal-panel--page' : 'modal-panel'} onClick={e => e.stopPropagation()} style={{ maxWidth: 620 }}>
 
         <div className="modal-header">
           <div className="modal-title"><User size={15} style={{ verticalAlign: 'middle', marginRight: 6 }} />Profile</div>
@@ -260,6 +275,24 @@ export default function Profile({ onClose }: Props) {
               <Row label="City"><input className="config-input" value={data.location_city || ''} onChange={e => set('location_city', e.target.value)} placeholder="São Paulo" /></Row>
               <Row label="State"><input className="config-input" value={data.location_state || ''} onChange={e => set('location_state', e.target.value)} placeholder="SP" /></Row>
               <Row label="Country"><input className="config-input" value={data.location_country || ''} onChange={e => set('location_country', e.target.value)} placeholder="Brasil" /></Row>
+              <Row label="Gender">
+                <CustomSelect
+                  value={data.custom_answers?.gender || ''}
+                  onChange={v => setAnswer('gender', v)}
+                  options={GENDER_OPTIONS}
+                />
+              </Row>
+              <Row label="PcD">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                  <input type="checkbox" checked={!!data.custom_answers?.pcd} onChange={e => setAnswer('pcd', e.target.checked)} />
+                  Person with disability
+                </label>
+              </Row>
+              <div className="settings-hint" style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                Gender and PcD only let the assessment hide postings restricted to women or to people with disabilities that you
+                can't apply to (they stay under "not eligible" in the results). Not stated: the model reads it from your name, and
+                keeps the job when unsure.
+              </div>
             </div>
           )}
 

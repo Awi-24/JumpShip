@@ -4,9 +4,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 vi.mock('../../hooks/useJobs', () => ({
   useJobs: () => ({ data: [], isLoading: false, refetch: vi.fn() }),
-  useSearch: () => ({ mutate: vi.fn(), isPending: false }),
+  useJobSearch: () => ({ mutate: vi.fn(), isPending: false, isError: false, data: undefined }),
 }));
 vi.mock('../../hooks/useResume', () => ({
+  useResumeParse: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useResume: () => ({ data: null, isLoading: false }),
   useUploadResume: () => ({ mutate: vi.fn(), isPending: false }),
 }));

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import DOMPurify from 'dompurify';
 import {
   Banknote, AlertTriangle, Bookmark,
-  FileText, Bot, Check, Sparkles, Tag, Globe, ChevronDown,
+  FileText, Bot, Check, Sparkles, Tag, Globe, ChevronDown, EyeOff,
 } from 'lucide-react';
 import ScoreRing from './ScoreRing';
 import type { JobResult, JobAssessment, ResumeProfile, LLMConfig } from '../types';
@@ -17,6 +17,10 @@ interface JobCardProps {
   onReassess?: () => void;
   isSaved?: boolean;
   onSave?: () => void;
+  onDismiss?: () => void;
+  /** Desktop master/detail: the row selects instead of expanding; the detail renders in its own pane. */
+  onSelect?: () => void;
+  selected?: boolean;
 }
 
 /** Lightweight markdown → HTML (no external dep needed). */
@@ -60,8 +64,12 @@ export default function JobCard({
   onReassess,
   isSaved,
   onSave,
+  onDismiss,
+  onSelect,
+  selected,
 }: JobCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const toggle = onSelect ?? (() => setExpanded(v => !v));
 
   const score = assessment?.match_score ?? job.match_score;
 
@@ -94,10 +102,10 @@ export default function JobCard({
     assessment.summary.toLowerCase().includes('could not parse');
 
   return (
-    <div className={`job-card ${expanded ? 'expanded' : ''}`}>
+    <div className={`job-card${expanded ? ' expanded' : ''}${selected ? ' selected' : ''}`}>
 
       {/* ── Header (always visible) ── */}
-      <div className="job-card-header" onClick={() => setExpanded(e => !e)} style={{ cursor: 'pointer' }}>
+      <div className="job-card-header" onClick={toggle} style={{ cursor: 'pointer' }}>
         <div className="company-logo">
           {job.company_url ? (
             <img
@@ -119,6 +127,7 @@ export default function JobCard({
           <div className="job-title">{job.title}</div>
           <div className="job-company">{job.company} · {job.location}</div>
           <div className="job-tags">
+            {job.is_new && <span className="tag tag-new">New</span>}
             {/* Work mode — from backend is_remote */}
             {workStyle.cls && <span className={`tag tag-workmode ${workStyle.cls}`}>{workStyle.label}</span>}
             {/* Seniority / contract from scraper */}
@@ -167,277 +176,317 @@ export default function JobCard({
           {score != null && !parseFailed && <ScoreRing score={score} />}
           <button
             className={`expand-btn ${expanded ? 'open' : ''}`}
-            onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
+            onClick={e => { e.stopPropagation(); toggle(); }}
             aria-label={expanded ? 'Collapse' : 'Expand'}
           ><ChevronDown size={16} /></button>
         </div>
       </div>
 
-      {/* ── Expanded body ── */}
       {expanded && (
-        <div className="job-expanded-body">
-          <div className="job-expanded-grid">
+        <JobDetail
+          job={job} resumeProfile={resumeProfile} llmConfig={llmConfig} assessment={assessment} assessing={assessing}
+          onReassess={onReassess} isSaved={isSaved} onSave={onSave} onDismiss={onDismiss}
+        />
+      )}
+    </div>
+  );
+}
 
-            {/* Left — description */}
-            <div className="job-expanded-col-outer">
-              <div className="exp-section-title"><FileText size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Description</div>
-              <div className="job-expanded-col">
-                <div
-                  className="job-description markdown-body"
-                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(md(job.description || 'No description available.')) }}
-                />
-              </div>
-            </div>
+/** Description, LLM assessment and actions of one job: below the row in a browser, in the detail pane on desktop. */
+export function JobDetail({
+  job, resumeProfile, llmConfig, assessment, assessing, onReassess, isSaved, onSave, onDismiss,
+}: Omit<JobCardProps, 'keywords' | 'onSelect' | 'selected'>) {
+  const parseFailed = assessment && assessment.summary.toLowerCase().includes('could not parse');
+  return (
+    <div className="job-expanded-body">
+      <div className="job-expanded-grid">
 
-            {/* Right — LLM assessment */}
-            <div className="job-expanded-col-outer">
-              <div className="exp-section-title"><Bot size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />LLM Assessment</div>
-              <div className="job-expanded-col">
-                <div className="assessment-box">
+        {/* Left — description */}
+        <div className="job-expanded-col-outer">
+          <div className="exp-section-title"><FileText size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Description</div>
+          <div className="job-expanded-col">
+            <div
+              className="job-description markdown-body"
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(md(job.description || 'No description available.')) }}
+            />
+          </div>
+        </div>
 
-                  {!resumeProfile && (
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                      Upload your résumé to get an AI-powered match analysis.
-                    </p>
+        {/* Right — LLM assessment */}
+        <div className="job-expanded-col-outer">
+          <div className="exp-section-title"><Bot size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />LLM Assessment</div>
+          <div className="job-expanded-col">
+            <div className="assessment-box">
+
+              {!resumeProfile && (
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                  Upload your résumé to get an AI-powered match analysis.
+                </p>
+              )}
+
+              {resumeProfile && assessing && !assessment && (
+                <div className="assessment-loading">
+                  <div className="spinner" />
+                  Analyzing with {llmConfig?.model ?? 'LLM'}…
+                </div>
+              )}
+
+              {/* Parse-failed state — show retry prompt */}
+              {resumeProfile && parseFailed && (
+                <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+                    Assessment could not be completed.
+                  </div>
+                  {onReassess && (
+                    <button
+                      className="apply-btn"
+                      style={{ background: 'transparent', border: '1px solid var(--border-bright)', color: 'var(--gold)' }}
+                      onClick={onReassess}
+                      disabled={assessing}
+                    >
+                      ↺ Try Again
+                    </button>
                   )}
+                </div>
+              )}
 
-                  {resumeProfile && assessing && !assessment && (
-                    <div className="assessment-loading">
-                      <div className="spinner" />
-                      Analyzing with {llmConfig?.model ?? 'LLM'}…
+              {resumeProfile && assessment && !parseFailed && (
+                <>
+                  {/* Irrelevant job warning */}
+                  {assessment.is_relevant === false && (
+                    <div style={{
+                      background: 'rgba(248,113,113,0.08)',
+                      border: '1px solid rgba(248,113,113,0.25)',
+                      borderRadius: 8,
+                      padding: '10px 12px',
+                      marginBottom: 14,
+                      fontSize: 12,
+                      color: '#f87171',
+                      lineHeight: 1.5,
+                    }}>
+                      <AlertTriangle size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />This job appears unrelated to your professional field.
+                    </div>
+                  )}
+                  {assessment.eligible === false && (
+                    <div className="eligibility-warning" style={{
+                      background: 'rgba(248,113,113,0.08)',
+                      border: '1px solid rgba(248,113,113,0.25)',
+                      borderRadius: 8,
+                      padding: '10px 12px',
+                      marginBottom: 14,
+                      fontSize: 12,
+                      color: '#f87171',
+                      lineHeight: 1.5,
+                    }}>
+                      <AlertTriangle size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                      Not open to you{assessment.eligibility_note ? `: ${assessment.eligibility_note}` : ''} (based on your profile).
                     </div>
                   )}
 
-                  {/* Parse-failed state — show retry prompt */}
-                  {resumeProfile && parseFailed && (
-                    <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                      <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-                        Assessment could not be completed.
-                      </div>
-                      {onReassess && (
-                        <button
-                          className="apply-btn"
-                          style={{ background: 'transparent', border: '1px solid var(--border-bright)', color: 'var(--gold)' }}
-                          onClick={onReassess}
-                          disabled={assessing}
-                        >
-                          ↺ Try Again
-                        </button>
-                      )}
+                  <div className="assessment-score-row">
+                    <ScoreRing score={assessment.match_score} />
+                    <span className="assessment-score-label">match score</span>
+                    {assessment.hire_recommendation && (() => {
+                      const cfg: Record<string, { label: string; color: string; bg: string; border: string }> = {
+                        strong_yes: { label: 'Apply now',    color: '#4ade80', bg: 'rgba(74,222,128,0.10)', border: 'rgba(74,222,128,0.30)' },
+                        yes:        { label: 'Good shot',    color: '#86efac', bg: 'rgba(74,222,128,0.07)', border: 'rgba(74,222,128,0.20)' },
+                        borderline: { label: 'Borderline',   color: '#fbbf24', bg: 'rgba(251,191,36,0.08)', border: 'rgba(251,191,36,0.25)' },
+                        no:         { label: 'Weak match',   color: '#f87171', bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.25)' },
+                        strong_no:  { label: 'Skip',         color: '#ef4444', bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.30)' },
+                      };
+                      const c = cfg[assessment.hire_recommendation!];
+                      return c ? (
+                        <span style={{ marginLeft: 10, padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, color: c.color, background: c.bg, border: `1px solid ${c.border}`, letterSpacing: '0.02em' }}>
+                          {c.label}
+                        </span>
+                      ) : null;
+                    })()}
+                  </div>
+
+                  {assessment.summary && (
+                    <div className="assessment-text">{assessment.summary}</div>
+                  )}
+
+                  {/* Income range */}
+                  {assessment.income_range && (
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '5px 12px',
+                      background: 'rgba(74,222,128,0.08)',
+                      border: '1px solid rgba(74,222,128,0.2)',
+                      borderRadius: 8,
+                      fontSize: 12,
+                      color: '#4ade80',
+                      fontWeight: 600,
+                      marginBottom: 14,
+                    }}>
+                      <Banknote size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />{assessment.income_range}
                     </div>
                   )}
 
-                  {resumeProfile && assessment && !parseFailed && (
-                    <>
-                      {/* Irrelevant job warning */}
-                      {assessment.is_relevant === false && (
-                        <div style={{
-                          background: 'rgba(248,113,113,0.08)',
-                          border: '1px solid rgba(248,113,113,0.25)',
-                          borderRadius: 8,
-                          padding: '10px 12px',
-                          marginBottom: 14,
-                          fontSize: 12,
-                          color: '#f87171',
-                          lineHeight: 1.5,
-                        }}>
-                          <AlertTriangle size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />This job appears unrelated to your professional field.
-                        </div>
-                      )}
+                  {assessment.strong_points.length > 0 && (
+                    <div className="assessment-pros">
+                      <div className="assessment-pros-title"><Check size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Strong Points</div>
+                      {assessment.strong_points.map((p, i) => (
+                        <div key={i} className="assessment-item">{p}</div>
+                      ))}
+                    </div>
+                  )}
 
-                      <div className="assessment-score-row">
-                        <ScoreRing score={assessment.match_score} />
-                        <span className="assessment-score-label">match score</span>
-                        {assessment.hire_recommendation && (() => {
-                          const cfg: Record<string, { label: string; color: string; bg: string; border: string }> = {
-                            strong_yes: { label: 'Apply now',    color: '#4ade80', bg: 'rgba(74,222,128,0.10)', border: 'rgba(74,222,128,0.30)' },
-                            yes:        { label: 'Good shot',    color: '#86efac', bg: 'rgba(74,222,128,0.07)', border: 'rgba(74,222,128,0.20)' },
-                            borderline: { label: 'Borderline',   color: '#fbbf24', bg: 'rgba(251,191,36,0.08)', border: 'rgba(251,191,36,0.25)' },
-                            no:         { label: 'Weak match',   color: '#f87171', bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.25)' },
-                            strong_no:  { label: 'Skip',         color: '#ef4444', bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.30)' },
-                          };
-                          const c = cfg[assessment.hire_recommendation!];
-                          return c ? (
-                            <span style={{ marginLeft: 10, padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, color: c.color, background: c.bg, border: `1px solid ${c.border}`, letterSpacing: '0.02em' }}>
-                              {c.label}
-                            </span>
-                          ) : null;
-                        })()}
+                  {assessment.gaps.length > 0 && (
+                    <div className="assessment-gaps">
+                      <div className="assessment-gaps-title"><AlertTriangle size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Gaps</div>
+                      {assessment.gaps.map((g, i) => (
+                        <div key={i} className="assessment-item">{g}</div>
+                      ))}
+                    </div>
+                  )}
+
+                  {(assessment.career_suggestions?.length ?? 0) > 0 && (
+                    <div style={{ marginTop: 14 }}>
+                      <div className="assessment-pros-title" style={{ color: 'var(--gold)' }}>
+                        <Sparkles size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Suggestions
                       </div>
+                      {assessment.career_suggestions.map((s, i) => (
+                        <div key={i} className="suggestion-item">{s}</div>
+                      ))}
+                    </div>
+                  )}
 
-                      {assessment.summary && (
-                        <div className="assessment-text">{assessment.summary}</div>
-                      )}
+                  {/* LLM-extracted job tags (stack, domain, seniority) */}
+                  {(assessment.job_tags?.length ?? 0) > 0 && (
+                    <div style={{ marginTop: 14 }}>
+                      <div className="assessment-pros-title" style={{ color: 'var(--text-muted)', fontSize: 11, marginBottom: 6 }}>
+                        <Tag size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />Job Tags
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {assessment.job_tags!.map(t => (
+                          <span key={t} className="tag tag-feature" style={{ fontSize: 11 }}>{t}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-                      {/* Income range */}
-                      {assessment.income_range && (
-                        <div style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          padding: '5px 12px',
-                          background: 'rgba(74,222,128,0.08)',
-                          border: '1px solid rgba(74,222,128,0.2)',
-                          borderRadius: 8,
-                          fontSize: 12,
-                          color: '#4ade80',
-                          fontWeight: 600,
-                          marginBottom: 14,
-                        }}>
-                          <Banknote size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />{assessment.income_range}
-                        </div>
-                      )}
-
-                      {assessment.strong_points.length > 0 && (
-                        <div className="assessment-pros">
-                          <div className="assessment-pros-title"><Check size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Strong Points</div>
-                          {assessment.strong_points.map((p, i) => (
-                            <div key={i} className="assessment-item">{p}</div>
-                          ))}
-                        </div>
-                      )}
-
-                      {assessment.gaps.length > 0 && (
-                        <div className="assessment-gaps">
-                          <div className="assessment-gaps-title"><AlertTriangle size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Gaps</div>
-                          {assessment.gaps.map((g, i) => (
-                            <div key={i} className="assessment-item">{g}</div>
-                          ))}
-                        </div>
-                      )}
-
-                      {(assessment.career_suggestions?.length ?? 0) > 0 && (
-                        <div style={{ marginTop: 14 }}>
-                          <div className="assessment-pros-title" style={{ color: 'var(--gold)' }}>
-                            <Sparkles size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Suggestions
-                          </div>
-                          {assessment.career_suggestions.map((s, i) => (
-                            <div key={i} className="suggestion-item">{s}</div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* LLM-extracted job tags (stack, domain, seniority) */}
-                      {(assessment.job_tags?.length ?? 0) > 0 && (
-                        <div style={{ marginTop: 14 }}>
-                          <div className="assessment-pros-title" style={{ color: 'var(--text-muted)', fontSize: 11, marginBottom: 6 }}>
-                            <Tag size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />Job Tags
+                  {/* Keywords matched / missing */}
+                  {((assessment.keywords_matched?.length ?? 0) > 0 || (assessment.keywords_missing?.length ?? 0) > 0) && (
+                    <div style={{ marginTop: 14 }}>
+                      {(assessment.keywords_matched?.length ?? 0) > 0 && (
+                        <div style={{ marginBottom: 8 }}>
+                          <div className="assessment-pros-title" style={{ color: '#4ade80', fontSize: 11, marginBottom: 5 }}>
+                            <Check size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />Keywords Matched
                           </div>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                            {assessment.job_tags!.map(t => (
-                              <span key={t} className="tag tag-feature" style={{ fontSize: 11 }}>{t}</span>
+                            {assessment.keywords_matched!.map(k => (
+                              <span key={k} className="tag" style={{ fontSize: 10, background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', color: '#4ade80' }}>{k}</span>
                             ))}
                           </div>
                         </div>
                       )}
-
-                      {/* Keywords matched / missing */}
-                      {((assessment.keywords_matched?.length ?? 0) > 0 || (assessment.keywords_missing?.length ?? 0) > 0) && (
-                        <div style={{ marginTop: 14 }}>
-                          {(assessment.keywords_matched?.length ?? 0) > 0 && (
-                            <div style={{ marginBottom: 8 }}>
-                              <div className="assessment-pros-title" style={{ color: '#4ade80', fontSize: 11, marginBottom: 5 }}>
-                                <Check size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />Keywords Matched
-                              </div>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                {assessment.keywords_matched!.map(k => (
-                                  <span key={k} className="tag" style={{ fontSize: 10, background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', color: '#4ade80' }}>{k}</span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {(assessment.keywords_missing?.length ?? 0) > 0 && (
-                            <div>
-                              <div className="assessment-pros-title" style={{ color: '#f87171', fontSize: 11, marginBottom: 5 }}>
-                                <AlertTriangle size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />Keywords Missing
-                              </div>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                {assessment.keywords_missing!.map(k => (
-                                  <span key={k} className="tag" style={{ fontSize: 10, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171' }}>{k}</span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {assessment.company_insights && (
-                        <div style={{ marginTop: 16 }}>
-                          <div className="assessment-pros-title" style={{ color: '#60a5fa' }}>
-                            <Globe size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Company Insights
+                      {(assessment.keywords_missing?.length ?? 0) > 0 && (
+                        <div>
+                          <div className="assessment-pros-title" style={{ color: '#f87171', fontSize: 11, marginBottom: 5 }}>
+                            <AlertTriangle size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />Keywords Missing
                           </div>
-                          <div className="assessment-item" style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                            {assessment.company_insights}
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                            {assessment.keywords_missing!.map(k => (
+                              <span key={k} className="tag" style={{ fontSize: 10, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171' }}>{k}</span>
+                            ))}
                           </div>
                         </div>
                       )}
-                    </>
+                    </div>
                   )}
-                </div>
-              </div>
+
+                  {assessment.company_insights && (
+                    <div style={{ marginTop: 16 }}>
+                      <div className="assessment-pros-title" style={{ color: '#60a5fa' }}>
+                        <Globe size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Company Insights
+                      </div>
+                      <div className="assessment-item" style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                        {assessment.company_insights}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
-
-          </div>
-
-          {/* Actions bar */}
-          <div className="job-expanded-actions">
-            {(() => {
-              let safeUrl: string | null = null;
-              if (job.url) {
-                try {
-                  const u = new URL(job.url);
-                  if (u.protocol === 'http:' || u.protocol === 'https:') safeUrl = u.toString();
-                } catch { /* invalid URL — render disabled */ }
-              }
-              return safeUrl ? (
-                <a
-                  href={safeUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="apply-btn"
-                  style={{ textDecoration: 'none' }}
-                  aria-label={`Apply to ${job.title} at ${job.company}`}
-                >
-                  Apply Now →
-                </a>
-              ) : (
-                <span className="apply-btn" style={{ opacity: 0.4 }} aria-disabled="true">
-                  Apply Now →
-                </span>
-              );
-            })()}
-
-            {resumeProfile && onReassess && (
-              <button
-                className="apply-btn"
-                style={{ background: 'transparent', border: '1px solid var(--border-bright)', color: 'var(--gold)' }}
-                onClick={onReassess}
-                disabled={assessing}
-                aria-label={`Re-assess ${job.title}`}
-              >
-                {assessing ? <><div className="spinner" style={{ width: 10, height: 10 }} /> Analyzing…</> : '↺ Re-assess'}
-              </button>
-            )}
-
-            {onSave && (
-              <button
-                className="apply-btn"
-                aria-label={isSaved ? `${job.title} saved` : `Save ${job.title} to tracker`}
-                style={{
-                  background: isSaved ? 'rgba(74,222,128,0.08)' : 'transparent',
-                  border: `1px solid ${isSaved ? 'rgba(74,222,128,0.35)' : 'var(--border-bright)'}`,
-                  color: isSaved ? '#4ade80' : 'var(--text-muted)',
-                }}
-                onClick={onSave}
-                disabled={isSaved}
-              >
-                <Bookmark size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-                {isSaved ? 'Saved to Tracker' : 'Save to Tracker'}
-              </button>
-            )}
           </div>
         </div>
-      )}
+
+      </div>
+
+      {/* Actions bar */}
+      <div className="job-expanded-actions">
+        {(() => {
+          let safeUrl: string | null = null;
+          if (job.url) {
+            try {
+              const u = new URL(job.url);
+              if (u.protocol === 'http:' || u.protocol === 'https:') safeUrl = u.toString();
+            } catch { /* invalid URL — render disabled */ }
+          }
+          return safeUrl ? (
+            <a
+              href={safeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="apply-btn"
+              style={{ textDecoration: 'none' }}
+              aria-label={`Apply to ${job.title} at ${job.company}`}
+            >
+              Apply Now →
+            </a>
+          ) : (
+            <span className="apply-btn" style={{ opacity: 0.4 }} aria-disabled="true">
+              Apply Now →
+            </span>
+          );
+        })()}
+
+        {resumeProfile && onReassess && (
+          <button
+            className="apply-btn"
+            style={{ background: 'transparent', border: '1px solid var(--border-bright)', color: 'var(--gold)' }}
+            onClick={onReassess}
+            disabled={assessing}
+            aria-label={`Re-assess ${job.title}`}
+          >
+            {assessing ? <><div className="spinner" style={{ width: 10, height: 10 }} /> Analyzing…</> : '↺ Re-assess'}
+          </button>
+        )}
+
+        {onSave && (
+          <button
+            className="apply-btn"
+            aria-label={isSaved ? `${job.title} saved` : `Save ${job.title} to tracker`}
+            style={{
+              background: isSaved ? 'rgba(74,222,128,0.08)' : 'transparent',
+              border: `1px solid ${isSaved ? 'rgba(74,222,128,0.35)' : 'var(--border-bright)'}`,
+              color: isSaved ? '#4ade80' : 'var(--text-muted)',
+            }}
+            onClick={onSave}
+            disabled={isSaved}
+          >
+            <Bookmark size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+            {isSaved ? 'Saved to Tracker' : 'Save to Tracker'}
+          </button>
+        )}
+
+        {onDismiss && (
+          <button
+            className="apply-btn"
+            aria-label={`Dismiss ${job.title}`}
+            title="Hide this job now and in later searches"
+            style={{ background: 'transparent', border: '1px solid var(--border-bright)', color: 'var(--text-muted)' }}
+            onClick={onDismiss}
+          >
+            <EyeOff size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+            Dismiss
+          </button>
+        )}
+      </div>
     </div>
   );
 }

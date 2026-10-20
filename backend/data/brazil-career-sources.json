@@ -47,13 +47,8 @@
       "sectors": ["fintech", "credit"],
       "listing_url": "https://job-boards.greenhouse.io/creditas",
       "ats": "greenhouse",
-      "api": {
-        "provider": "greenhouse",
-        "board_token": "creditas",
-        "jobs_endpoint": "https://boards-api.greenhouse.io/v1/boards/creditas/jobs",
-        "docs_url": "https://developers.greenhouse.io/job-board.html"
-      },
-      "ingestion_notes": null
+      "api": null,
+      "ingestion_notes": "Board Greenhouse 'creditas' retorna 404; a pagina de carreiras agora usa Gupy."
     },
     {
       "id": "neon_lever",
@@ -68,6 +63,118 @@
         "docs_url": "https://hire.lever.co/developer/documentation"
       },
       "ingestion_notes": "GET público em postings JSON; respeitar rate limits."
+    },
+    {
+      "id": "swile_lever",
+      "name": "Swile (Lever)",
+      "sectors": ["benefits", "fintech"],
+      "listing_url": "https://jobs.lever.co/swile",
+      "ats": "lever",
+      "api": {
+        "provider": "lever",
+        "site": "swile",
+        "postings_endpoint": "https://api.lever.co/v0/postings/swile?mode=json",
+        "docs_url": "https://hire.lever.co/developer/documentation"
+      },
+      "ingestion_notes": "GET público em postings JSON (vagas no Brasil (São Paulo); verificado 2026-10-20)."
+    },
+    {
+      "id": "binance_lever",
+      "name": "Binance (Lever)",
+      "sectors": ["crypto", "fintech"],
+      "listing_url": "https://jobs.lever.co/binance",
+      "ats": "lever",
+      "api": {
+        "provider": "lever",
+        "site": "binance",
+        "postings_endpoint": "https://api.lever.co/v0/postings/binance?mode=json",
+        "docs_url": "https://hire.lever.co/developer/documentation"
+      },
+      "ingestion_notes": "GET público em postings JSON (muitas vagas remotas / LatAm; verificado 2026-10-20)."
+    },
+    {
+      "id": "pigment_lever",
+      "name": "Pigment (Lever)",
+      "sectors": ["saas", "finance"],
+      "listing_url": "https://jobs.lever.co/pigment",
+      "ats": "lever",
+      "api": {
+        "provider": "lever",
+        "site": "pigment",
+        "postings_endpoint": "https://api.lever.co/v0/postings/pigment?mode=json",
+        "docs_url": "https://hire.lever.co/developer/documentation"
+      },
+      "ingestion_notes": "GET público em postings JSON (vagas remotas; verificado 2026-10-20)."
+    },
+    {
+      "id": "kavak_lever",
+      "name": "Kavak (Lever)",
+      "sectors": ["automotive", "marketplace"],
+      "listing_url": "https://jobs.lever.co/kavak",
+      "ats": "lever",
+      "api": {
+        "provider": "lever",
+        "site": "kavak",
+        "postings_endpoint": "https://api.lever.co/v0/postings/kavak?mode=json",
+        "docs_url": "https://hire.lever.co/developer/documentation"
+      },
+      "ingestion_notes": "GET público em postings JSON (LatAm; verificado 2026-10-20)."
+    },
+    {
+      "id": "xepelin_lever",
+      "name": "Xepelin (Lever)",
+      "sectors": ["fintech"],
+      "listing_url": "https://jobs.lever.co/xepelin",
+      "ats": "lever",
+      "api": {
+        "provider": "lever",
+        "site": "xepelin",
+        "postings_endpoint": "https://api.lever.co/v0/postings/xepelin?mode=json",
+        "docs_url": "https://hire.lever.co/developer/documentation"
+      },
+      "ingestion_notes": "GET público em postings JSON (LatAm; verificado 2026-10-20)."
+    },
+    {
+      "id": "toptal_lever",
+      "name": "Toptal (Lever)",
+      "sectors": ["talent network"],
+      "listing_url": "https://jobs.lever.co/toptal",
+      "ats": "lever",
+      "api": {
+        "provider": "lever",
+        "site": "toptal",
+        "postings_endpoint": "https://api.lever.co/v0/postings/toptal?mode=json",
+        "docs_url": "https://hire.lever.co/developer/documentation"
+      },
+      "ingestion_notes": "GET público em postings JSON (remoto, rede de freelancers; verificado 2026-10-20)."
+    },
+    {
+      "id": "aircall_lever",
+      "name": "Aircall (Lever)",
+      "sectors": ["saas", "telephony"],
+      "listing_url": "https://jobs.lever.co/aircall",
+      "ats": "lever",
+      "api": {
+        "provider": "lever",
+        "site": "aircall",
+        "postings_endpoint": "https://api.lever.co/v0/postings/aircall?mode=json",
+        "docs_url": "https://hire.lever.co/developer/documentation"
+      },
+      "ingestion_notes": "GET público em postings JSON (vagas remotas; verificado 2026-10-20)."
+    },
+    {
+      "id": "qonto_lever",
+      "name": "Qonto (Lever)",
+      "sectors": ["fintech", "banking"],
+      "listing_url": "https://jobs.lever.co/qonto",
+      "ats": "lever",
+      "api": {
+        "provider": "lever",
+        "site": "qonto",
+        "postings_endpoint": "https://api.lever.co/v0/postings/qonto?mode=json",
+        "docs_url": "https://hire.lever.co/developer/documentation"
+      },
+      "ingestion_notes": "GET público em postings JSON (vagas remotas (Europa); verificado 2026-10-20)."
     },
     {
       "id": "quintoandar_careers",
@@ -231,12 +338,9 @@
       "name": "PicPay",
       "sectors": ["fintech", "payments"],
       "listing_url": "https://picpay.com/oportunidades-de-emprego-e-carreiras/central-de-vagas",
-      "ats": "greenhouse",
-      "api": {
-        "provider": "greenhouse",
-        "board_token": "picpay"
-      },
-      "ingestion_notes": "Usa Greenhouse (board token: picpay). Coberto por greenhouse_scraper via _SUPPLEMENTAL_BOARDS."
+      "ats": "custom",
+      "api": null,
+      "ingestion_notes": "Board Greenhouse 'picpay' retorna 404; a central de vagas migrou para Oracle Cloud HCM."
     },
     {
       "id": "loft_gupy",

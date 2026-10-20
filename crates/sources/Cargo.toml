@@ -1,0 +1,24 @@
+[package]
+name = "jumpship-sources"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+futures = "0.3.34"
+html5ever = "0.39"
+htmlize = { version = "1.1.0", features = ["unescape"] }
+jumpship-core = { path = "../core" }
+md5 = "0.8.1"
+percent-encoding = "2.3.2"
+regex = "1.13.1"
+reqwest = { version = "0.13.5", features = ["json", "gzip", "query"] }
+scraper = "0.27.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tokio = { version = "1.53.2", features = ["time", "process", "sync", "rt", "net"] }
+tokio-tungstenite = "0.28.0"
+tracing = "0.1.44"
+
+[dev-dependencies]
+tokio = { version = "1.53.2", features = ["macros", "rt-multi-thread", "net", "io-util"] }

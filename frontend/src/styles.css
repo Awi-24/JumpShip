@@ -867,6 +867,9 @@ html[data-theme="light"] .app-shell:hover .grid-overlay {
   gap: 6px;
 }
 
+.resume-name { min-width: 0; }
+.resume-file { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .resume-profile {
   font-size: 12px;
   color: var(--text-muted);
@@ -1209,6 +1212,8 @@ html[data-theme="light"] .app-shell:hover .grid-overlay {
 
 .search-btn:hover { background: var(--gold-light); transform: translateY(-1px); }
 .search-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.search-btn--cancel { background: transparent; border: 1px solid var(--error-border); color: var(--error-text); }
+.search-btn--cancel:hover { background: var(--error-bg); }
 
 /* MAIN CONTENT */
 .main-content {
@@ -1366,6 +1371,7 @@ html[data-theme="light"] .app-shell:hover .grid-overlay {
 .tag.tag-llm { color: #38bdf8; border-color: rgba(56,189,248,0.25); background: rgba(56,189,248,0.07); }
 /* Source platform */
 .tag.tag-source { color: var(--text-muted); border-color: var(--border); background: transparent; font-size: 10px; opacity: 0.7; }
+.tag.tag-new { color: var(--gold); border-color: var(--gold); background: transparent; font-weight: 700; }
 /* Posted date */
 .tag.tag-date { color: var(--text-muted); border-color: transparent; background: transparent; font-size: 10px; padding-left: 0; }
 
@@ -4425,6 +4431,7 @@ input:focus, select:focus, textarea:focus {
 .tracker-card-expand-btn:hover { color: var(--text); }
 .tracker-card-expand-btn.open { transform: rotate(180deg); }
 .tracker-card-body { overflow: visible; border-top: 1px solid var(--border); margin-top: 8px; padding-top: 10px; }
+.tracker-section-title { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
 .tracker-assessment-section { background: var(--bg2); border-radius: 8px; padding: 10px; font-size: 12px; color: var(--text-muted); line-height: 1.6; }
 .tracker-jd-scroll { max-height: 120px; overflow-y: auto; font-size: 12px; color: var(--text-muted); line-height: 1.6; white-space: pre-wrap; }
 .tracker-notes-field { width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 12px; padding: 8px; resize: vertical; min-height: 60px; font-family: inherit; }

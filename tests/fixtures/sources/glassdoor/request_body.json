@@ -1,0 +1,25 @@
+[
+  {
+    "operationName": "JobSearchResultsQuery",
+    "variables": {
+      "keyword": "python",
+      "numJobsToShow": 100,
+      "filterParams": [
+        {
+          "filterKey": "radius",
+          "values": "50"
+        },
+        {
+          "filterKey": "jobType",
+          "values": "fulltime"
+        }
+      ],
+      "locationId": 2479061,
+      "locationType": "CITY",
+      "parameterUrlInput": "IL.0,12_ICITY2479061",
+      "pageNumber": 1,
+      "pageCursor": null
+    },
+    "query": "\nquery JobSearchResultsQuery(\n    $keyword: String,\n    $locationId: Int,\n    $locationType: LocationTypeEnum,\n    $numJobsToShow: Int!,\n    $pageCursor: String,\n    $pageNumber: Int,\n    $filterParams: [FilterParams],\n    $parameterUrlInput: String\n) {\n    jobListings(\n        contextHolder: {\n            searchParams: {\n                keyword: $keyword,\n                locationId: $locationId,\n                locationType: $locationType,\n                numPerPage: $numJobsToShow,\n                pageCursor: $pageCursor,\n                pageNumber: $pageNumber,\n                filterParams: $filterParams,\n                parameterUrlInput: $parameterUrlInput,\n                searchType: SR\n            }\n        }\n    ) {\n        jobListings {\n            jobview {\n                header {\n                    adOrderSponsorshipLevel\n                    ageInDays\n                    employer {\n                        id\n                    }\n                    employerNameFromSearch\n                    jobTypeKeys\n                    locationName\n                    locationType\n                    payCurrency\n                    payPeriod\n                    payPeriodAdjustedPay {\n                        p10\n                        p90\n                    }\n                    rating\n                    remoteWorkTypes\n                }\n                job {\n                    jobTitleText\n                    listingId\n                }\n                map {\n                    country\n                }\n                overview {\n                    headquarters\n                    overview {\n                        description\n                    }\n                    primaryIndustry {\n                        industryName\n                    }\n                    revenue\n                    size\n                    squareLogoUrl\n                    website\n                }\n            }\n        }\n        paginationCursors {\n            cursor\n            pageNumber\n        }\n    }\n}\n"
+  }
+]

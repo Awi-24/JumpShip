@@ -1,260 +1,218 @@
 from __future__ import annotations
 
-import math
-from datetime import datetime
-from typing import Tuple
+import json
+from urllib.parse import urlsplit
 
-from jobspy.indeed.constant import job_search_query, api_headers
-from jobspy.indeed.util import is_job_remote, get_compensation, get_job_type
+from jobspy.indeed.constant import (
+    countries,
+    default_distance,
+    headers,
+    hybrid_key,
+    job_search_query,
+    job_type_codes,
+    jobs_per_page,
+    full_time_is_permanent_in,
+    languages,
+    permanent_key,
+    remote_key,
+)
+from jobspy.indeed.util import get_compensation, get_job_type, is_job_remote
 from jobspy.model import (
-    Scraper,
-    ScraperInput,
-    Site,
     JobPost,
-    Location,
     JobResponse,
     JobType,
-    DescriptionFormat,
+    Location,
+    Scraper,
+    ScraperInput,
 )
-from jobspy.util import (
-    extract_emails_from_text,
-    markdown_converter,
-    create_session,
-    create_logger,
-)
+from jobspy.util import create_logger, create_session, format_description, utc_date
 
 log = create_logger("Indeed")
 
 
 class Indeed(Scraper):
-    def __init__(
-        self, proxies: list[str] | str | None = None, ca_cert: str | None = None, user_agent: str | None = None
-    ):
-        """
-        Initializes IndeedScraper with the Indeed API url
-        """
-        super().__init__(Site.INDEED, proxies=proxies)
+    api_url = "https://apis.indeed.com/graphql"
 
+    def __init__(
+        self,
+        proxies: list[str] | str | None = None,
+        ca_cert: str | None = None,
+        user_agent: str | None = None,
+    ):
+        super().__init__(proxies=proxies, ca_cert=ca_cert, user_agent=user_agent)
         self.session = create_session(
             proxies=self.proxies, ca_cert=ca_cert, is_tls=False
         )
-        self.scraper_input = None
-        self.jobs_per_page = 100
-        self.num_workers = 10
-        self.seen_urls = set()
-        self.headers = None
-        self.api_country_code = None
         self.base_url = None
-        self.api_url = "https://apis.indeed.com/graphql"
 
     def scrape(self, scraper_input: ScraperInput) -> JobResponse:
-        """
-        Scrapes Indeed for jobs with scraper_input criteria
-        :param scraper_input:
-        :return: job_response
-        """
         self.scraper_input = scraper_input
-        domain, self.api_country_code = self.scraper_input.country.indeed_domain_value
+        domain, country_code = scraper_input.country.indeed_domain_value
         self.base_url = f"https://{domain}.indeed.com"
-        self.headers = api_headers.copy()
-        self.headers["indeed-co"] = self.scraper_input.country.indeed_domain_value
-        job_list = []
+        language = languages.get(country_code, "en")
+        request_headers = headers | {
+            "indeed-co": country_code,
+            "indeed-locale": f"{language}-{country_code}",
+        }
+        if self.user_agent:
+            request_headers["user-agent"] = self.user_agent
+        filters = self._build_filters()
+        job_list: list[JobPost] = []
+        seen = set()
+        skip = scraper_input.offset
+        cursor = None
         page = 1
 
-        cursor = None
-
-        while len(self.seen_urls) < scraper_input.results_wanted + scraper_input.offset:
-            log.info(
-                f"search page: {page} / {math.ceil(scraper_input.results_wanted / self.jobs_per_page)}"
-            )
-            jobs, cursor = self._scrape_page(cursor)
-            if not jobs:
-                log.info(f"found no jobs on page: {page}")
+        while len(job_list) < scraper_input.results_wanted:
+            log.info(f"search page: {page}")
+            try:
+                response = self.session.post(
+                    self.api_url,
+                    headers=request_headers,
+                    json={"query": self._build_query(filters, cursor)},
+                )
+                if response.status_code != 200:
+                    log.error(f"Indeed response status code {response.status_code}")
+                    break
+                data = response.json()
+                search = (data.get("data") or {}).get("jobSearch")
+                if not search:
+                    log.error(f"Indeed: {data.get('errors')}")
+                    break
+                jobs = {
+                    result["job"]["key"]: result["job"]
+                    for result in search["results"]
+                    if result["job"]
+                }
+                new_jobs = [job for key, job in jobs.items() if key not in seen]
+                seen.update(jobs)
+                cursor = search["pageInfo"]["nextCursor"]
+            except Exception as e:
+                log.error(f"Indeed: {e}")
                 break
-            job_list += jobs
-            page += 1
-        return JobResponse(
-            jobs=job_list[
-                scraper_input.offset : scraper_input.offset
-                + scraper_input.results_wanted
-            ]
-        )
 
-    def _scrape_page(self, cursor: str | None) -> Tuple[list[JobPost], str | None]:
-        """
-        Scrapes a page of Indeed for jobs with scraper_input criteria
-        :param cursor:
-        :return: jobs found on page, next page cursor
-        """
-        jobs = []
-        new_cursor = None
-        filters = self._build_filters()
-        search_term = (
-            self.scraper_input.search_term.replace('"', '\\"')
-            if self.scraper_input.search_term
-            else ""
-        )
-        query = job_search_query.format(
-            what=(f'what: "{search_term}"' if search_term else ""),
-            location=(
-                f'location: {{where: "{self.scraper_input.location}", radius: {self.scraper_input.distance}, radiusUnit: MILES}}'
-                if self.scraper_input.location
+            for job in new_jobs[skip:]:
+                try:
+                    job_list.append(self._process_job(job))
+                except Exception as e:
+                    log.warning(f"skipping job: {e}")
+                    continue
+                if len(job_list) >= scraper_input.results_wanted:
+                    break
+            skip = max(skip - len(new_jobs), 0)
+
+            if not new_jobs or not cursor:
+                break
+            page += 1
+
+        return JobResponse(jobs=job_list)
+
+    def _build_query(self, filters: str, cursor: str | None) -> str:
+        search_term = self.scraper_input.search_term
+        location = self.scraper_input.location
+        distance = self.scraper_input.distance
+        if distance is None:
+            distance = default_distance
+        return job_search_query.format(
+            what=(
+                f"what: {json.dumps(search_term, ensure_ascii=False)}"
+                if search_term
                 else ""
             ),
-            dateOnIndeed=self.scraper_input.hours_old,
+            location=(
+                f"location: {{where: {json.dumps(location, ensure_ascii=False)}, radius: {distance}, radiusUnit: MILES}}"
+                if location
+                else ""
+            ),
+            limit=jobs_per_page,
             cursor=f'cursor: "{cursor}"' if cursor else "",
             filters=filters,
         )
-        payload = {
-            "query": query,
-        }
-        api_headers_temp = api_headers.copy()
-        api_headers_temp["indeed-co"] = self.api_country_code
-        response = self.session.post(
-            self.api_url,
-            headers=api_headers_temp,
-            json=payload,
-            timeout=10,
-            verify=False,
-        )
-        if not response.ok:
-            log.info(
-                f"responded with status code: {response.status_code} (submit GitHub issue if this appears to be a bug)"
-            )
-            return jobs, new_cursor
-        data = response.json()
-        jobs = data["data"]["jobSearch"]["results"]
-        new_cursor = data["data"]["jobSearch"]["pageInfo"]["nextCursor"]
 
-        job_list = []
-        for job in jobs:
-            processed_job = self._process_job(job["job"])
-            if processed_job:
-                job_list.append(processed_job)
+    def _build_filters(self) -> str:
+        def attribute(key, match=""):
+            return f'{{ keyword: {{ field: "attributes", keys: ["{key}"]{match} }} }}'
 
-        return job_list, new_cursor
-
-    def _build_filters(self):
-        """
-        Builds the filters dict for job type/is_remote. If hours_old is provided, composite filter for job_type/is_remote is not possible.
-        IndeedApply: filters: { keyword: { field: "indeedApplyScope", keys: ["DESKTOP"] } }
-        """
-        filters_str = ""
+        filters = []
         if self.scraper_input.hours_old:
-            filters_str = """
-            filters: {{
-                date: {{
-                  field: "dateOnIndeed",
-                  start: "{start}h"
-                }}
-            }}
-            """.format(
-                start=self.scraper_input.hours_old
+            filters.append(
+                f'{{ date: {{ field: "dateOnIndeed", start: "{self.scraper_input.hours_old}h" }} }}'
             )
-        elif self.scraper_input.easy_apply:
-            filters_str = """
-            filters: {
-                keyword: {
-                  field: "indeedApplyScope",
-                  keys: ["DESKTOP"]
-                }
-            }
-            """
-        elif self.scraper_input.job_type or self.scraper_input.is_remote:
-            job_type_key_mapping = {
-                JobType.FULL_TIME: "CF3CP",
-                JobType.PART_TIME: "75GKK",
-                JobType.CONTRACT: "NJXCK",
-                JobType.INTERNSHIP: "VDTG7",
-            }
 
-            keys = []
-            if self.scraper_input.job_type:
-                key = job_type_key_mapping[self.scraper_input.job_type]
-                keys.append(key)
+        job_type = self.scraper_input.job_type
+        keys = list(job_type_codes.get(job_type, ()))
+        if job_type and not keys:
+            log.warning(
+                f"Indeed: job_type {job_type.value[0]} isn't supported, ignoring it"
+            )
+        if (
+            job_type == JobType.FULL_TIME
+            and self.scraper_input.country == full_time_is_permanent_in
+        ):
+            keys.append(permanent_key)
+        if len(keys) > 1:
+            any_key = ", ".join(attribute(key) for key in keys)
+            filters.append(
+                f"{{ composite: {{ filters: [{any_key}], operation: OR }} }}"
+            )
+        elif keys:
+            filters.append(attribute(keys[0]))
+        if self.scraper_input.is_remote:
+            filters.append(attribute(remote_key))
+            filters.append(attribute(hybrid_key, ", match: MUST_NOT"))
 
-            if self.scraper_input.is_remote:
-                keys.append("DSQF7")
+        if self.scraper_input.easy_apply:
+            filters.append(
+                '{ keyword: { field: "indeedApplyScope", keys: ["DESKTOP"] } }'
+            )
+        return f"filters: [{', '.join(filters)}]" if filters else ""
 
-            if keys:
-                keys_str = '", "'.join(keys)
-                filters_str = f"""
-                filters: {{
-                  composite: {{
-                    filters: [{{
-                      keyword: {{
-                        field: "attributes",
-                        keys: ["{keys_str}"]
-                      }}
-                    }}]
-                  }}
-                }}
-                """
-        return filters_str
+    def _process_job(self, job: dict) -> JobPost:
+        description, emails = format_description(
+            job["description"]["html"], self.scraper_input.description_format
+        )
 
-    def _process_job(self, job: dict) -> JobPost | None:
-        """
-        Parses the job dict into JobPost model
-        :param job: dict to parse
-        :return: JobPost if it's a new job
-        """
-        job_url = f'{self.base_url}/viewjob?jk={job["key"]}'
-        if job_url in self.seen_urls:
-            return
-        self.seen_urls.add(job_url)
-        description = job["description"]["html"]
-        if self.scraper_input.description_format == DescriptionFormat.MARKDOWN:
-            description = markdown_converter(description)
-
-        job_type = get_job_type(job["attributes"])
-        timestamp_seconds = job["datePublished"] / 1000
-        date_posted = datetime.fromtimestamp(timestamp_seconds).strftime("%Y-%m-%d")
-        employer = job["employer"].get("dossier") if job["employer"] else None
-        employer_details = employer.get("employerDetails", {}) if employer else {}
-        rel_url = job["employer"]["relativeCompanyPageUrl"] if job["employer"] else None
+        employer = job["employer"] or {}
+        dossier = employer.get("dossier") or {}
+        details = dossier.get("employerDetails") or {}
+        company_page = employer.get("relativeCompanyPageUrl")
+        rating = ((employer.get("ugcStats") or {}).get("ratings") or {}).get(
+            "overallRating"
+        ) or {}
+        location = job["location"]
+        country_code = location.get("countryCode")
+        apply_url = job["recruit"]["viewJobUrl"]
+        if f".{urlsplit(apply_url).hostname}".endswith(".indeed.com"):
+            apply_url = None
         return JobPost(
             id=f'in-{job["key"]}',
             title=job["title"],
             description=description,
-            company_name=job["employer"].get("name") if job.get("employer") else None,
-            company_url=(f"{self.base_url}{rel_url}" if job["employer"] else None),
-            company_url_direct=(
-                employer["links"]["corporateWebsite"] if employer else None
-            ),
+            company_name=employer.get("name") or job["sourceEmployerName"],
+            company_url=f"{self.base_url}{company_page}" if company_page else None,
+            company_url_direct=(dossier.get("links") or {}).get("corporateWebsite"),
             location=Location(
-                city=job.get("location", {}).get("city"),
-                state=job.get("location", {}).get("admin1Code"),
-                country=job.get("location", {}).get("countryCode"),
+                city=location.get("city"),
+                state=location.get("admin1Code"),
+                country=countries.get(country_code, country_code),
             ),
-            job_type=job_type,
+            job_type=get_job_type(job["attributes"], self.scraper_input.country),
             compensation=get_compensation(job["compensation"]),
-            date_posted=date_posted,
-            job_url=job_url,
-            job_url_direct=(
-                job["recruit"].get("viewJobUrl") if job.get("recruit") else None
-            ),
-            emails=extract_emails_from_text(description) if description else None,
-            is_remote=is_job_remote(job, description),
-            company_addresses=(
-                employer_details["addresses"][0]
-                if employer_details.get("addresses")
-                else None
-            ),
+            date_posted=utc_date(job["dateOnIndeed"] / 1000),
+            job_url=f'{self.base_url}/viewjob?jk={job["key"]}',
+            job_url_direct=apply_url,
+            emails=emails,
+            is_remote=is_job_remote(job["attributes"]),
+            company_addresses=(details.get("addresses") or [None])[0],
             company_industry=(
-                employer_details["industry"]
-                .replace("Iv1", "")
-                .replace("_", " ")
-                .title()
-                .strip()
-                if employer_details.get("industry")
+                details["industry"].replace("Iv1", "").replace("_", " ").title().strip()
+                if details.get("industry")
                 else None
             ),
-            company_num_employees=employer_details.get("employeesLocalizedLabel"),
-            company_revenue=employer_details.get("revenueLocalizedLabel"),
-            company_description=employer_details.get("briefDescription"),
-            company_logo=(
-                employer["images"].get("squareLogoUrl")
-                if employer and employer.get("images")
-                else None
-            ),
+            company_num_employees=details.get("employeesLocalizedLabel"),
+            company_revenue=details.get("revenueLocalizedLabel"),
+            company_description=details.get("briefDescription"),
+            company_logo=(dossier.get("images") or {}).get("squareLogoUrl"),
+            company_rating=rating.get("value") if rating.get("count") else None,
+            company_reviews_count=rating.get("count") or None,
         )

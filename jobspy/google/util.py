@@ -24,7 +24,7 @@ def find_job_info(jobs_data: list | dict) -> list | None:
 
 
 def find_job_info_initial_page(html_text: str):
-    pattern = f'520084652":(' + r"\[.*?\]\s*])\s*}\s*]\s*]\s*]\s*]\s*]"
+    pattern = '520084652":(' + r"\[.*?\]\s*])\s*}\s*]\s*]\s*]\s*]\s*]"
     results = []
     matches = re.finditer(pattern, html_text)
 
@@ -36,6 +36,5 @@ def find_job_info_initial_page(html_text: str):
             results.append(parsed_data)
 
         except json.JSONDecodeError as e:
-            log.error(f"Failed to parse match: {str(e)}")
-            results.append({"raw_match": match.group(0), "error": str(e)})
+            log.warning(f"skipping job: {e}")
     return results

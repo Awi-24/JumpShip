@@ -1,0 +1,417 @@
+[
+  {
+    "site": "arbeitnow",
+    "case": "data_engineer",
+    "raw": "arbeitnow/live.json",
+    "expected": "arbeitnow/data_engineer.expected.json",
+    "keywords": [
+      "data engineer"
+    ],
+    "ctx": {
+      "results_wanted": 20
+    },
+    "request": "GET https://www.arbeitnow.com/api/job-board-api?page=1&search=data%20engineer"
+  },
+  {
+    "site": "arbeitnow",
+    "case": "python",
+    "raw": "arbeitnow/live.json",
+    "expected": "arbeitnow/python.expected.json",
+    "keywords": [
+      "python"
+    ],
+    "ctx": {
+      "results_wanted": 20
+    },
+    "request": "GET https://www.arbeitnow.com/api/job-board-api?page=1&search=python"
+  },
+  {
+    "site": "arbeitnow",
+    "case": "python_cap2",
+    "raw": "arbeitnow/live.json",
+    "expected": "arbeitnow/python_cap2.expected.json",
+    "keywords": [
+      "python"
+    ],
+    "ctx": {
+      "results_wanted": 2
+    },
+    "request": "GET https://www.arbeitnow.com/api/job-board-api?page=1&search=python"
+  },
+  {
+    "site": "greenhouse",
+    "case": "anthropic_python",
+    "raw": "greenhouse/anthropic.json",
+    "expected": "greenhouse/anthropic_python.expected.json",
+    "keywords": [
+      "python"
+    ],
+    "ctx": {
+      "company": "Anthropic",
+      "token": "anthropic"
+    },
+    "request": "GET https://boards-api.greenhouse.io/v1/boards/anthropic/jobs?content=true"
+  },
+  {
+    "site": "greenhouse",
+    "case": "hotmart_python",
+    "raw": "greenhouse/hotmart.json",
+    "expected": "greenhouse/hotmart_python.expected.json",
+    "keywords": [
+      "python"
+    ],
+    "ctx": {
+      "company": "Hotmart (Greenhouse BR)",
+      "token": "hotmartcareersbr"
+    },
+    "request": "GET https://boards-api.greenhouse.io/v1/boards/hotmartcareersbr/jobs?content=true"
+  },
+  {
+    "site": "greenhouse",
+    "case": "ifood_python",
+    "raw": "greenhouse/ifood.json",
+    "expected": "greenhouse/ifood_python.expected.json",
+    "keywords": [
+      "python"
+    ],
+    "ctx": {
+      "company": "iFood (Greenhouse)",
+      "token": "ifoodcarreiras"
+    },
+    "request": "GET https://boards-api.greenhouse.io/v1/boards/ifoodcarreiras/jobs?content=true"
+  },
+  {
+    "site": "greenhouse",
+    "case": "inter_data_engineer",
+    "raw": "greenhouse/inter.json",
+    "expected": "greenhouse/inter_data_engineer.expected.json",
+    "keywords": [
+      "data engineer",
+      "engenheiro de dados"
+    ],
+    "ctx": {
+      "company": "Banco Inter",
+      "token": "inter"
+    },
+    "request": "GET https://boards-api.greenhouse.io/v1/boards/inter/jobs?content=true"
+  },
+  {
+    "site": "greenhouse",
+    "case": "nubank_empty",
+    "raw": "greenhouse/nubank_empty.json",
+    "expected": "greenhouse/nubank_empty.expected.json",
+    "keywords": [
+      "python"
+    ],
+    "ctx": {
+      "company": "Nubank",
+      "token": "nubank"
+    },
+    "request": "GET https://boards-api.greenhouse.io/v1/boards/nubank/jobs?content=true (0 jobs)"
+  },
+  {
+    "site": "gupy",
+    "case": "data_engineer_pt_merged",
+    "raw": [
+      "gupy/data_engineer.html",
+      "gupy/engenheiro_de_dados.html"
+    ],
+    "expected": "gupy/data_engineer_pt_merged.expected.json",
+    "keywords": [
+      "data engineer",
+      "engenheiro de dados"
+    ],
+    "ctx": {
+      "results_wanted": 20
+    },
+    "request": "two requests (term=data engineer, term=engenheiro de dados) merged by id; keywords PT-expanded as the dispatcher does"
+  },
+  {
+    "site": "gupy",
+    "case": "python",
+    "raw": "gupy/python.html",
+    "expected": "gupy/python.expected.json",
+    "keywords": [
+      "python"
+    ],
+    "ctx": {
+      "results_wanted": 20
+    },
+    "request": "GET https://portal.gupy.io/job-search/term=python"
+  },
+  {
+    "site": "gupy",
+    "case": "python_cap2",
+    "raw": "gupy/python.html",
+    "expected": "gupy/python_cap2.expected.json",
+    "keywords": [
+      "python"
+    ],
+    "ctx": {
+      "results_wanted": 2
+    },
+    "request": "GET https://portal.gupy.io/job-search/term=python"
+  },
+  {
+    "site": "gupy",
+    "case": "python_remote",
+    "raw": "gupy/python_remote.html",
+    "expected": "gupy/python_remote.expected.json",
+    "keywords": [
+      "python"
+    ],
+    "ctx": {
+      "results_wanted": 20
+    },
+    "request": "GET https://portal.gupy.io/job-search/term=python&workplaceTypes[]=remote"
+  },
+  {
+    "site": "lever",
+    "case": "neon_analista",
+    "raw": "lever/neon.json",
+    "expected": "lever/neon_analista.expected.json",
+    "keywords": [
+      "analista",
+      "growth"
+    ],
+    "ctx": {
+      "company": "Neon Pagamentos (Lever)",
+      "site": "neon"
+    },
+    "request": "GET https://api.lever.co/v0/postings/neon?mode=json"
+  },
+  {
+    "site": "lever",
+    "case": "neon_engineer",
+    "raw": "lever/neon.json",
+    "expected": "lever/neon_engineer.expected.json",
+    "keywords": [
+      "engineer",
+      "software engineer"
+    ],
+    "ctx": {
+      "company": "Neon Pagamentos (Lever)",
+      "site": "neon"
+    },
+    "request": "same payload, other keywords"
+  },
+  {
+    "site": "lever",
+    "case": "neon_no_match",
+    "raw": "lever/neon.json",
+    "expected": "lever/neon_no_match.expected.json",
+    "keywords": [
+      "python"
+    ],
+    "ctx": {
+      "company": "Neon Pagamentos (Lever)",
+      "site": "neon"
+    },
+    "request": "same payload; keyword matches nothing (Lever filters locally)"
+  },
+  {
+    "site": "programathor",
+    "case": "frontend_cap2",
+    "raw": [
+      "programathor/page1.html",
+      "programathor/page2.html"
+    ],
+    "expected": "programathor/frontend_cap2.expected.json",
+    "keywords": [
+      "frontend",
+      "react"
+    ],
+    "ctx": {
+      "results_wanted": 2
+    },
+    "request": "same pages, other keywords + cap"
+  },
+  {
+    "site": "programathor",
+    "case": "python_page1",
+    "raw": "programathor/page1.html",
+    "expected": "programathor/python_page1.expected.json",
+    "keywords": [
+      "python"
+    ],
+    "ctx": {
+      "results_wanted": 20
+    },
+    "request": "GET https://programathor.com.br/jobs"
+  },
+  {
+    "site": "programathor",
+    "case": "python_two_pages",
+    "raw": [
+      "programathor/page1.html",
+      "programathor/page2.html"
+    ],
+    "expected": "programathor/python_two_pages.expected.json",
+    "keywords": [
+      "python"
+    ],
+    "ctx": {
+      "results_wanted": 20
+    },
+    "request": "GET https://programathor.com.br/jobs, then ?page=2"
+  },
+  {
+    "site": "remoteok",
+    "case": "data_engineer",
+    "raw": "remoteok/live.json",
+    "expected": "remoteok/data_engineer.expected.json",
+    "keywords": [
+      "data engineer"
+    ],
+    "ctx": {
+      "results_wanted": 20
+    },
+    "request": "GET https://remoteok.com/api"
+  },
+  {
+    "site": "remoteok",
+    "case": "python",
+    "raw": "remoteok/live.json",
+    "expected": "remoteok/python.expected.json",
+    "keywords": [
+      "python"
+    ],
+    "ctx": {
+      "results_wanted": 20
+    },
+    "request": "GET https://remoteok.com/api"
+  },
+  {
+    "site": "remoteok",
+    "case": "python_cap2",
+    "raw": "remoteok/live.json",
+    "expected": "remoteok/python_cap2.expected.json",
+    "keywords": [
+      "python"
+    ],
+    "ctx": {
+      "results_wanted": 2
+    },
+    "request": "GET https://remoteok.com/api"
+  },
+  {
+    "site": "trampos",
+    "case": "analista_de_dados",
+    "raw": "trampos/analista_de_dados.json",
+    "expected": "trampos/analista_de_dados.expected.json",
+    "keywords": [
+      "analista de dados"
+    ],
+    "ctx": {
+      "results_wanted": 20
+    },
+    "request": "GET https://trampos.co/api/v2/opportunities?tr=analista%20de%20dados"
+  },
+  {
+    "site": "trampos",
+    "case": "data_engineer_empty",
+    "raw": "trampos/data_engineer_empty.json",
+    "expected": "trampos/data_engineer_empty.expected.json",
+    "keywords": [
+      "data engineer"
+    ],
+    "ctx": {
+      "results_wanted": 20
+    },
+    "request": "GET https://trampos.co/api/v2/opportunities?tr=data%20engineer (0 results)"
+  },
+  {
+    "site": "trampos",
+    "case": "python",
+    "raw": "trampos/python.json",
+    "expected": "trampos/python.expected.json",
+    "keywords": [
+      "python"
+    ],
+    "ctx": {
+      "results_wanted": 20
+    },
+    "request": "GET https://trampos.co/api/v2/opportunities?tr=python"
+  },
+  {
+    "site": "trampos",
+    "case": "two_terms_merged",
+    "raw": [
+      "trampos/python.json",
+      "trampos/analista_de_dados.json"
+    ],
+    "expected": "trampos/two_terms_merged.expected.json",
+    "keywords": [
+      "python",
+      "analista de dados"
+    ],
+    "ctx": {
+      "results_wanted": 20
+    },
+    "request": "two requests (tr=python, tr=analista de dados), merged by id"
+  },
+  {
+    "site": "workday",
+    "case": "aes_empty",
+    "raw": "workday/aes_empty.json",
+    "expected": "workday/aes_empty.expected.json",
+    "keywords": [
+      "python"
+    ],
+    "ctx": {
+      "hostname": "aes.wd1.myworkdayjobs.com",
+      "tenant": "aes",
+      "company": "AES Brasil (Workday)"
+    },
+    "request": "POST https://aes.wd1.myworkdayjobs.com/wday/cxs/aes/AES_BRAZIL/jobs searchText='python' (0 postings)"
+  },
+  {
+    "site": "workday",
+    "case": "equinor_data_engineer",
+    "raw": "workday/equinor_data_engineer.json",
+    "expected": "workday/equinor_data_engineer.expected.json",
+    "keywords": [
+      "data engineer"
+    ],
+    "ctx": {
+      "hostname": "equinor.wd3.myworkdayjobs.com",
+      "tenant": "equinor",
+      "company": "Equinor (Workday)"
+    },
+    "request": "POST https://equinor.wd3.myworkdayjobs.com/wday/cxs/equinor/EQNR/jobs searchText='data engineer'"
+  },
+  {
+    "site": "workday",
+    "case": "santander_python",
+    "raw": "workday/santander_python.json",
+    "expected": "workday/santander_python.expected.json",
+    "keywords": [
+      "python"
+    ],
+    "ctx": {
+      "hostname": "santander.wd3.myworkdayjobs.com",
+      "tenant": "santander",
+      "company": "Santander Brasil (Workday)"
+    },
+    "request": "POST https://santander.wd3.myworkdayjobs.com/wday/cxs/santander/SantanderCareers/jobs {appliedFacets:{},limit:20,offset:0,searchText:'python'}"
+  },
+  {
+    "site": "workday",
+    "case": "santander_two_terms_merged",
+    "raw": [
+      "workday/santander_python.json",
+      "workday/santander_data_engineer.json"
+    ],
+    "expected": "workday/santander_two_terms_merged.expected.json",
+    "keywords": [
+      "python",
+      "data engineer"
+    ],
+    "ctx": {
+      "hostname": "santander.wd3.myworkdayjobs.com",
+      "tenant": "santander",
+      "company": "Santander Brasil (Workday)"
+    },
+    "request": "two POSTs (searchText=python, searchText=data engineer), merged by externalPath"
+  }
+]

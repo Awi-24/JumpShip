@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 
 import httpx
 
+from backend.services.text_match import matches_any
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,7 +40,6 @@ _HEADERS = {
 
 async def fetch_remoteok(keywords: list[str], results_wanted: int = 20) -> list[dict]:
     """Fetch remote-only jobs from RemoteOK's public API."""
-    results: list[dict] = []
     try:
         async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
             r = await client.get("https://remoteok.com/api", headers=_HEADERS, follow_redirects=True)
@@ -46,20 +47,19 @@ async def fetch_remoteok(keywords: list[str], results_wanted: int = 20) -> list[
             jobs = r.json()
     except Exception as exc:
         logger.warning("RemoteOK fetch failed: %s", exc)
-        return results
+        raise
+    return parse_remoteok(jobs, keywords, results_wanted)
 
-    kw_lower = [k.lower() for k in keywords]
 
+def parse_remoteok(jobs: list, keywords: list[str], results_wanted: int = 20) -> list[dict]:
+    """Normalize RemoteOK's decoded /api JSON (list; element 0 is a legal notice) into job dicts."""
+    results: list[dict] = []
     for job in jobs:
         if not isinstance(job, dict) or not job.get("id"):
             continue
 
-        title = (job.get("position") or "").lower()
-        tags = " ".join(t.lower() for t in (job.get("tags") or []))
-        desc = (job.get("description") or "").lower()
-        text = f"{title} {tags} {desc}"
-
-        if not any(kw in text for kw in kw_lower):
+        tags = " ".join(job.get("tags") or [])
+        if not matches_any(keywords, job.get("position") or "", tags, job.get("description") or ""):
             continue
 
         sal_min = job.get("salary_min") or 0
@@ -91,15 +91,13 @@ async def fetch_remoteok(keywords: list[str], results_wanted: int = 20) -> list[
         if len(results) >= results_wanted:
             break
 
-    logger.info("RemoteOK: fetched %d jobs matching %s", len(results), keywords)
+    logger.info("RemoteOK: parsed %d jobs matching %s", len(results), keywords)
     return results
 
 
 async def fetch_arbeitnow(keywords: list[str], results_wanted: int = 20) -> list[dict]:
     """Fetch jobs from Arbeitnow's public API (EU-focused, remote-friendly)."""
-    results: list[dict] = []
     search_term = (" ".join(keywords[:4])).strip()
-    kw_lower = [k.lower() for k in keywords]
 
     try:
         async with httpx.AsyncClient(timeout=22, follow_redirects=True) as client:
@@ -125,15 +123,16 @@ async def fetch_arbeitnow(keywords: list[str], results_wanted: int = 20) -> list
                 data = r2.json()
     except Exception as exc:
         logger.warning("Arbeitnow fetch failed: %s", exc)
-        return results
+        raise
+    return parse_arbeitnow(data, keywords, results_wanted)
 
+
+def parse_arbeitnow(data: dict, keywords: list[str], results_wanted: int = 20) -> list[dict]:
+    """Normalize Arbeitnow's decoded job-board-api JSON ({"data": [...]}) into job dicts."""
+    results: list[dict] = []
     for job in data.get("data", []):
-        title = (job.get("title") or "").lower()
-        tags = " ".join(t.lower() for t in (job.get("tags") or []))
-        desc_preview = (job.get("description") or "").lower()
-        text = f"{title} {tags} {desc_preview}"
-
-        if kw_lower and not any(kw in text for kw in kw_lower):
+        tags = " ".join(job.get("tags") or [])
+        if not matches_any(keywords, job.get("title") or "", tags, job.get("description") or ""):
             continue
 
         sal_from = job.get("salary_from") or 0
@@ -168,5 +167,5 @@ async def fetch_arbeitnow(keywords: list[str], results_wanted: int = 20) -> list
         if len(results) >= results_wanted:
             break
 
-    logger.info("Arbeitnow: fetched %d jobs matching %s", len(results), keywords)
+    logger.info("Arbeitnow: parsed %d jobs matching %s", len(results), keywords)
     return results

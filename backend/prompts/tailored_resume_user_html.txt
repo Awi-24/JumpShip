@@ -1,0 +1,38 @@
+<job_description>
+{job_title_line}
+
+{job_description}
+</job_description>
+
+<original_resume>
+{resume}
+</original_resume>
+
+<candidate_context>
+{candidate_context}
+</candidate_context>
+
+<fit_signals>
+Match score: {score} / 100
+Gap areas: {gaps}
+Keywords to weave in (only where source content supports them): {missing_kw}
+</fit_signals>
+
+<html_instructions>
+1. Follow the SKELETON structure exactly — same HTML section IDs and CSS classes.
+2. Replace every placeholder with real content from ORIGINAL RESUME or ADDITIONAL CANDIDATE INFO.
+3. Repeat <div class="job">…</div> for each role (most recent first).
+4. Include <section id="projects"> if <additional_candidate_info> lists any projects, side work, or open-source. Omit if no project data exists.
+5. Omit <section id="education"> entirely if source has no degree/school facts.
+6. Omit <section id="certifications"> entirely if source has no certifications. Never output empty sections.
+7. skills-block: include every technology from source AND from additional candidate info; ORDER them by relevance to the job (matching tech first); use · separator.
+8. Use the <table class="layout-cols"> for education + certifications as shown in SKELETON.
+9. No <style>, <script>, <html>, <head>, or <body> tags.
+</html_instructions>
+
+<skeleton>
+{skeleton}
+</skeleton>
+
+Execute all steps. Return the three XML tags (<analise_ats>, <mapeamento_de_verdade>, <curriculo_otimizado>).
+

@@ -27,6 +27,7 @@ _HEADERS = {
 }
 _SEMAPHORE_LIMIT = 4
 _TIMEOUT = 20
+_MAX_TERMS = 3
 
 
 def _parse_workday_url(careers_url: str) -> tuple[str, str, str] | None:
@@ -60,35 +61,51 @@ async def _fetch_board(
 
     hostname, tenant, site = parsed
     api_url = f"https://{hostname}/wday/cxs/{tenant}/{site}/jobs"
-    search_text = " ".join(keywords[:5]).strip() if keywords else ""
+    # One request per keyword (Workday ANDs the words of a single searchText); merge by externalPath.
+    terms = [k.strip() for k in (keywords or [])[:_MAX_TERMS] if k and k.strip()] or [""]
+    payloads: list[dict] = []
 
     async with sem:
-        try:
-            r = await client.post(
-                api_url,
-                json={
-                    "appliedFacets": {},
-                    "limit": min(results_wanted, 20),
-                    "offset": 0,
-                    "searchText": search_text,
-                },
-                headers=_HEADERS,
-            )
-            if r.status_code in (404, 403):
-                logger.warning("Workday board unreachable (%s): HTTP %s", site, r.status_code)
-                return []
-            r.raise_for_status()
-            data = r.json()
-        except Exception as exc:
-            logger.warning("Workday fetch failed (%s): %s", site, exc)
-            return []
+        for term in terms:
+            try:
+                r = await client.post(
+                    api_url,
+                    json={
+                        "appliedFacets": {},
+                        "limit": min(results_wanted, 20),
+                        "offset": 0,
+                        "searchText": term,
+                    },
+                    headers=_HEADERS,
+                )
+                if r.status_code in (404, 403):
+                    logger.warning("Workday board unreachable (%s): HTTP %s", site, r.status_code)
+                    break
+                r.raise_for_status()
+                payloads.append(r.json())
+            except Exception as exc:
+                logger.warning("Workday fetch failed (%s, '%s'): %s", site, term, exc)
 
-    company = source.get("name", tenant)
+    return parse_workday(payloads, keywords, hostname, tenant, source.get("name", tenant))
+
+
+def parse_workday(
+    payload: dict | list[dict], keywords: list[str] | None, hostname: str, tenant: str, company: str,
+) -> list[dict]:
+    """Normalize Workday CXS /jobs JSON ({"jobPostings": [...]}; one or several responses) into job dicts.
+
+    No local keyword filter: the server already matched `searchText`.
+    """
+    postings: dict[str, dict] = {}
+    for data in [payload] if isinstance(payload, dict) else payload:
+        for posting in data.get("jobPostings", []):
+            if isinstance(posting, dict):
+                key = posting.get("externalPath") or posting.get("title") or ""
+                postings.setdefault(key, posting)
+
     results: list[dict] = []
 
-    for posting in data.get("jobPostings", []):
-        if not isinstance(posting, dict):
-            continue
+    for posting in postings.values():
         ext_path = posting.get("externalPath") or ""
         url = f"https://{hostname}{ext_path}" if ext_path else ""
         title = posting.get("title") or ""

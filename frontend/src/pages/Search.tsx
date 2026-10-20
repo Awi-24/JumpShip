@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   User, Settings2, Search as SearchIcon, Bookmark, Rocket,
-  Eye, X, AlertTriangle, Globe, FileDown, FileText,
+  Eye, EyeOff, X, AlertTriangle, Globe, FileDown, FileText,
 } from 'lucide-react';
 import ResumeUpload from '../components/ResumeUpload';
-import JobCard from '../components/JobCard';
+import JobCard, { JobDetail } from '../components/JobCard';
 import SettingsModal from '../components/SettingsModal';
 import ThemeToggle from '../components/ThemeToggle';
 import Profile from './Profile';
@@ -15,22 +15,45 @@ import { useResumeParse } from '../hooks/useResume';
 import { useJobSearch } from '../hooks/useJobs';
 import { useSettings } from '../hooks/useSettings';
 import { useResumeCache } from '../hooks/useResumeCache';
-import type { ResumeProfile, JobResult, JobAssessment, SortOption, ProfileResponse } from '../types';
+import { isDesktop, useStoredFlag } from '../desktop';
+import { HISTORY_KEY, loadHistory, saveHistory, type SearchHistoryEntry } from '../searchHistory';
+import type { ResumeProfile, JobResult, JobAssessment, JobSearchResponse, SortOption, ProfileResponse } from '../types';
 
 interface SearchProps {
   onBack: () => void;
   onNavigate: (page: 'tracker') => void;
+  /** A recent search picked on the desktop start screen: its filters are restored on open. */
+  initialEntry?: SearchHistoryEntry | null;
 }
 
-const ALL_SITES = ['linkedin', 'indeed', 'glassdoor', 'zip_recruiter', 'remoteok', 'arbeitnow', 'gupy', 'programathor', 'trampos'];
-const JUMPSHIP_SITES = ['greenhouse', 'lever', 'workday', 'playwright'];
+// The desktop (Rust) backend has no Chrome-TLS client yet, so Glassdoor answers 403 every time there: not offered.
+const ALL_SITES = ['linkedin', 'indeed', 'glassdoor', 'remoteok', 'arbeitnow', 'remotive', 'himalayas', 'jobicy', 'gupy', 'programathor', 'trampos']
+  .filter(s => !(isDesktop && s === 'glassdoor'));
+const knownSite = (s: string) => ALL_SITES.includes(s) || JUMPSHIP_SITES.includes(s);
+const JUMPSHIP_SITES = ['greenhouse', 'lever', 'workday', 'smartrecruiters', 'ashby', 'amazon', 'playwright'];
 const JUMPSHIP_SITE_LABELS: Record<string, string> = {
   greenhouse: 'Greenhouse',
   lever: 'Lever',
   workday: 'Workday',
+  smartrecruiters: 'SmartRecruiters',
+  ashby: 'Ashby',
+  amazon: 'Amazon',
   playwright: 'Career Pages',
 };
 const PAGE_SIZE = 20;
+const POSTED_OPTIONS = [
+  { value: 'any', label: 'Any time' },
+  { value: '24', label: 'Last 24 hours' },
+  { value: '72', label: 'Last 3 days' },
+  { value: '168', label: 'Last week' },
+  { value: '720', label: 'Last month' },
+];
+const WORK_MODE_OPTIONS = [
+  { value: 'any', label: 'Any' },
+  { value: 'remote', label: 'Remote' },
+  { value: 'hybrid', label: 'Hybrid' },
+  { value: 'onsite', label: 'On-site' },
+];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function parseSalary(s: string): number {
@@ -45,31 +68,21 @@ function parseDate(s: string): number {
   return isNaN(d.getTime()) ? 0 : d.getTime();
 }
 
-// ── Search History (localStorage) ────────────────────────────────────────────
-interface SearchHistoryEntry {
-  keywords: string[];
-  location: string;
-  sites: string[];
-  timestamp: number;
+// API key for the active provider (all providers, not just openai/anthropic/groq)
+function llmApiKeyFor(s: ReturnType<typeof useSettings>['settings']): string {
+  const keyMap: Record<string, string> = {
+    openai: s.openaiKey, anthropic: s.anthropicKey, groq: s.groqKey,
+    gemini: s.geminiKey, mistral: s.mistralKey, deepseek: s.deepseekKey,
+    huggingface: s.huggingfaceKey, openrouter: s.openrouterKey, cohere: s.cohereKey,
+  };
+  return keyMap[s.llmProvider] || '';
 }
 
-const HISTORY_KEY = 'jumpship_search_history';
-const MAX_HISTORY = 10;
 
-function loadHistory(): SearchHistoryEntry[] {
-  try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
-  } catch { return []; }
-}
-
-function saveHistory(entry: SearchHistoryEntry) {
-  try {
-    const history = loadHistory().filter(
-      h => h.keywords.join(',') !== entry.keywords.join(',') || h.location !== entry.location
-    );
-    history.unshift(entry);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)));
-  } catch { /* ignore */ }
+function withoutIds(set: Set<string>, ids: string[]): Set<string> {
+  const next = new Set(set);
+  for (const id of ids) next.delete(id);
+  return next;
 }
 
 // ── Export helpers ────────────────────────────────────────────────────────────
@@ -89,7 +102,8 @@ function exportCSV(jobs: JobResult[], assessments: Record<string, JobAssessment>
       j.url,
     ].join(',');
   }).join('\n');
-  const blob = new Blob([header + rows], { type: 'text/csv' });
+  // BOM: without it Excel reads the UTF-8 file as ANSI ("SÃ£o Paulo").
+  const blob = new Blob(['\ufeff' + header + rows], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -110,7 +124,7 @@ function exportJSON(jobs: JobResult[], assessments: Record<string, JobAssessment
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
-export default function Search({ onBack, onNavigate }: SearchProps) {
+export default function Search({ onBack, onNavigate, initialEntry }: SearchProps) {
   const { settings, saveSettings } = useSettings();
   const settingsRef = useRef(settings);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
@@ -133,11 +147,14 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const [keywords, setKeywords] = useState<string[]>(resumeCache?.keywords ?? []);
   const [location, setLocation] = useState(settings.defaultLocation);
   const [jobType, setJobType] = useState('all');
+  const [postedWithin, setPostedWithin] = useState('any');
+  const [workMode, setWorkMode] = useState<'any' | 'remote' | 'hybrid' | 'onsite'>('any');
   const [sortBy, setSortBy] = useState<SortOption>('match');
   const [newKeyword, setNewKeyword] = useState('');
-  const [activeSites, setActiveSites] = useState<string[]>(
-    settings.defaultSites?.length ? settings.defaultSites : ['linkedin', 'indeed', 'glassdoor']
-  );
+  const [activeSites, setActiveSites] = useState<string[]>(() => {
+    const sites = (settings.defaultSites ?? []).filter(knownSite);
+    return sites.length ? sites : ['linkedin', 'indeed'];
+  });
   const [resultsWanted, setResultsWanted] = useState(settings.resultsWanted ?? 20);
 
   // Pagination
@@ -150,6 +167,10 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const [savedUrls, setSavedUrls] = useState<Set<string>>(new Set());
 
   const [showHidden, setShowHidden] = useState(false);
+  // Desktop: filters pane folded to a strip, more room for results while the model works.
+  const [filtersMin, setFiltersMin] = useStoredFlag('jumpship-filters-min');
+  // Desktop: the job shown in the detail pane.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Keyword suggestions & translations
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -165,9 +186,22 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   // Assessments — owned by parent for sorting + auto-assess
   const [assessments, setAssessments] = useState<Record<string, JobAssessment>>({});
   const [assessingIds, setAssessingIds] = useState<Set<string>>(new Set());
+  // Cancel: the running search's stream and the assessments in flight. `stopped` = the user cancelled this search.
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const assessAbortRef = useRef(new AbortController());
+  const [stopped, setStopped] = useState(false);
+  // Assessment requests on the wire right now (the parallel workers): listed with a spinner while they run.
+  const [inFlight, setInFlight] = useState<Set<string>>(new Set());
 
-  const jobSearch = useJobSearch();
-  const jobs: JobResult[] = jobSearch.data || [];
+  // Streamed boards so far (Rust backend); `jobSearch.data` takes over once the stream ends.
+  const [partial, setPartial] = useState<JobSearchResponse | null>(null);
+  const jobSearch = useJobSearch(setPartial);
+  // Dismissed this session (the backend drops them from later searches); filtered at display time so the
+  // auto-assess effect keyed on `jobs` doesn't restart.
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const current = jobSearch.data ?? (jobSearch.isPending || stopped ? partial : null); // cancelled: keep what came in
+  const jobs: JobResult[] = useMemo(() => current?.jobs ?? [], [current]);
+  const sources = current?.sources ?? {};
 
   // Poll LLM health
   useEffect(() => {
@@ -189,10 +223,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   const handleResumeUpload = useCallback(async (file: File) => {
     setResumeError(null);
     const s = settingsRef.current;
-    const apiKey =
-      s.llmProvider === 'openai'    ? s.openaiKey :
-      s.llmProvider === 'anthropic' ? s.anthropicKey :
-      s.llmProvider === 'groq'      ? s.groqKey : '';
+    const apiKey = llmApiKeyFor(s);
 
     let profile;
     try {
@@ -275,22 +306,19 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
   // ── Build LLM body fields ──────────────────────────────────────────────────
   const getLlmFields = useCallback((featureModel?: string) => {
     const s = settingsRef.current;
-    const keyMap: Record<string, string> = {
-      openai: s.openaiKey, anthropic: s.anthropicKey, groq: s.groqKey,
-      gemini: s.geminiKey, mistral: s.mistralKey, deepseek: s.deepseekKey,
-      huggingface: s.huggingfaceKey, openrouter: s.openrouterKey, cohere: s.cohereKey,
-    };
     return {
       llm_provider: s.llmProvider,
       llm_model:    featureModel || s.llmModel || undefined,
-      llm_api_key:  keyMap[s.llmProvider] || undefined,
+      llm_api_key:  llmApiKeyFor(s) || undefined,
       llm_base_url: s.ollamaUrl || undefined,
     };
   }, []);
 
   // ── Auto-assess all jobs ──────────────────────────────────────────────────
-  const assessSingle = useCallback(async (job: JobResult, profile: ResumeProfile) => {
-    const body = { job, resume_profile: profile, ...getLlmFields(settingsRef.current.evaluatorLlmModel) };
+  const assessSingle = useCallback(async (job: JobResult, profile: ResumeProfile, refresh = false) => {
+    const { signal } = assessAbortRef.current;
+    setInFlight(prev => new Set(prev).add(job.id));
+    const body = { job, resume_profile: profile, refresh, ...getLlmFields(settingsRef.current.evaluatorLlmModel) };
     setAssessingIds(prev => new Set(prev).add(job.id));
 
     const MAX_RETRIES = 2;
@@ -302,6 +330,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
+          signal,
         });
         if (!res.ok) break;
         const data: JobAssessment = await res.json();
@@ -316,6 +345,8 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
       }
     }
 
+    setInFlight(prev => withoutIds(prev, [job.id]));
+    if (signal.aborted) return; // cancelled or cleared: no result, no fallback
     const fallback: JobAssessment = {
       match_score: 0,
       summary: 'Assessment could not be completed for this listing.',
@@ -330,11 +361,9 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
 
   // ── Batch assess (cloud providers — parallel, one round-trip) ─────────────
   const assessBatch = useCallback(async (jobList: JobResult[], profile: ResumeProfile) => {
-    if (!jobList.length) {
-      setAssessingIds(new Set());
-      return;
-    }
-    setAssessingIds(new Set(jobList.map(j => j.id)));
+    if (!jobList.length) return;
+    const { signal } = assessAbortRef.current;
+    setInFlight(prev => new Set([...prev, ...jobList.map(j => j.id)]));
     const batchFallback: JobAssessment = {
       match_score: 0,
       summary: 'Assessment could not be completed for this listing.',
@@ -354,6 +383,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal,
       });
       if (!res.ok) {
         setAssessments(prev => {
@@ -376,6 +406,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
         return next;
       });
     } catch {
+      if (signal.aborted) return; // cancelled or cleared
       setAssessments(prev => {
         const next = { ...prev };
         for (const j of jobList) next[j.id] = batchFallback;
@@ -383,60 +414,98 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
       });
     }
     finally {
-      setAssessingIds(new Set());
+      setAssessingIds(prev => withoutIds(prev, jobList.map(j => j.id)));
+      setInFlight(prev => withoutIds(prev, jobList.map(j => j.id)));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getLlmFields]);
 
-  // Trigger auto-assessment whenever jobs load and a resume exists
+  // Auto-assessment: every job is queued once per search, as soon as its board answers (streaming), so the
+  // slowest board no longer holds up the LLM. A new search or résumé starts over.
+  const requestedRef = useRef<Set<string>>(new Set());
+  const queueRef = useRef<JobResult[]>([]);
+  const workersRef = useRef(0);
+  const profileRef = useRef(resumeProfile);
+  useEffect(() => { profileRef.current = resumeProfile; }, [resumeProfile]);
+
+  // Stops queued and in-flight assessments (their results are dropped); scores already in stay.
+  const stopAssessments = useCallback(() => {
+    assessAbortRef.current.abort();
+    assessAbortRef.current = new AbortController();
+    queueRef.current = [];
+    setAssessingIds(new Set());
+    setInFlight(new Set());
+  }, []);
+
+  const resetAssessments = useCallback(() => {
+    stopAssessments();
+    requestedRef.current = new Set();
+    setAssessments({});
+  }, [stopAssessments]);
+
+  // Local LLM: at most ASSESS_CONCURRENCY in flight (the backend semaphore also guards the GPU).
+  const pump = useCallback(() => {
+    const profile = profileRef.current;
+    while (profile && workersRef.current < ASSESS_CONCURRENCY && queueRef.current.length) {
+      const job = queueRef.current.shift()!;
+      workersRef.current++;
+      assessSingle(job, profile).finally(() => {
+        workersRef.current--;
+        pump();
+      });
+    }
+  }, [ASSESS_CONCURRENCY, assessSingle]);
+
+  useEffect(() => { resetAssessments(); }, [resumeProfile, resetAssessments]);
+
   const jobIds = jobs.map(j => j.id).join(',');
   useEffect(() => {
-    if (!resumeProfile || !jobs.length) return;
-    setAssessments({});
-    const pending = [...jobs];
-    // Mark every job as in-flight immediately so the search loader stays up without a gap
-    setAssessingIds(new Set(pending.map(j => j.id)));
-
-    const s = settingsRef.current;
-    const isCloud = !LOCAL_PROVIDERS.has(s.llmProvider || 'ollama');
-
-    if (isCloud) {
-      // Cloud: fire all in parallel via batch endpoint
-      assessBatch(jobs, resumeProfile);
-      return;
+    if (!resumeProfile) return;
+    // Most relevant first: with a slow local LLM those are scored before the long tail.
+    const fresh = jobs
+      .filter(j => !requestedRef.current.has(j.id))
+      .sort((a, b) => (b.relevance ?? 0) - (a.relevance ?? 0));
+    if (!fresh.length) return;
+    for (const j of fresh) requestedRef.current.add(j.id);
+    // Mark them in flight right away so the search loader stays up without a gap
+    setAssessingIds(prev => {
+      const next = new Set(prev);
+      for (const j of fresh) next.add(j.id);
+      return next;
+    });
+    if (!LOCAL_PROVIDERS.has(settingsRef.current.llmProvider || 'ollama')) {
+      assessBatch(fresh, resumeProfile); // cloud: one parallel round-trip per board
+    } else {
+      queueRef.current.push(...fresh);
+      pump();
     }
-
-    // Local: sequential batches with backend semaphore preventing GPU contention
-    let cancelled = false;
-    (async () => {
-      for (let i = 0; i < pending.length; i += ASSESS_CONCURRENCY) {
-        if (cancelled) break;
-        const batch = pending.slice(i, i + ASSESS_CONCURRENCY);
-        await Promise.allSettled(batch.map(job => assessSingle(job, resumeProfile)));
-      }
-    })();
-    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobIds, resumeProfile]);
 
   const handleReassess = useCallback((job: JobResult) => {
     if (!resumeProfile) return;
     setAssessments(prev => { const n = { ...prev }; delete n[job.id]; return n; });
-    assessSingle(job, resumeProfile);
+    assessSingle(job, resumeProfile, true);
   }, [resumeProfile, assessSingle]);
 
   // ── Search ─────────────────────────────────────────────────────────────────
   const handleSearch = () => {
     const s = settingsRef.current;
-    const apiKey =
-      s.llmProvider === 'openai'    ? s.openaiKey :
-      s.llmProvider === 'anthropic' ? s.anthropicKey :
-      s.llmProvider === 'groq'      ? s.groqKey : '';
+    const apiKey = llmApiKeyFor(s);
+    setPartial(null);
+    resetAssessments();
+    searchAbortRef.current?.abort();
+    searchAbortRef.current = new AbortController();
+    setStopped(false);
+    setSelectedId(null);
 
     jobSearch.mutate({
+      signal: searchAbortRef.current.signal,
       keywords,
       location,
-      job_type: jobType === 'all' ? 'fulltime' : jobType,
+      job_type: jobType,
+      hours_old: postedWithin === 'any' ? null : Number(postedWithin),
+      work_mode: workMode,
       sites: activeSites.length > 0 ? activeSites : ['linkedin', 'indeed'],
       results_wanted: resultsWanted,
       resume_profile: resumeProfile,
@@ -458,6 +527,23 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     setVisibleCount(PAGE_SIZE);
     setSuggestions([]);
     setTranslations([]);
+  };
+
+  const cancelSearch = () => {
+    searchAbortRef.current?.abort();
+    stopAssessments();
+    setStopped(true);
+  };
+
+  const clearSearch = () => {
+    searchAbortRef.current?.abort();
+    jobSearch.reset();
+    setPartial(null);
+    resetAssessments();
+    setStopped(false);
+    setSelectedId(null);
+    setShowHidden(false);
+    setVisibleCount(PAGE_SIZE);
   };
 
 
@@ -530,63 +616,92 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
     } catch { /* silent — tracker page will show nothing changed */ }
   }, [assessments, savedUrls]);
 
+  const handleDismiss = useCallback((job: JobResult) => {
+    setDismissedIds(prev => new Set(prev).add(job.id));
+    fetch('/api/jobs/dismiss', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: job.id, url: job.url }),
+    }).catch(() => { /* still hidden for this session */ });
+  }, []);
+
+  const restoreDismissed = async () => {
+    try { await fetch('/api/jobs/dismissed', { method: 'DELETE' }); } catch { /* search again anyway */ }
+    setDismissedIds(new Set());
+    handleSearch();
+  };
+
   // ── Restore search from history ────────────────────────────────────────────
   const restoreSearch = (entry: SearchHistoryEntry) => {
     setKeywords(entry.keywords);
     setLocation(entry.location);
-    setActiveSites(entry.sites);
+    setActiveSites(entry.sites.filter(knownSite));
   };
+  useEffect(() => {
+    if (initialEntry) restoreSearch(initialEntry);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Sorting + relevance filter ──────────────────────────────────────────────
   const sortedJobs = useMemo(() => {
     const visible = jobs.filter(j => {
       const a = assessments[j.id];
-      return !a || a.is_relevant !== false;
+      return !dismissedIds.has(j.id) && (!a || (a.is_relevant !== false && a.eligible !== false));
     });
 
+    // Rust backend: annual-USD salaries (comparable across currencies / periods); else the first number in the text.
+    const normalized = visible.some(j => j.salary_annual_usd != null);
+    const salary = (j: JobResult) => normalized ? j.salary_annual_usd ?? -1 : parseSalary(j.salary_range);
     return [...visible].sort((a, b) => {
       if (sortBy === 'match') {
         const sa = assessments[a.id]?.match_score ?? -1;
         const sb = assessments[b.id]?.match_score ?? -1;
-        return sb - sa;
+        return sb - sa || (b.relevance ?? 0) - (a.relevance ?? 0); // unscored: keyword relevance
       }
       if (sortBy === 'newest') return parseDate(b.posted_date) - parseDate(a.posted_date);
-      if (sortBy === 'salary') return parseSalary(b.salary_range) - parseSalary(a.salary_range);
+      if (sortBy === 'salary') return salary(b) - salary(a);
       return 0;
     });
-  }, [jobs, sortBy, assessments]);
+  }, [jobs, sortBy, assessments, dismissedIds]);
+  const dismissedCount = (jobSearch.data?.dismissed ?? 0) + dismissedIds.size;
 
-  // Paginated view
-  const paginatedJobs = sortedJobs.slice(0, visibleCount);
-  const hasMore = visibleCount < sortedJobs.length;
-
-  const filteredCount = useMemo(() =>
-    jobs.filter(j => assessments[j.id]?.is_relevant === false).length,
-  [jobs, assessments]);
-
+  // Hidden by the assessment: outside the candidate's field, or restricted to women / PcD and the profile is not.
   const hiddenJobs = useMemo(() =>
-    jobs.filter(j => assessments[j.id]?.is_relevant === false),
+    jobs.filter(j => assessments[j.id]?.is_relevant === false || assessments[j.id]?.eligible === false),
   [jobs, assessments]);
+  const ineligibleCount = hiddenJobs.filter(j => assessments[j.id]?.eligible === false).length;
+  const filteredCount = hiddenJobs.length;
 
   const llmConfig = {
     provider: settings.llmProvider,
     model: settings.llmModel,
-    apiKey:
-      settings.llmProvider === 'openai'    ? settings.openaiKey :
-      settings.llmProvider === 'anthropic' ? settings.anthropicKey :
-      settings.llmProvider === 'groq'      ? settings.groqKey : '',
+    apiKey: llmApiKeyFor(settings),
     baseUrl: settings.ollamaUrl,
   };
 
-  const assessedCount = Object.keys(assessments).length;
+  const assessedCount = jobs.filter(j => assessments[j.id]).length;
   const assessingCount = assessingIds.size;
 
   const totalJobCount = jobs.length;
   const awaitingAllAssessments =
+    !stopped &&
     Boolean(resumeProfile) &&
     totalJobCount > 0 &&
     (assessingCount > 0 || assessedCount < totalJobCount);
-  const searchPipelineBusy = jobSearch.isPending || awaitingAllAssessments;
+  // Without a résumé, streamed boards show up as they arrive; with one, the list waits for the scores.
+  const searchPipelineBusy = (jobSearch.isPending && (Boolean(resumeProfile) || jobs.length === 0)) || awaitingAllAssessments;
+  const boardsDone = Object.keys(sources).length;
+  // Desktop: jobs show up as the model takes them (spinner) and returns them (score), with the progress bar docked under the list; the
+  // full loader only while there is nothing to list yet.
+  const listJobs = isDesktop && awaitingAllAssessments ? sortedJobs.filter(j => assessments[j.id] || inFlight.has(j.id)) : sortedJobs;
+  const showLoader = searchPipelineBusy && (!isDesktop || listJobs.length === 0);
+  const dockedProgress = searchPipelineBusy && !showLoader;
+  const running = jobSearch.isPending || awaitingAllAssessments;
+
+  // Paginated view
+  const paginatedJobs = listJobs.slice(0, visibleCount);
+  const selectedJob = selectedId ? jobs.find(j => j.id === selectedId) ?? null : null;
+  const hasMore = visibleCount < listJobs.length;
 
   return (
     <div className="search-page">
@@ -627,12 +742,12 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
             <Bookmark size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Tracker
           </button>
           <ThemeToggle compact />
-          <button className="settings-trigger" onClick={() => setProfileOpen(true)} title="Profile">
-            <User size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Profile
-          </button>
-          <button className="settings-trigger" onClick={() => setSettingsOpen(true)} title="Settings">
-            <Settings2 size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Settings
-          </button>
+            <button className="settings-trigger" onClick={() => setProfileOpen(true)} title="Profile">
+              <User size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Profile
+            </button>
+            <button className="settings-trigger" onClick={() => setSettingsOpen(true)} title="Settings">
+              <Settings2 size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />Settings
+            </button>
         </div>
       </header>
 
@@ -640,9 +755,22 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
       {profileOpen && <Profile onClose={() => setProfileOpen(false)} />}
 
 
-      <div className="search-body">
+      <div className={`search-body${isDesktop && filtersMin ? ' filters-min' : ''}`}>
         {/* ── SIDEBAR ── */}
-        <aside className="sidebar">
+        <aside className="sidebar" data-pane="filters">
+          {isDesktop && (
+            <div className="pane-tools">
+              <button
+                type="button"
+                className="pane-toggle"
+                onClick={() => setFiltersMin(!filtersMin)}
+                title={filtersMin ? 'Show filters' : 'Hide filters'}
+                aria-expanded={!filtersMin}
+              >
+                {filtersMin ? '» filters' : '«'}
+              </button>
+            </div>
+          )}
 
           {/* Resume */}
           <div>
@@ -713,7 +841,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                 {keywords.map(k => {
                   const isLong = k.split(' ').length > 2 || k.length > 25;
                   return (
-                    <div key={k} className={`keyword-chip${isLong ? ' kw-warn' : ''}`} title={isLong ? 'Long phrases may return fewer results' : undefined}>
+                    <div key={k} className={`keyword-chip${isLong ? ' kw-warn' : ''}${k.length > 14 ? ' chip--wide' : ''}`} title={isLong ? 'Long phrases may return fewer results' : undefined}>
                       {k}
                       <button onClick={() => removeKeyword(k)}>×</button>
                     </div>
@@ -741,7 +869,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
 
               {/* AI Keyword Tools */}
               {keywords.length > 0 && llmStatus === 'green' && (
-                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <div className="kw-tools" style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                   <button
                     className="export-btn"
                     style={{ flex: 1 }}
@@ -757,10 +885,11 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                     style={{ flex: 1 }}
                     onClick={fetchTranslations}
                     disabled={loadingTranslations}
+                    title="Translate the keywords to Portuguese"
                   >
                     {loadingTranslations
                       ? <><div className="spinner" style={{ width: 8, height: 8 }} /> Loading…</>
-                      : <><Globe size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />Translate PT</>}
+                      : <><Globe size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />{isDesktop ? 'Translate' : 'Translate PT'}</>}
                   </button>
                 </div>
               )}
@@ -769,7 +898,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
               {suggestions.length > 0 && (
                 <div className="suggestion-chips">
                   {suggestions.map(s => (
-                    <button key={s} className="suggestion-chip" onClick={() => addKeyword(s)}>+ {s}</button>
+                    <button key={s} className={`suggestion-chip${s.length > 14 ? ' chip--wide' : ''}`} onClick={() => addKeyword(s)}>+ {s}</button>
                   ))}
                 </div>
               )}
@@ -778,7 +907,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
               {translations.length > 0 && (
                 <div className="translate-chips">
                   {translations.map(t => (
-                    <button key={t} className="translate-chip" onClick={() => addKeyword(t)}>+ {t}</button>
+                    <button key={t} className={`translate-chip${t.length > 14 ? ' chip--wide' : ''}`} onClick={() => addKeyword(t)}>+ {t}</button>
                   ))}
                 </div>
               )}
@@ -806,6 +935,22 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                   { value: 'parttime', label: 'Part-time' },
                   { value: 'contract', label: 'Contract' },
                 ]}
+              />
+            </div>
+
+            {/* Posted within */}
+            <div className="filter-group" style={{ marginTop: 14 }}>
+              <div className="filter-label">Posted within</div>
+              <CustomSelect value={postedWithin} onChange={setPostedWithin} options={POSTED_OPTIONS} />
+            </div>
+
+            {/* Work mode */}
+            <div className="filter-group" style={{ marginTop: 14 }}>
+              <div className="filter-label">Work mode</div>
+              <CustomSelect
+                value={workMode}
+                onChange={v => setWorkMode(v as typeof workMode)}
+                options={WORK_MODE_OPTIONS}
               />
             </div>
 
@@ -870,12 +1015,12 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
           </div>
 
           <button
-            className="search-btn"
-            onClick={handleSearch}
-            disabled={jobSearch.isPending || keywords.length === 0 || activeSites.length === 0}
+            className={`search-btn${running ? ' search-btn--cancel' : ''}`}
+            onClick={running ? cancelSearch : handleSearch}
+            disabled={!running && (keywords.length === 0 || activeSites.length === 0)}
           >
-            {jobSearch.isPending
-              ? <><div className="spinner" style={{ width: 14, height: 14 }} /> Fetching jobs…</>
+            {running
+              ? <><div className="spinner" style={{ width: 14, height: 14 }} /> {jobSearch.isPending ? 'Fetching jobs' : 'Assessing'} · Cancel</>
               : <><SearchIcon size={14} style={{ verticalAlign: 'middle', marginRight: 5 }} />Search Jobs</>}
           </button>
 
@@ -910,26 +1055,34 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
         </aside>
 
         {/* ── MAIN CONTENT ── */}
-        <main className="main-content">
+        <main className="main-content" data-pane="results">
 
           {(<>
-          {searchPipelineBusy ? (
+          {showLoader ? (
             <>
               <div className="results-header">
                 <div className="results-title">
-                  {jobSearch.isPending ? 'Searching job boards…' : 'Evaluating your fit…'}
+                  {jobSearch.isPending
+                    ? `Searching job boards… ${boardsDone ? `${boardsDone}/${activeSites.length} boards · ${jobs.length} jobs` : ''}`
+                    : 'Evaluating your fit…'}
                 </div>
               </div>
               <AssessmentLoader
-                fetching={jobSearch.isPending}
-                total={jobSearch.isPending ? Math.max(resultsWanted, 1) : totalJobCount}
+                fetching={jobSearch.isPending && jobs.length === 0}
+                total={jobs.length === 0 ? Math.max(resultsWanted, 1) : totalJobCount}
                 assessed={assessedCount}
+                parallel={inFlight.size}
               />
             </>
-          ) : !jobSearch.data ? (
+          ) : !current ? (
             <div className="empty-state">
               <div className="empty-icon"><Rocket size={36} strokeWidth={1.2} /></div>
               <div className="empty-title">Ready to launch your search</div>
+              {jobSearch.isError && jobSearch.error.name !== 'AbortError' && (
+                <div style={{ color: '#f87171', fontSize: 13, marginBottom: 8 }}>
+                  <AlertTriangle size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />{jobSearch.error.message}
+                </div>
+              )}
               <div className="empty-sub">
                 {resumeProfile
                   ? 'Keywords extracted. Hit Search to find matching jobs.'
@@ -941,17 +1094,52 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
               <div className="results-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <div className="results-title">Results</div>
-                  <div className="results-count">{sortedJobs.length} jobs</div>
+                  <div className="results-count">{listJobs.length} jobs</div>
+                  {jobSearch.isPending && (
+                    <span className="filter-pill">
+                      <div className="spinner" style={{ width: 9, height: 9, display: 'inline-block', marginRight: 4 }} />
+                      {boardsDone}/{activeSites.length} boards
+                    </span>
+                  )}
+                  {Object.entries(sources).map(([site, st]) =>
+                    st.error || st.count === 0 ? (
+                      <span
+                        key={site}
+                        className="filter-pill"
+                        title={`${site}: ${st.error ?? '0 results'}`}
+                        style={st.error ? { color: '#f87171', borderColor: 'rgba(248,113,113,0.4)' } : { color: 'var(--text-muted)' }}
+                      >
+                        {site}: {st.error ? (st.error.length > 40 ? st.error.slice(0, 40) + '…' : st.error) : 0}
+                      </span>
+                    ) : null
+                  )}
+                  {stopped && <span className="filter-pill">cancelled</span>}
+                  {dismissedCount > 0 && (
+                    <button
+                      className="filter-pill"
+                      title="Jobs you dismissed stay out of new searches"
+                      onClick={restoreDismissed}
+                    >
+                      <EyeOff size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />{dismissedCount} dismissed · restore
+                    </button>
+                  )}
                   {filteredCount > 0 && (
                     <button
                       className={`filter-pill${showHidden ? ' active' : ''}`}
                       onClick={() => setShowHidden(v => !v)}
                     >
-                      {showHidden ? <><X size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />Hide</> : <Eye size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />} {filteredCount} unrelated
+                      {showHidden ? <><X size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />Hide</> : <Eye size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />}{' '}
+                      {[
+                        filteredCount > ineligibleCount && `${filteredCount - ineligibleCount} unrelated`,
+                        ineligibleCount > 0 && `${ineligibleCount} not eligible`,
+                      ].filter(Boolean).join(' · ')}
                     </button>
                   )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button className="export-btn" onClick={clearSearch} title="Stop this search and clear its results">
+                    <X size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />Clear
+                  </button>
                   {/* Export buttons */}
                   {sortedJobs.length > 0 && (
                     <div className="export-actions">
@@ -990,6 +1178,9 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                     onReassess={() => handleReassess(job)}
                     isSaved={savedUrls.has(job.url || job.id)}
                     onSave={() => handleSaveToTracker(job)}
+                    onSelect={isDesktop ? () => setSelectedId(job.id) : undefined}
+                    selected={job.id === selectedId}
+                    onDismiss={() => handleDismiss(job)}
                   />
                 ))}
               </div>
@@ -1001,7 +1192,7 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                     className="load-more-btn"
                     onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
                   >
-                    Show more ({sortedJobs.length - visibleCount} remaining)
+                    Show more ({listJobs.length - visibleCount} remaining)
                   </button>
                 </div>
               )}
@@ -1010,9 +1201,9 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
               {showHidden && hiddenJobs.length > 0 && (
                 <div className="hidden-jobs-section">
                   <div className="hidden-jobs-header">
-                    <span>Unrelated Jobs</span>
+                    <span>Hidden Jobs</span>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>
-                      These were flagged by the AI as outside your professional field
+                      Flagged by the AI as outside your professional field, or restricted to women / PcD candidates per your profile
                     </span>
                   </div>
                   <div className="jobs-list">
@@ -1028,9 +1219,17 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
                         onReassess={() => handleReassess(job)}
                         isSaved={savedUrls.has(job.url || job.id)}
                         onSave={() => handleSaveToTracker(job)}
+                        onSelect={isDesktop ? () => setSelectedId(job.id) : undefined}
+                        selected={job.id === selectedId}
                       />
                     ))}
                   </div>
+                </div>
+              )}
+
+              {dockedProgress && (
+                <div className="results-progress">
+                  <AssessmentLoader fetching={false} total={totalJobCount} assessed={assessedCount} parallel={inFlight.size} />
                 </div>
               )}
 
@@ -1045,6 +1244,36 @@ export default function Search({ onBack, onNavigate }: SearchProps) {
           )}
           </>)}
         </main>
+
+        {isDesktop && (
+          <section className="detail-pane" data-pane="detail">
+            {selectedJob ? (
+              <>
+                <div className="detail-head">
+                  <div className="detail-title">{selectedJob.title}</div>
+                  <div className="detail-sub">{selectedJob.company} · {selectedJob.location}</div>
+                </div>
+                <JobDetail
+                  key={selectedJob.id}
+                  job={selectedJob}
+                  resumeProfile={resumeProfile}
+                  llmConfig={llmConfig}
+                  assessment={assessments[selectedJob.id]}
+                  assessing={assessingIds.has(selectedJob.id)}
+                  onReassess={() => handleReassess(selectedJob)}
+                  isSaved={savedUrls.has(selectedJob.url || selectedJob.id)}
+                  onSave={() => handleSaveToTracker(selectedJob)}
+                  onDismiss={() => { handleDismiss(selectedJob); setSelectedId(null); }}
+                />
+              </>
+            ) : (
+              <div className="detail-empty">
+                <strong>no job selected</strong>
+                Pick a result to read its description and match assessment here.
+              </div>
+            )}
+          </section>
+        )}
       </div>
     </div>
   );

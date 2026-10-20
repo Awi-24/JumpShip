@@ -1,0 +1,18 @@
+[package]
+name = "jumpship-desktop"
+version.workspace = true
+edition.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+axum = "0.8.9"
+jumpship-server = { path = "../server" }
+keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service", "crypto-rust"] }
+open = "5.4.4"
+tauri = { version = "2", features = [] }
+tokio = { version = "1.53.2", features = ["net"] }
+tracing = "0.1.44"
+tracing-subscriber = "0.3.23"
+uuid = { version = "1.28.0", features = ["v4"] }

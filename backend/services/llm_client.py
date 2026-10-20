@@ -18,6 +18,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Optional
 
+from backend.prompts import load, render
+
 # ── Concurrency control ────────────────────────────────────────────────────────
 # Local providers (Ollama / LM Studio) run one inference at a time on the GPU.
 # Cloud-relay models (Ollama *-cloud suffix) bypass the semaphore — inference is remote.
@@ -60,8 +62,8 @@ def needs_semaphore(provider: str, model: str) -> bool:
 # Qwen3, QwQ, DeepSeek-R1 and similar "reasoning" models run an internal chain-of-
 # thought pass before generating a response.  For structured JSON tasks this wastes
 # the token budget: the model can burn the entire max_tokens on <think> and return
-# empty content.  We suppress thinking for these models by prepending /no-think to
-# the system prompt, which is supported by Qwen3 and compatible runtimes.
+# empty content.  We suppress thinking for these models by prepending /no_think to
+# the system prompt (Qwen3's switch is "/no_think"), supported by compatible runtimes.
 
 _THINKING_MODEL_RE = re.compile(
     r"qwen3|qwq|deepseek-r\d|deepseek-reasoner|qwen-3",
@@ -74,10 +76,19 @@ def _is_thinking_model(model: str) -> bool:
 
 
 def _suppress_thinking(system: str, model: str) -> str:
-    """Prepend /no-think to system prompt for thinking models (Qwen3, DeepSeek-R1, QwQ)."""
-    if _is_thinking_model(model) and not system.startswith("/no-think"):
-        return "/no-think\n" + system
+    """Prepend /no_think to system prompt for thinking models (Qwen3, DeepSeek-R1, QwQ)."""
+    if _is_thinking_model(model) and not system.startswith("/no_think"):
+        return "/no_think\n" + system
     return system
+
+
+def ollama_base_url() -> str:
+    """Ollama URL: OLLAMA_BASE_URL (settings/.env) -> OLLAMA_HOST (only with a scheme) -> localhost."""
+    from backend.config import settings
+    host = os.getenv("OLLAMA_HOST", "").strip()
+    if "ollama_base_url" not in settings.model_fields_set and re.match(r"https?://", host):
+        return host.rstrip("/")
+    return settings.ollama_base_url.rstrip("/")
 
 
 # ── JSON helpers ───────────────────────────────────────────────────────────────
@@ -266,17 +277,15 @@ class LLMClient:
     max_tokens: int = 8192  # thinking models need head-room beyond their CoT pass
 
     def _resolve_base_url(self) -> Optional[str]:
-        if self.base_url:
+        # Only local providers take base_url: the UI sends its Ollama URL with every request, which would
+        # otherwise point cloud providers at Ollama.
+        if self.base_url and self.provider in ("ollama", "lmstudio"):
             url = self.base_url.rstrip("/")
-            # Local providers need /v1/ suffix for OpenAI-compat SDK
-            if self.provider in ("ollama", "lmstudio"):
-                if not url.endswith("/v1"):
-                    url = f"{url}/v1"
+            if not url.endswith("/v1"):  # OpenAI-compat SDK needs the /v1/ prefix
+                url = f"{url}/v1"
             return url + "/"
-        # Ollama: respect OLLAMA_HOST env
         if self.provider == "ollama":
-            host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-            return f"{host.rstrip('/')}/v1/"
+            return f"{ollama_base_url()}/v1/"
         # LM Studio: OpenAI-compat server (see LMSTUDIO_BASE_URL; models router uses same env)
         if self.provider == "lmstudio":
             host = (os.getenv("LMSTUDIO_BASE_URL") or "http://localhost:1234").strip()
@@ -347,13 +356,9 @@ class LLMClient:
         try:
             return clean_and_parse_json(raw)
         except ValueError:
-            repair_prompt = (
-                "The following text should be valid JSON but isn't. "
-                "Return ONLY the corrected JSON with no extra text:\n\n" + raw[:2000]
-            )
             raw2 = self.complete(
-                "You are a JSON repair assistant. Output only valid JSON.",
-                repair_prompt,
+                load("json_repair_system"),
+                render("json_repair_user", raw=raw[:2000]),
                 json_schema=None,
             )
             return clean_and_parse_json(raw2)
