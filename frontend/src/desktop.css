@@ -568,7 +568,8 @@ html.is-desktop .sidebar .search-btn {
 html.is-desktop .search-btn::before { content: '> '; }
 html.is-desktop .sidebar .search-btn--cancel,
 html.is-desktop .sidebar .search-btn--cancel:hover:not(:disabled) { background: var(--pane) !important; color: var(--error-text) !important; border-top-color: var(--error-text) !important; }
-html.is-desktop .sidebar .search-btn--cancel:hover:not(:disabled) { background: var(--error-bg) !important; }
+/* The sticky button sits over the filters: the red hover tint goes over the opaque pane, not over the pills. */
+html.is-desktop .sidebar .search-btn--cancel:hover:not(:disabled) { background: linear-gradient(var(--error-bg), var(--error-bg)) var(--pane) !important; }
 html.is-desktop .sidebar .search-btn:disabled { opacity: 1; background: var(--bg3) !important; border-color: var(--line) !important; color: var(--text-muted) !important; }
 html.is-desktop .upload-zone { border: 1px dashed var(--line-strong); background: transparent; padding: var(--s4) var(--s3); }
 html.is-desktop .upload-zone:hover { background: var(--hover); }
