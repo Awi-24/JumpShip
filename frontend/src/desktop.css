@@ -80,14 +80,16 @@ html.is-desktop button,
 html.is-desktop [role='button'],
 html.is-desktop [role='tab'] { cursor: default; }
 /* Scrollbars: a 6px gutter (content never runs under it), the thumb only shows while the pointer is over the box.
-   ::-webkit-scrollbar is ignored once scrollbar-width / scrollbar-color are set, so those stay unset (WebView2 is Chromium). */
+   Chromium ignores ::-webkit-scrollbar wherever scrollbar-width / scrollbar-color are not auto, and styles.css sets
+   them (none / thin) for the browser app: back to auto here (WebView2 is Chromium). */
+html.is-desktop * { scrollbar-width: auto !important; scrollbar-color: auto !important; }
 html.is-desktop ::-webkit-scrollbar { width: 6px; height: 6px; }
 html.is-desktop ::-webkit-scrollbar-track,
 html.is-desktop ::-webkit-scrollbar-corner { background: transparent; }
 html.is-desktop ::-webkit-scrollbar-thumb { background: transparent; }
-html.is-desktop :hover::-webkit-scrollbar-thumb { background: var(--line); }
+html.is-desktop :hover::-webkit-scrollbar-thumb { background: var(--border-bright); }
 html.is-desktop ::-webkit-scrollbar-thumb:hover,
-html.is-desktop ::-webkit-scrollbar-thumb:active { background: var(--line-strong); }
+html.is-desktop ::-webkit-scrollbar-thumb:active { background: var(--gold); }
 html.is-desktop :focus-visible { outline: 1px solid var(--gold); outline-offset: 1px; }
 html.is-desktop ::selection { background: var(--gold); color: #0a0a0a; }
 html.is-desktop [hidden] { display: none !important; }
@@ -399,7 +401,7 @@ html.is-desktop .job-tags { display: flex; flex-wrap: wrap; gap: var(--s1); marg
 html.is-desktop .keyword-chips,
 html.is-desktop .site-pills,
 html.is-desktop .suggestion-chips,
-html.is-desktop .translate-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s1); margin-top: 0 !important; }
+html.is-desktop .translate-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: dense; gap: var(--s1); margin-top: 0 !important; }
 html.is-desktop .keyword-chips > span,
 html.is-desktop .chip--wide { grid-column: 1 / -1; }
 html.is-desktop .keyword-chips > span { text-align: center; }
@@ -543,6 +545,8 @@ html.is-desktop .sidebar-section-title,
 html.is-desktop .filter-label,
 html.is-desktop .search-history-title { margin-bottom: var(--s2) !important; font-size: var(--fs-xs) !important; font-weight: 700; color: var(--text-muted); text-transform: lowercase; }
 html.is-desktop .filter-group .filter-label { margin-bottom: 0 !important; }
+/* Label with a value at the right ("results per search  20"): the '# ' stays with the label. */
+html.is-desktop .filter-label > span:first-child { margin-right: auto; }
 html.is-desktop .sidebar-section-title::before,
 html.is-desktop .filter-label::before { content: '# '; color: var(--accent-text); }
 html.is-desktop .llm-status-card { display: none; }
@@ -796,6 +800,38 @@ html.is-desktop[data-theme='light'] .rail-logo { filter: drop-shadow(0 0 1px rgb
 .start-row time { flex-shrink: 0; font-size: var(--fs-xs); color: var(--text-muted); margin-top: 2px; }
 .start-empty { padding: var(--s3); font-size: var(--fs-sm); color: var(--text-muted); }
 
+/* ── Splash: launch screen over the window; always dark (the wordmark is white + amber) ── */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s5);
+  background: #0b0b0a repeating-linear-gradient(to bottom, transparent 0 2px, rgba(255, 255, 255, 0.025) 2px 3px);
+  transition: opacity 0.26s steps(4);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.splash--out { opacity: 0; }
+.splash img { width: min(380px, 42vw); filter: drop-shadow(0 0 18px rgba(245, 166, 35, 0.35)); animation: splash-in 0.6s steps(6) both; }
+@keyframes splash-in { from { opacity: 0; transform: translateY(8px); } }
+.splash-log {
+  width: 30ch;
+  min-height: 6.4em;
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  color: rgba(245, 166, 35, 0.85);
+  text-shadow: 0 0 6px rgba(245, 166, 35, 0.55);
+  white-space: pre;
+}
+.splash-log .cursor { display: inline-block; height: 1.1em; vertical-align: text-bottom; margin-left: 0; }
+.splash-bar { width: 30ch; height: 6px; border: 1px solid rgba(245, 166, 35, 0.4); }
+.splash-bar span { display: block; height: 100%; background: #f5a623; transition: width 0.3s steps(3); }
+
 @media (max-width: 1180px) {
   /* Small screen (the window is 90% of it): results over detail, filters beside both. */
   html.is-desktop .search-body { --filters-w: 280px; grid-template: minmax(0, 1fr) minmax(0, 1fr) / var(--filters-w) minmax(0, 1fr); }
@@ -806,6 +842,7 @@ html.is-desktop[data-theme='light'] .rail-logo { filter: drop-shadow(0 0 1px rgb
 }
 @media (prefers-reduced-motion: reduce) {
   .cursor,
+  .splash img,
   .detail-empty strong::after,
   .tracker-drawer { animation: none; }
 }

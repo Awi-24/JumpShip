@@ -8,6 +8,7 @@ import Profile from './pages/Profile';
 import TitleBar from './components/TitleBar';
 import NavRail, { NAV, type DesktopPage } from './components/NavRail';
 import StatusBar from './components/StatusBar';
+import Splash from './components/Splash';
 import SettingsModal from './components/SettingsModal';
 import { useSettings } from './hooks/useSettings';
 import { isDesktop, useStoredFlag } from './desktop';
@@ -115,6 +116,8 @@ function DesktopApp() {
   const [back, setBack] = useState<DesktopPage>('start');
   const { settings, saveSettings } = useSettings();
   const [railMin, setRailMin] = useStoredFlag('jumpship-rail-min');
+  const [booting, setBooting] = useState(true);
+  const endSplash = useCallback(() => setBooting(false), []);
 
   const go = useCallback((next: DesktopPage) => {
     if (next === 'search') setSearchOpened(true);
@@ -170,6 +173,7 @@ function DesktopApp() {
         )}
       </main>
       <StatusBar />
+      {booting && <Splash onDone={endSplash} />}
     </div>
   );
 }
