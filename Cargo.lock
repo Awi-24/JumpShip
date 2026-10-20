@@ -2446,7 +2446,7 @@ dependencies = [
 
 [[package]]
 name = "jumpship-core"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "serde",
  "unicode-normalization",
@@ -2454,7 +2454,7 @@ dependencies = [
 
 [[package]]
 name = "jumpship-desktop"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "axum",
  "jumpship-server",
@@ -2470,7 +2470,7 @@ dependencies = [
 
 [[package]]
 name = "jumpship-server"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -2500,7 +2500,7 @@ dependencies = [
 
 [[package]]
 name = "jumpship-sources"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "chrono",
  "futures",
