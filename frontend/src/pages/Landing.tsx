@@ -101,6 +101,12 @@ type RoadmapStatus = 'shipped' | 'progress' | 'planned';
 
 const WHATS_NEXT: { Icon: typeof Map; title: string; desc: string; status: RoadmapStatus }[] = [
   {
+    Icon: Rocket,
+    title: 'JumpShip 2.0 for Windows',
+    desc: 'Native desktop app (Rust): no Python, 7 MB installer, streaming search across 17 sources, assessment cache, eligibility filter from your profile, retro-terminal UI.',
+    status: 'shipped',
+  },
+  {
     Icon: Search,
     title: 'JumpShip 1.0',
     desc: 'Unified JobSpy + Scrapper search, LLM scoring and tailored PDFs, Kanban tracker, mock interview flow, Ollama/LM Studio defaults, and encrypted optional API keys.',
@@ -160,7 +166,7 @@ const LOCAL_LLM_STEPS = [
 ];
 
 function statusLabel(s: RoadmapStatus): string {
-  if (s === 'shipped') return 'Shipped · 1.0';
+  if (s === 'shipped') return 'Shipped';
   if (s === 'progress') return 'In progress';
   return 'Planned';
 }
@@ -390,7 +396,7 @@ export default function Landing({ onEnter }: LandingProps) {
             <span style={{ color: 'var(--gold)' }}>first-class.</span>
           </h2>
           <p className="section-sub">
-            JumpShip 1.0 defaults to Ollama; LM Studio works out of the box with the same UI. Cloud providers are optional — flip them on only when you want them.
+            JumpShip defaults to Ollama; LM Studio works out of the box with the same UI. Cloud providers are optional — flip them on only when you want them.
           </p>
           <motion.div
             className="how-grid how-grid--setup"
@@ -426,7 +432,7 @@ export default function Landing({ onEnter }: LandingProps) {
             <span style={{ color: 'var(--gold)' }}>Clear next bets.</span>
           </h2>
           <p className="section-sub">
-            1.0 is the consolidation release: search stack, LLM scoring, tailored PDFs, tracker, and interview prep. What follows is depth — more regional coverage, richer profiles, and optional inbox workflows.
+            1.0 consolidated search, LLM scoring, tailored PDFs, tracker and interview prep; 2.0 brings it to a native Windows app. What follows is depth — more regional coverage, richer profiles, and optional inbox workflows.
           </p>
           <motion.div
             className="roadmap-grid"

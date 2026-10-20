@@ -31,7 +31,7 @@ async fn health(State(st): State<AppState>) -> Json<Value> {
         .is_ok_and(|r| r.status() == 200);
     Json(json!({
         "status": "ok", "llm_provider": st.cfg.llm_provider, "llm_model": st.cfg.llm_model,
-        "llm_available": available, "version": "1.0.0",
+        "llm_available": available, "version": "2.0.0",
     }))
 }
 

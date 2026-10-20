@@ -72,7 +72,7 @@ _migrate_db()
 app = FastAPI(
     title="JumpShip API",
     description="AI-powered job search. Resume parsing, multi-source scraping, LLM job assessment, tailored resume generation.",
-    version="1.0.0",
+    version="2.0.0",
 )
 
 origins = settings.cors_origins_list
@@ -114,7 +114,7 @@ async def health():
         llm_provider=settings.llm_provider,
         llm_model=settings.llm_model,
         llm_available=available,
-        version="1.0.0",
+        version="2.0.0",
     )
 
 
